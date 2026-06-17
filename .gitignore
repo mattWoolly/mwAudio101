@@ -1,0 +1,37 @@
+# Build output
+/build/
+/build-*/
+/out/
+cmake-build-*/
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+
+# Plugin bundles built locally
+*.vst3
+*.component
+*.clap
+*.lv2
+
+# Research / calibration cache — runnable references, never committed, never the oracle
+/research-cache/
+
+# Golden/regression scratch (blessed/ IS committed; scratch is not)
+/test-output/
+/test-scratch/
+
+# JUCE / dependency checkouts fetched by CMake FetchContent
+/_deps/
+/external/_build/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+compile_commands.json
+.cache/
