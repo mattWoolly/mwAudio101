@@ -52,6 +52,32 @@ verbatim, so the task can state "the contract IS the spec".
 
 ## ADR ledger
 
-| ADR | Title | Status |
+All accepted 2026-06-17/18 (Phase 2). ADRs 016–024 are reconciliation/gap decisions from the
+coherence pass; "refined-by" notes appear in the affected ADRs' Status lines.
+
+| ADR | Title | Notes |
 |---|---|---|
-| _(none yet)_ | populated in Phase 2 | — |
+| 001 | DSP core / plugin-shell boundary & real-time contract | core (mwcore) has zero JUCE deps; prepare/process/reset seam |
+| 002 | Anti-aliased oscillator generation | PolyBLEP default + minBLEP HQ (see 018) |
+| 003 | IR3109 4-pole VCF modeling method | Huovilainen core; TPT/ZDF = bless oracle |
+| 004 | Oversampling strategy | per-voice 2× nonlinear zone (Drive moved out, see 017) |
+| 005 | Control-rate & 6-bit CV authenticity | default superseded by 016 (modern-smooth default) |
+| 006 | Voice architecture, polyphony & unison | mono default affirmed by 016 |
+| 007 | Modulation routing, arpeggiator & 100-step seq | host-sync arp/seq |
+| 008 | Parameter / state / preset schema (the contract) | Quality param via 018; load-failure via 021 |
+| 009 | Vintage variance / analog-drift model | INIT default set by 016 (subtle drift) |
+| 010 | Built-in FX section (Chorus/Delay/Drive) | Drive placement/PDC via 017 |
+| 011 | Plugin formats & wrapper strategy | LV2/AAX via 024 |
+| 012 | MIDI / MPE-lite mapping & tuning reference | velocity default superseded by 016 (on) |
+| 013 | Testing: golden/regression + calibration harness | honesty-labels into provenance |
+| 014 | Build system, dependency management & toolchain | CPM-pinned JUCE/Catch2/clap-juce-extensions |
+| 015 | GUI architecture (modern reimagined, vector) | no faceplate skin |
+| 016 | Owner ratifications: out-of-box defaults | supersedes 005/012 default clauses; sets 009 INIT; affirms 006 |
+| 017 | Plugin latency (PDC) policy & Drive placement | Drive = post-voice FX; constant reported PDC |
+| 018 | Quality-tier parameter registration | one structural Quality {Eco/Standard/HQ} param |
+| 019 | Voice-rendering threading model | single-threaded in processBlock for v1 |
+| 020 | Parameter smoothing / de-zipper policy | table-driven per-class de-zipper |
+| 021 | State / preset load-failure handling | fall back to INIT, never crash, warn |
+| 022 | MPE-lite & arp/seq cross-format behavior | per-format fallback contract |
+| 023 | Engine versioning, bless comms & blessed sample-rates | renderVersion in state; blessed SR set |
+| 024 | LV2 export path & AAX exclusion | LV2 via JUCE-native export; AAX out |

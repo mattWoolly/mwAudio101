@@ -35,6 +35,19 @@ host-synced arp/seq, MPE-lite, ~64 curated presets). Built by an AI agent fleet 
 | CI timing | Added LAST (it slows local iteration); local build/test until then. |
 | Out of scope (now) | mod matrix, 2nd LFO/env, multi-FX rack, macros, randomizer, wavetable/sampler, iOS/AUv3 — each deferred via a future ADR. |
 
+## Owner ratifications (2026-06-18)
+
+Above-ADR owner decisions resolving Phase-2 architecture ratification items. Full record +
+consequences + supersession links: **ADR-016**.
+
+| Item | Ratified choice |
+|---|---|
+| Default control mode | **Modern-smooth** (hi-res); authentic 6-bit "Vintage" stepping is a toggle (supersedes ADR-005 default clause) |
+| Default velocity | **ON** (velocity → VCA/VCF amount); faithful no-velocity is a switch (supersedes ADR-012 default clause) |
+| Default voice mode | **Monophonic** with authentic last/low-note priority; Poly/Unison one toggle away (affirms ADR-006) |
+| INIT-patch character | **Subtle analog drift on** (Age macro low) (sets ADR-009 INIT default) |
+| Accepted defaults (no veto) | FX engine-default OFF but bakeable into factory presets, no reverb v1 (ADR-010); AAX permanently out, LV2 Linux-only at launch (ADR-011/024); sequencer steps = saved state, not automation lanes (ADR-008); MPE-lite = pitch + 1 assignable pressure dest, lower zone (ADR-012); UI modern-only, no faceplate skin (ADR-015); "modeled from documented circuit behavior" honesty labels in all UI/marketing (ADR-013); voice-stealing + persisted-seed-with-reroll policies (ADR-006/009) |
+
 ## Phases
 
 1. **Research** (`docs/research/`) — deep-research workflow, adversarially verified + cited.
