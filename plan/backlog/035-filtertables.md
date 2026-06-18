@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 035
 title: FilterTables: per-sample-rate CV->g and tuning-comp tables built in prepare
-status: todo
+status: done
 depends-on: [001, 006, 007]
 component: core
 estimated-size: M

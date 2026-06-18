@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 027
 title: minBLEP residual table + per-voice applicator
-status: in-review
+status: done
 depends-on: [001, 006, 007]
 component: core
 estimated-size: M

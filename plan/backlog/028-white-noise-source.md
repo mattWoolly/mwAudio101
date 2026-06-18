@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 028
 title: White-noise source (xorshift32)
-status: todo
+status: done
 depends-on: [001, 006, 007]
 component: core
 estimated-size: S

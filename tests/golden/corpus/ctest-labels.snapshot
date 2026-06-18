@@ -1,10 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileCopyrightText: 2026 Matt Woolly
 #
-# Checked-in subsystem-tag snapshot (docs/design/11 §8.4; ADR-013 C3). A
-# deleted/renamed labelled suite shows as a failing diff against this file, not
-# silence. Updating it is a reviewed change. Regenerate with:
-#   <test-bin> --list-tags   (then take the [bracketed] tags, sorted + deduped)
+# Checked-in subsystem-tag snapshot (docs/design/11 §8.4; ADR-013 C3).
+# Regenerate: <test-bin> --list-tags (bracketed tags, sorted+deduped). Orchestrator regenerates per wave.
 [blockcontext]
 [cal]
 [calibration]
@@ -12,9 +10,13 @@
 [core]
 [engineversion]
 [env_header]
+[fracdelay]
 [harness]
 [hostevent]
 [minblep]
+[modseqtypes]
+[noise]
+[os-iir]
 [paramids]
 [polyblep]
 [prng]
@@ -23,4 +25,12 @@
 [smoothclass]
 [smoother]
 [statetree]
+[ui]
+[ui_assets]
+[ui_telemetry]
+[ui_tokens]
+[vcf-tables]
+[vcf-tanh]
 [vcf-tpt]
+[vcf]
+[vintage_prng]

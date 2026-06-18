@@ -81,4 +81,5 @@ coherence pass; "refined-by" notes appear in the affected ADRs' Status lines.
 | 022 | MPE-lite & arp/seq cross-format behavior | per-format fallback contract |
 | 023 | Engine versioning, bless comms & blessed sample-rates | renderVersion in state; blessed SR set |
 | 024 | LV2 export path & AAX exclusion | LV2 via JUCE-native export; AAX out |
+| 026 | Float-domain range/saturation clamps | noise/tanh clamp to honor binding ranges (wave-4 TDD finding) |
 | 025 | Sequencer per-step accent — removed for v1 | supersedes 008 C8 accent field; aligns docs 05/06 to 007 (no accent); accent deferred |

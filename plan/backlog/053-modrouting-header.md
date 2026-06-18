@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 053
 title: ModRouting.h header: ModDepths/VelocityRouting/ModBus PODs
-status: in-review
+status: done
 depends-on: [007, 006, 001]
 component: core
 estimated-size: S

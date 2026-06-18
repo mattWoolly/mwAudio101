@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  SPDX-FileCopyrightText: 2026 Matt Woolly
+
+  mwAudio101 product logo — static vector art loaded via
+  juce::Drawable::createFromSVG through BinaryData
+  [docs/design/10-ui.md §12; ADR-015 C11].
+
+  Original mark. Deliberately NOT an SH-101 faceplate replica and NOT in the
+  Roland grey/red/blue palette (trademark distance is deliberate — CLAUDE.md;
+  research/12 §7.2). A signal-flow "mw" wordmark inside a rounded badge.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80" width="240" height="80"
+     role="img" aria-label="mwAudio101">
+  <title>mwAudio101</title>
+  <rect x="2" y="2" width="236" height="76" rx="14" ry="14"
+        fill="none" stroke="#1FB6A6" stroke-width="3"/>
+  <!-- signal-flow node + connecting line motif -->
+  <path d="M22 40 H62" fill="none" stroke="#1FB6A6" stroke-width="3"
+        stroke-linecap="round"/>
+  <circle cx="22" cy="40" r="6" fill="#F2C14E"/>
+  <circle cx="62" cy="40" r="6" fill="none" stroke="#1FB6A6" stroke-width="3"/>
+  <!-- 'mw' wordmark drawn as strokes (no font dependency) -->
+  <path d="M82 56 V30 L96 50 L110 30 V56" fill="none" stroke="#E8ECEF"
+        stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M120 30 L128 56 L138 38 L148 56 L156 30" fill="none" stroke="#E8ECEF"
+        stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- '101' suffix -->
+  <text x="172" y="50" font-family="sans-serif" font-size="22"
+        font-weight="700" fill="#1FB6A6">101</text>
+</svg>

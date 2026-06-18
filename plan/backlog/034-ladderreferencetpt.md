@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 034
 title: LadderReferenceTPT: offline TPT/ZDF linear 4-pole oracle
-status: in-review
+status: done
 depends-on: [001, 006]
 component: core
 estimated-size: M

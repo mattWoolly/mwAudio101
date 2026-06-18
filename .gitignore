@@ -35,3 +35,6 @@ cmake-build-*/
 *.swp
 compile_commands.json
 .cache/
+
+# Agent worktrees / scratch
+.claude/

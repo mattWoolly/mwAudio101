@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 052
 title: Vca.h header: VcaMode enum + Vca class layout
-status: in-review
+status: done
 depends-on: [007, 006, 001]
 component: core
 estimated-size: S

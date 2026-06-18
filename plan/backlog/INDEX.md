@@ -37,28 +37,28 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 4 | 015 | SmoothingClass enum + per-class time-constant accessor (SmoothingClass.h) | core | S | 001, 006 | done |
 | 4 | 016 | Engine/render/schema version constants (EngineVersion.h) | core | S | 001, 006 | done |
 | 4 | 017 | State-tree identifiers + Extras POD payload (StateTree.h, Extras.h) | core | S | 001, 006 | done |
-| 4 | 026 | PolyBLEP closed-form residual (header-only) | core | S | 001, 006 | todo |
-| 4 | 027 | minBLEP residual table + per-voice applicator | core | M | 001, 006, 007 | todo |
-| 4 | 028 | White-noise source (xorshift32) | core | S | 001, 006, 007 | todo |
-| 4 | 033 | FastTanh.h: shared frozen tanh approximation + OTA-knee transconductor | core | S | 001, 006, 007 | todo |
-| 4 | 034 | LadderReferenceTPT: offline TPT/ZDF linear 4-pole oracle | core | M | 001, 006 | todo |
-| 4 | 035 | FilterTables: per-sample-rate CV->g and tuning-comp tables built in prepare | core | M | 001, 006, 007 | todo |
-| 4 | 036 | Oversampler: polyphase IIR halfband up/downsampler (realtime path) | core | M | 001, 006, 007 | todo |
-| 4 | 040 | SHA-256 byte hasher for golden serialization | qa | S | 001, 006 | todo |
-| 4 | 049 | Envelope/LFO/VCA (PI) calibration constants block | core | S | 007, 006, 001 | todo |
-| 4 | 050 | Envelope.h header: EnvStage/EnvTrigMode/EnvParams + Envelope class layout | core | S | 007, 006, 001 | todo |
-| 4 | 051 | Lfo.h header: LfoShape enum + Lfo class layout | core | S | 007, 006, 001 | todo |
-| 4 | 052 | Vca.h header: VcaMode enum + Vca class layout | core | S | 007, 006, 001 | todo |
-| 4 | 053 | ModRouting.h header: ModDepths/VelocityRouting/ModBus PODs | core | S | 007, 006, 001 | todo |
-| 4 | 063 | Xorshift128+ PRNG with Gaussian/cubic helpers and seed derivation | engine | S | 001, 006, 007 | todo |
-| 4 | 067 | VoiceTypes.h — shared voice/control PODs, enums, and pool constants | core | S | 001, 006, 007 | todo |
-| 4 | 081 | Control-core POD types: events, enums, ModInputs/Outputs, ControlSnapshot | core | S | 001, 006, 007 | todo |
-| 4 | 088 | FxParams POD snapshot struct | core | S | 001, 006 | todo |
-| 4 | 089 | FractionalDelayLine header-only ring buffer | core | S | 001, 006, 007 | todo |
+| 4 | 026 | PolyBLEP closed-form residual (header-only) | core | S | 001, 006 | done |
+| 4 | 027 | minBLEP residual table + per-voice applicator | core | M | 001, 006, 007 | done |
+| 4 | 028 | White-noise source (xorshift32) | core | S | 001, 006, 007 | done |
+| 4 | 033 | FastTanh.h: shared frozen tanh approximation + OTA-knee transconductor | core | S | 001, 006, 007 | done |
+| 4 | 034 | LadderReferenceTPT: offline TPT/ZDF linear 4-pole oracle | core | M | 001, 006 | done |
+| 4 | 035 | FilterTables: per-sample-rate CV->g and tuning-comp tables built in prepare | core | M | 001, 006, 007 | done |
+| 4 | 036 | Oversampler: polyphase IIR halfband up/downsampler (realtime path) | core | M | 001, 006, 007 | done |
+| 4 | 040 | SHA-256 byte hasher for golden serialization | qa | S | 001, 006 | done |
+| 4 | 049 | Envelope/LFO/VCA (PI) calibration constants block | core | S | 007, 006, 001 | done |
+| 4 | 050 | Envelope.h header: EnvStage/EnvTrigMode/EnvParams + Envelope class layout | core | S | 007, 006, 001 | done |
+| 4 | 051 | Lfo.h header: LfoShape enum + Lfo class layout | core | S | 007, 006, 001 | done |
+| 4 | 052 | Vca.h header: VcaMode enum + Vca class layout | core | S | 007, 006, 001 | done |
+| 4 | 053 | ModRouting.h header: ModDepths/VelocityRouting/ModBus PODs | core | S | 007, 006, 001 | done |
+| 4 | 063 | Xorshift128+ PRNG with Gaussian/cubic helpers and seed derivation | engine | S | 001, 006, 007 | done |
+| 4 | 067 | VoiceTypes.h — shared voice/control PODs, enums, and pool constants | core | S | 001, 006, 007 | done |
+| 4 | 081 | Control-core POD types: events, enums, ModInputs/Outputs, ControlSnapshot | core | S | 001, 006, 007 | done |
+| 4 | 088 | FxParams POD snapshot struct | core | S | 001, 006 | done |
+| 4 | 089 | FractionalDelayLine header-only ring buffer | core | S | 001, 006, 007 | done |
 | 4 | 099 | HostEvent POD + NormalizedEventBuffer (plugin/host/HostEvent.h) | app | S | 001, 006, 007 | done |
-| 4 | 106 | DesignTokens table (palette/stroke/radius/typography, single reskin knob) | ui | S | 006 | todo |
-| 4 | 107 | Telemetry SPSC types (Snapshot POD + Producer/Consumer, lock-free, pre-allocated) | ui | M | 006, 006 | todo |
-| 4 | 110 | SVG assets + BinaryData embedding (logo + static decoration) | ui | S | 001, 006 | todo |
+| 4 | 106 | DesignTokens table (palette/stroke/radius/typography, single reskin knob) | ui | S | 006 | done |
+| 4 | 107 | Telemetry SPSC types (Snapshot POD + Producer/Consumer, lock-free, pre-allocated) | ui | M | 006, 006 | done |
+| 4 | 110 | SVG assets + BinaryData embedding (logo + static decoration) | ui | S | 001, 006 | done |
 | 5 | 018 | renderVersion state lifecycle + opt-in flag (RenderVersionState.h/.cpp) | core | S | 016, 017 | todo |
 | 5 | 019 | Declarative parameter registry (ParamDefs.h) | core | M | 014, 015, 007 | todo |
 | 5 | 022 | Migration chain (Migration.h/.cpp) | core | S | 016, 017, 007 | todo |

@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 088
 title: FxParams POD snapshot struct
-status: in-review
+status: done
 depends-on: [001, 006]
 component: core
 estimated-size: S
