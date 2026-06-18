@@ -1,0 +1,112 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Matt Woolly
+#
+# tests/golden/corpus/MANIFEST.toml — the provenance ledger for the golden corpus
+# (docs/design/11 §7.1, §7.3; ADR-013 Layer 3). The single control that keeps a
+# guess from silently hardening into a "regression-protected fact" [§1.3].
+#
+# Authored / appended ONLY by the guarded bless tool (tools/bless, arm64-only, task
+# golden-10), NEVER by hand and NEVER as a test side-effect [§7.2; ADR-013 C10/C11].
+# Each [[golden]] table records the full §7.3 field set for one blessed artifact:
+# its blob SHA-256, who/when/where it was blessed, the exact render parameters, the
+# corpus class + tolerance band (CLASS-FP), the FP-flag proof, the renderVersion it
+# was blessed under (ADR-023 V11), and its ledger §2-§8 honesty labels (§7.4).
+#
+# This harness validates self-consistency and topology-faithfulness, NEVER measured
+# SH-101 fidelity [§1.3; ADR-013 owner ratification]. honestyLabels tokens are the
+# controlled vocabulary of research/13 §1.2 — clone-derived, reverse-engineered,
+# theory/inference, community-disassembly, service-manual, disputed,
+# software-emulation-artifact.
+#
+# The seed entries below are illustrative example blesses (placeholder hashes) that
+# exercise both determinism classes and the honesty-label binding; the bless tool
+# replaces / appends real entries as goldens are blessed on macOS arm64.
+
+renderVersion = 1   # CURRENT renderVersion this corpus was authored at (ADR-023 V11)
+
+# --- CLASS-EXACT: fixed-seed integer PRNG noise stream [research/10 §6] -----------
+# Integer path -> SHA-256 hash-compared, identical on arm64 AND Linux x64 [C5].
+[[golden]]
+artifactSha256 = "c870021727399190b3c1cb4c385cd25c50c0aa4153cc5ff0ecccc65c1780d2eb"
+artifactRef = "corpus/prng-stream-44100-s12345.f32"
+blesser = "mwaudio101-ci"
+isoDate = "2026-06-18"
+commitSha = "0000000000000000000000000000000000000000"
+blessReason = "seed corpus: fixed-seed integer PRNG noise stream (CLASS-EXACT)"
+engine = "Huov"
+oversampleFactor = 2
+sampleRate = 44100.0
+seed = 12345
+blockSize = 512
+corpusClass = "EXACT"
+compiler = "AppleClang 17.0.0.17000013"
+fpFlagProof = "-fno-fast-math -ffp-contract=off"
+arm64HostId = "ref-macos-arm64-01"
+renderVersion = 1
+honestyLabels = []
+
+# --- CLASS-EXACT: sequencer per-step byte layout [research/13 §4.6] ---------------
+# Byte format derives from a community-disassembly ledger fact -> MUST carry label.
+[[golden]]
+artifactSha256 = "78e606c774218bcac9ba8c9b5bc8faefd72c6681868588696d30a98e4f798114"
+artifactRef = "corpus/seq-bytes-48000-s777.f32"
+blesser = "mwaudio101-ci"
+isoDate = "2026-06-18"
+commitSha = "0000000000000000000000000000000000000000"
+blessReason = "seed corpus: sequencer per-step byte layout (CLASS-EXACT)"
+engine = "Huov"
+oversampleFactor = 2
+sampleRate = 48000.0
+seed = 777
+blockSize = 512
+corpusClass = "EXACT"
+compiler = "AppleClang 17.0.0.17000013"
+fpFlagProof = "-fno-fast-math -ffp-contract=off"
+arm64HostId = "ref-macos-arm64-01"
+renderVersion = 1
+honestyLabels = ["community-disassembly"]
+
+# --- CLASS-FP: IR3109 ladder self-oscillation amplitude [research/13 §4.1] --------
+# Nonlinear path -> two-stage compare, per-corpus tolerance band in the manifest.
+# Self-osc amplitude is clone-derived (AMSynths AM8101 @ +-12V), NOT measured.
+[[golden]]
+artifactSha256 = "eac2d9e74821f67af9f4a722e0f88e24e116f1c03f21ad240450b4d9d614e2cf"
+artifactRef = "corpus/ladder-selfosc-48000-s4242.f32"
+blesser = "mwaudio101-ci"
+isoDate = "2026-06-18"
+commitSha = "0000000000000000000000000000000000000000"
+blessReason = "seed corpus: ladder self-oscillation amplitude (CLASS-FP)"
+engine = "Huov"
+oversampleFactor = 2
+sampleRate = 48000.0
+seed = 4242
+blockSize = 512
+corpusClass = "FP"
+tolerance = 1e-6
+compiler = "AppleClang 17.0.0.17000013"
+fpFlagProof = "-fno-fast-math -ffp-contract=off"
+arm64HostId = "ref-macos-arm64-01"
+renderVersion = 1
+honestyLabels = ["clone-derived"]
+
+# --- CLASS-FP: BA662 VCA drive (tanh) [research/13 §4.2] --------------------------
+# VCA internals are reverse-engineered (Open Music Labs chip probing), NOT measured.
+[[golden]]
+artifactSha256 = "23a0ea8954aa152d7e2b072acdf8ae2dc57717bb063f39c0a45cdfe29b84f794"
+artifactRef = "corpus/vca-drive-96000-s9001.f32"
+blesser = "mwaudio101-ci"
+isoDate = "2026-06-18"
+commitSha = "0000000000000000000000000000000000000000"
+blessReason = "seed corpus: BA662 VCA drive saturation (CLASS-FP)"
+engine = "Huov"
+oversampleFactor = 2
+sampleRate = 96000.0
+seed = 9001
+blockSize = 512
+corpusClass = "FP"
+tolerance = 1e-6
+compiler = "AppleClang 17.0.0.17000013"
+fpFlagProof = "-fno-fast-math -ffp-contract=off"
+arm64HostId = "ref-macos-arm64-01"
+renderVersion = 1
+honestyLabels = ["reverse-engineered"]
