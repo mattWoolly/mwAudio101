@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 067
 title: VoiceTypes.h — shared voice/control PODs, enums, and pool constants
-status: todo
+status: in-review
 depends-on: [001, 006, 007]
 component: core
 estimated-size: S
