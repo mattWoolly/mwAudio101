@@ -58,6 +58,29 @@ ctest --preset default -R fp_discipline_guard --no-tests=error
 ctest --preset default -R audiothreadguard --no-tests=error
 ```
 
+## Source discovery (CONFIGURE_DEPENDS globs)
+
+`mwcore` and the `mw101_tests` binary discover their sources via `file(GLOB_RECURSE
+… CONFIGURE_DEPENDS)`, **not** an explicit list. To add code: drop a `.cpp` under
+`core/**` (one of `core/{dsp,voice,control,fx,params,calibration,midi,util}/`) and
+its test under `tests/unit/**` (or `tests/integration/**`), then re-run
+`cmake --preset default`. **No `CMakeLists.txt` edit is needed**, and re-running
+configure is what re-evaluates the glob — `CONFIGURE_DEPENDS` makes the build try to
+re-glob, but the reliable step is an explicit configure after adding/removing files.
+This lets the parallel development fleet add module files without serializing on
+(and conflicting in) `core/CMakeLists.txt` / `tests/CMakeLists.txt`.
+
+The standalone invariant **tools** `LicenseHeaderCheck` and `FpDisciplineCheck` stay
+explicit single-file `add_executable` targets — they are tooling, not unit tests, so
+they are deliberately excluded from the test glob.
+
+**Tradeoff (glob vs explicit list):** globbing trades CMake's per-file precision for
+zero-merge-conflict scaling. The cost is that a *new* file requires a configure run
+to be seen (`CONFIGURE_DEPENDS` is best-effort, not guaranteed on every generator),
+and the file set is implicit rather than reviewable in one list. For this fleet the
+conflict-free scaling wins; if a file is silently missed, re-run `cmake --preset
+default`.
+
 ## Presets
 
 `configurePresets`, `buildPresets`, and `testPresets` share the same names 1:1.

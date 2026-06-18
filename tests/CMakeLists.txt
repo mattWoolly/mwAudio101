@@ -10,25 +10,28 @@ list(APPEND CMAKE_MODULE_PATH "${Catch2_SOURCE_DIR}/extras")
 include(Catch)
 include(CTest)
 
+# --- Source discovery: CONFIGURE_DEPENDS glob (parallel-fleet enabler) ----------
+# Unit/integration test sources are discovered by glob, NOT listed explicitly, so
+# the parallel development fleet can add tests/unit/**/XTest.cpp without serializing
+# on this file (no CMakeLists merge conflicts). CONFIGURE_DEPENDS re-runs the glob
+# when the file set changes; still re-run `cmake --preset default` after adding a
+# file (see docs/BUILDING.md). The standalone invariant TOOLS below
+# (LicenseHeaderCheck, FpDisciplineCheck) are NOT unit tests and stay explicit; the
+# RT sentinel AudioThreadGuard*.cpp is part of mw101_tests and is globbed by name.
+file(GLOB_RECURSE MW_TEST_SOURCES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/invariants/AudioThreadGuard*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/integration/*.cpp")
+
+# Empty-list guard: until any test .cpp lands, fall back to the discovery self-test
+# so configure never fails on a freshly-globbed tree. HarnessSelfTest.cpp is always
+# present today, so this is belt-and-suspenders for transient states.
+if(NOT MW_TEST_SOURCES)
+  set(MW_TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/unit/HarnessSelfTest.cpp")
+endif()
+
 # --- The headless unit/golden test binary: links mwcore ONLY (no JUCE) ----------
-add_executable(mw101_tests
-  # Layer-1 units (core + params + state + version)
-  unit/CalibrationTest.cpp
-  unit/BlockContextTest.cpp
-  unit/SmootherTest.cpp
-  unit/PrngTest.cpp
-  unit/SmoothingClassTest.cpp
-  unit/ParamIDsTest.cpp
-  unit/StateTreeTest.cpp
-  unit/EngineVersionTest.cpp
-  # Plugin-side PODs (pure C++, no JUCE — compiled here)
-  unit/CapabilitiesTest.cpp
-  unit/HostEventTest.cpp
-  # Cross-cutting RT sentinel + its self-tests
-  invariants/AudioThreadGuard.cpp
-  invariants/AudioThreadGuardTest.cpp
-  # Discovery wiring self-test
-  unit/HarnessSelfTest.cpp)
+add_executable(mw101_tests ${MW_TEST_SOURCES})
 
 target_link_libraries(mw101_tests PRIVATE
   mwcore                       # the JUCE-free core [ADR-001 C13]

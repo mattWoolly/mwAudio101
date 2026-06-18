@@ -4,8 +4,23 @@
 # core/CMakeLists.txt — the mwcore pure-C++20 static library (task 005).
 # Realizes docs/design/00 §3.3, docs/design/11 §13.6, ADR-001 C1, ADR-014 C11.
 
-add_library(mwcore STATIC
-  Core.cpp)
+# --- Source discovery: CONFIGURE_DEPENDS glob (parallel-fleet enabler) ----------
+# mwcore sources are discovered by glob, NOT listed explicitly, so the parallel
+# development fleet can add core/**/X.cpp without serializing on this file (no
+# CMakeLists merge conflicts). CONFIGURE_DEPENDS makes the build re-run the glob
+# when the file set changes; still re-run `cmake --preset default` after adding a
+# file (see docs/BUILDING.md). Tradeoff vs an explicit list is documented there.
+file(GLOB_RECURSE MWCORE_SOURCES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
+
+# Empty-list guard: until any .cpp lands, fall back to the anchor TU so configure
+# never fails on a freshly-globbed tree. Core.cpp is always present today, so this
+# is belt-and-suspenders for transient states.
+if(NOT MWCORE_SOURCES)
+  set(MWCORE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Core.cpp")
+endif()
+
+add_library(mwcore STATIC ${MWCORE_SOURCES})
 
 target_include_directories(mwcore PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}")
