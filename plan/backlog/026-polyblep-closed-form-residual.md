@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 026
 title: PolyBLEP closed-form residual (header-only)
-status: todo
+status: in-review
 depends-on: [001, 006]
 component: core
 estimated-size: S
