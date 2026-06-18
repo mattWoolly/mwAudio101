@@ -1,3 +1,8 @@
+<!--
+SPDX-License-Identifier: GPL-3.0-or-later
+SPDX-FileCopyrightText: 2026 Matt Woolly
+-->
+
 # <Product> v<N> — QA Report (Adversarial Audit)
 
 **Date:** <date>

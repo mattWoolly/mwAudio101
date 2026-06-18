@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 007
 title: core/BlockContext.h — POD seam aggregate + views
-status: todo
+status: in-review
 depends-on: [005]
 component: core
 estimated-size: S

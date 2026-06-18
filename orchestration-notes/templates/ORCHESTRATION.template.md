@@ -1,3 +1,8 @@
+<!--
+SPDX-License-Identifier: GPL-3.0-or-later
+SPDX-FileCopyrightText: 2026 Matt Woolly
+-->
+
 # <Project> — Orchestration Plan
 
 **Project:** <one-paragraph description of what is being built and for whom>.

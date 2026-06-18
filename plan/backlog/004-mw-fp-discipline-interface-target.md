@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 004
 title: mw_fp_discipline INTERFACE target (CompilerFlags.cmake)
-status: todo
+status: in-review
 depends-on: [001]
 component: infra
 estimated-size: S

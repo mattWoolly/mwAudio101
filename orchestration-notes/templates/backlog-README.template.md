@@ -1,3 +1,8 @@
+<!--
+SPDX-License-Identifier: GPL-3.0-or-later
+SPDX-FileCopyrightText: 2026 Matt Woolly
+-->
+
 # Backlog
 
 Atomic, agent-executable task files. **One file = one task = one branch = one PR.**

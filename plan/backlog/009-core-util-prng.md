@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 009
 title: core/util/Prng.h — seeded integer PRNG + CLASS-EXACT stream ctest
-status: todo
+status: in-review
 depends-on: [006]
 component: core
 estimated-size: S
