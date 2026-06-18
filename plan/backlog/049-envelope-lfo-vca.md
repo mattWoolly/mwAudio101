@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 049
 title: Envelope/LFO/VCA (PI) calibration constants block
-status: todo
+status: in-review
 depends-on: [007, 006, 001]
 component: core
 estimated-size: S
