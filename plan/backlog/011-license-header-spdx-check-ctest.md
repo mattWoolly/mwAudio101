@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 011
 title: License-header SPDX check + ctest-labels snapshot diff
-status: in-review
+status: done
 depends-on: [006]
 component: qa
 estimated-size: S

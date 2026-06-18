@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 008
 title: core/params/Smoother.h — OnePoleSmoother + ctest
-status: in-review
+status: done
 depends-on: [006]
 component: core
 estimated-size: S

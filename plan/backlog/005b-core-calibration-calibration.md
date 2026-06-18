@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 005b
 title: core/calibration/Calibration.h — single cross-module (PI) constants table + per-renderVersion frozen constant-set registry
-status: in-review
+status: done
 depends-on: [005]
 component: core
 estimated-size: M

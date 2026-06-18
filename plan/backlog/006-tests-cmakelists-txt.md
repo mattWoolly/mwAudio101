@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 006
 title: tests/CMakeLists.txt — Catch2 binary, catch_discover_tests, silent-pass gates
-status: in-review
+status: done
 depends-on: [003, 005]
 component: qa
 estimated-size: M

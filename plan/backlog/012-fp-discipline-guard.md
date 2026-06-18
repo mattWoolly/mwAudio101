@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 012
 title: fp_discipline_guard — compile_commands.json forbidden-flag grep ctest
-status: in-review
+status: done
 depends-on: [004, 006]
 component: qa
 estimated-size: S

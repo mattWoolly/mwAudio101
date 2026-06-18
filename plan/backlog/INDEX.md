@@ -15,28 +15,28 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 
 | Wave | id | Title | Component | Size | Depends on | Status |
 |---|---|---|---|---|---|---|
-| 0 | 001 | Top-level CMakeLists + project skeleton + options | infra | S | — | todo |
-| 1 | 002 | CMakePresets.json schema-v6 base + sanitizer + per-platform presets | infra | M | 001 | todo |
-| 1 | 003 | CPM bootstrap + full-SHA dependency pin manifest | infra | M | 001 | todo |
-| 1 | 004 | mw_fp_discipline INTERFACE target (CompilerFlags.cmake) | infra | S | 001 | todo |
-| 1 | 095 | Validator target locator cmake/Validators.cmake | infra | S | 001 | todo |
-| 1 | 098 | Capability rung enums + ResolvedCapabilities POD (plugin/host/Capabilities.h) | app | S | 001 | todo |
-| 2 | 005 | mwcore static-lib target + no-JUCE-in-core build guard | infra | S | 001, 004 | todo |
-| 2 | 013 | docs/BUILDING.md local==CI command map + scripts/check.sh | docs | S | 002 | todo |
-| 2 | 096 | Configure-time format gate cmake/Formats.cmake | infra | M | 001, 095 | todo |
-| 3 | 005b | core/calibration/Calibration.h — single cross-module (PI) constants table + per-renderVersion frozen constant-set registry | core | M | 005 | todo |
-| 3 | 006 | tests/CMakeLists.txt — Catch2 binary, catch_discover_tests, silent-pass gates | qa | M | 003, 005 | todo |
-| 3 | 007 | core/BlockContext.h — POD seam aggregate + views | core | S | 005 | todo |
-| 3 | 097 | Per-platform format sets in CMakePresets.json | infra | S | 001, 096 | todo |
-| 4 | 008 | core/params/Smoother.h — OnePoleSmoother + ctest | core | S | 006 | todo |
-| 4 | 009 | core/util/Prng.h — seeded integer PRNG + CLASS-EXACT stream ctest | core | S | 006 | todo |
-| 4 | 010 | AudioThreadGuard alloc/lock sentinel + ctest | qa | M | 006 | todo |
-| 4 | 011 | License-header SPDX check + ctest-labels snapshot diff | qa | S | 006 | todo |
-| 4 | 012 | fp_discipline_guard — compile_commands.json forbidden-flag grep ctest | qa | S | 004, 006 | todo |
-| 4 | 014 | Compile-time parameter string-ID constants (ParamIDs.h) | core | S | 001, 006 | todo |
-| 4 | 015 | SmoothingClass enum + per-class time-constant accessor (SmoothingClass.h) | core | S | 001, 006 | todo |
-| 4 | 016 | Engine/render/schema version constants (EngineVersion.h) | core | S | 001, 006 | todo |
-| 4 | 017 | State-tree identifiers + Extras POD payload (StateTree.h, Extras.h) | core | S | 001, 006 | todo |
+| 0 | 001 | Top-level CMakeLists + project skeleton + options | infra | S | — | done |
+| 1 | 002 | CMakePresets.json schema-v6 base + sanitizer + per-platform presets | infra | M | 001 | done |
+| 1 | 003 | CPM bootstrap + full-SHA dependency pin manifest | infra | M | 001 | done |
+| 1 | 004 | mw_fp_discipline INTERFACE target (CompilerFlags.cmake) | infra | S | 001 | done |
+| 1 | 095 | Validator target locator cmake/Validators.cmake | infra | S | 001 | done |
+| 1 | 098 | Capability rung enums + ResolvedCapabilities POD (plugin/host/Capabilities.h) | app | S | 001 | done |
+| 2 | 005 | mwcore static-lib target + no-JUCE-in-core build guard | infra | S | 001, 004 | done |
+| 2 | 013 | docs/BUILDING.md local==CI command map + scripts/check.sh | docs | S | 002 | done |
+| 2 | 096 | Configure-time format gate cmake/Formats.cmake | infra | M | 001, 095 | done |
+| 3 | 005b | core/calibration/Calibration.h — single cross-module (PI) constants table + per-renderVersion frozen constant-set registry | core | M | 005 | done |
+| 3 | 006 | tests/CMakeLists.txt — Catch2 binary, catch_discover_tests, silent-pass gates | qa | M | 003, 005 | done |
+| 3 | 007 | core/BlockContext.h — POD seam aggregate + views | core | S | 005 | done |
+| 3 | 097 | Per-platform format sets in CMakePresets.json | infra | S | 001, 096 | done |
+| 4 | 008 | core/params/Smoother.h — OnePoleSmoother + ctest | core | S | 006 | done |
+| 4 | 009 | core/util/Prng.h — seeded integer PRNG + CLASS-EXACT stream ctest | core | S | 006 | done |
+| 4 | 010 | AudioThreadGuard alloc/lock sentinel + ctest | qa | M | 006 | done |
+| 4 | 011 | License-header SPDX check + ctest-labels snapshot diff | qa | S | 006 | done |
+| 4 | 012 | fp_discipline_guard — compile_commands.json forbidden-flag grep ctest | qa | S | 004, 006 | done |
+| 4 | 014 | Compile-time parameter string-ID constants (ParamIDs.h) | core | S | 001, 006 | done |
+| 4 | 015 | SmoothingClass enum + per-class time-constant accessor (SmoothingClass.h) | core | S | 001, 006 | done |
+| 4 | 016 | Engine/render/schema version constants (EngineVersion.h) | core | S | 001, 006 | done |
+| 4 | 017 | State-tree identifiers + Extras POD payload (StateTree.h, Extras.h) | core | S | 001, 006 | done |
 | 4 | 026 | PolyBLEP closed-form residual (header-only) | core | S | 001, 006 | todo |
 | 4 | 027 | minBLEP residual table + per-voice applicator | core | M | 001, 006, 007 | todo |
 | 4 | 028 | White-noise source (xorshift32) | core | S | 001, 006, 007 | todo |
@@ -55,7 +55,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 4 | 081 | Control-core POD types: events, enums, ModInputs/Outputs, ControlSnapshot | core | S | 001, 006, 007 | todo |
 | 4 | 088 | FxParams POD snapshot struct | core | S | 001, 006 | todo |
 | 4 | 089 | FractionalDelayLine header-only ring buffer | core | S | 001, 006, 007 | todo |
-| 4 | 099 | HostEvent POD + NormalizedEventBuffer (plugin/host/HostEvent.h) | app | S | 001, 006, 007 | todo |
+| 4 | 099 | HostEvent POD + NormalizedEventBuffer (plugin/host/HostEvent.h) | app | S | 001, 006, 007 | done |
 | 4 | 106 | DesignTokens table (palette/stroke/radius/typography, single reskin knob) | ui | S | 006 | todo |
 | 4 | 107 | Telemetry SPSC types (Snapshot POD + Producer/Consumer, lock-free, pre-allocated) | ui | M | 006, 006 | todo |
 | 4 | 110 | SVG assets + BinaryData embedding (logo + static decoration) | ui | S | 001, 006 | todo |

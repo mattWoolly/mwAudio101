@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 013
 title: docs/BUILDING.md local==CI command map + scripts/check.sh
-status: in-review
+status: done
 depends-on: [002]
 component: docs
 estimated-size: S

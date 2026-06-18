@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 010
 title: AudioThreadGuard alloc/lock sentinel + ctest
-status: in-review
+status: done
 depends-on: [006]
 component: qa
 estimated-size: M

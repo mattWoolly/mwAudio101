@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 098
 title: Capability rung enums + ResolvedCapabilities POD (plugin/host/Capabilities.h)
-status: in-review
+status: done
 depends-on: [001]
 component: app
 estimated-size: S

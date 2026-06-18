@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 015
 title: SmoothingClass enum + per-class time-constant accessor (SmoothingClass.h)
-status: in-review
+status: done
 depends-on: [001, 006]
 component: core
 estimated-size: S
