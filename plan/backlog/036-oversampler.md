@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 036
 title: Oversampler: polyphase IIR halfband up/downsampler (realtime path)
-status: todo
+status: in-review
 depends-on: [001, 006, 007]
 component: core
 estimated-size: M
