@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 050
 title: Envelope.h header: EnvStage/EnvTrigMode/EnvParams + Envelope class layout
-status: todo
+status: in-review
 depends-on: [007, 006, 001]
 component: core
 estimated-size: S
