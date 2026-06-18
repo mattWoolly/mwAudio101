@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Matt Woolly
 //
-// core/dsp/Envelope.h — the one shared ADSR generator's public API + POD state
-// (task 050). This header DECLARES the surface verbatim from
-// docs/design/03-dsp-envelope-lfo-vca.md §2.2; the coefficient/curve math, the
-// trigger state machine, and the (PI) calibration constant VALUES land in the
-// separate .cpp / calibration tasks (this task's ## Out of scope).
+// core/dsp/Envelope.h — the one shared ADSR generator's public API + POD state.
+// The surface is DECLARED here verbatim from docs/design/03-dsp-envelope-lfo-vca.md
+// §2.2 (task 050); the coefficient/curve math and the trigger state machine are
+// DEFINED out-of-line in Envelope.cpp (task 054) per §2.4 / §2.5, and the (PI)
+// calibration constant VALUES live in core/calibration/EnvLfoVcaConstants.h
+// (task 049).
 //
 // One ADSR per voice, shared across VCF cutoff / VCA gain / VCO pulse width; there
 // is no separate filter or amp EG [docs/design/03 §2.1; research/04 §2.1]. The
@@ -13,17 +14,15 @@
 // scaling is applied downstream by ModRouting, not here [docs/design/03 §2.1].
 //
 // Real-time invariants [docs/design/03 §2.1; docs/design/00 §9; ADR-001, ADR-020
-// S14]: all state is POD; coefficients are precomputed in prepare(); no heap
-// allocation and no locks on the audio thread; the hot path (tick) and the trigger
-// entry points are noexcept. The envelope advances on the control-rate tick
+// S14]: all state is POD; coefficients are precomputed in prepare()/setParams(); no
+// heap allocation and no locks on the audio thread; the hot path (tick) and the
+// trigger entry points are noexcept. The envelope advances on the control-rate tick
 // cadence and never reads a wall-clock timer [docs/design/03 §2.1; ADR-005].
 //
-// The inline bodies here are deliberately math-free placeholders that only keep
-// the declared POD state coherent and the header self-contained for the
-// header-surface tests; the audible ADSR contour (one-pole-toward-target per stage,
-// attack overshoot, snap threshold) and the GATE / GATE+TRIG / LFO trigger logic
-// are implemented by the .cpp task per §2.4 / §2.5. No (PI) curve/time constant is
-// inlined at a call site here [docs/design/00 §8.3; ADR-020 S13].
+// The audible ADSR contour (one-pole-toward-target per stage, attack overshoot,
+// snap threshold) and the GATE / GATE+TRIG / LFO trigger logic are implemented in
+// Envelope.cpp; no (PI) curve/time constant is inlined at a call site [docs/design/00
+// §8.3; ADR-020 S13]. Only the const accessors are inline here (they are constexpr).
 
 #pragma once
 
@@ -69,6 +68,12 @@ public:
     constexpr float    level()  const noexcept { return level_; }
 
 private:
+    // Enter the Attack stage from the current level (the >1 overshoot target and the
+    // attack coefficient). Shared by noteOn()/clockTrigger() per §2.5; defined in
+    // Envelope.cpp. v1 re-attacks from the current level (no snap to 0) — a (PI)
+    // choice / open validation gap [docs/design/03 §2.5; research/04 §5.3].
+    void startAttack() noexcept;
+
     double sampleRate_      = 48000.0;
     int    ticksPerControl_ = 1;
     EnvStage stage_         = EnvStage::Idle;
@@ -78,58 +83,8 @@ private:
     float  sustain_         = 0.7f;
     float  curve_           = 1.0f;
     EnvTrigMode trig_       = EnvTrigMode::GateTrig;
-    // precomputed per-stage coefficients refreshed in setParams()
+    // precomputed per-stage coefficients refreshed in setParams() (§2.4)
     float  aCoeff_ = 0, dCoeff_ = 0, rCoeff_ = 0;
 };
-
-// --- Inline placeholder bodies (math-free; the .cpp task implements §2.4/§2.5) --
-//
-// These keep the declared POD state coherent and make Envelope.h self-contained
-// for the header-surface tests. They intentionally contain NO coefficient/curve
-// math and NO (PI) literals — that logic is the separate .cpp task's scope.
-
-inline void Envelope::prepare(double sampleRate, int controlRateDivider) noexcept
-{
-    sampleRate_      = sampleRate;
-    ticksPerControl_ = controlRateDivider;
-    reset();
-}
-
-inline void Envelope::reset() noexcept
-{
-    stage_  = EnvStage::Idle;
-    level_  = 0.0f;
-    target_ = 0.0f;
-}
-
-inline void Envelope::setParams(const EnvParams& p) noexcept
-{
-    // Store the POD targets only; per-stage coefficient computation (§2.4) is the
-    // .cpp task. No curve/time math is performed here.
-    sustain_ = p.sustain;
-    curve_   = p.curve;
-    trig_    = p.trig;
-}
-
-inline void Envelope::noteOn(bool /*legato*/) noexcept
-{
-    // Trigger state machine (GATE vs GATE+TRIG vs LFO) is the .cpp task (§2.5).
-}
-
-inline void Envelope::noteOff() noexcept
-{
-    // Transition to Release is the .cpp task (§2.5).
-}
-
-inline void Envelope::clockTrigger() noexcept
-{
-    // LFO-mode retrigger is the .cpp task (§2.5 / §3.6).
-}
-
-inline float Envelope::tick() noexcept
-{
-    // Contour advance (one-pole-toward-target per stage, §2.4) is the .cpp task.
-    return level_;
-}
 
 } // namespace mw101::dsp
