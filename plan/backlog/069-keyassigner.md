@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 069
 title: KeyAssigner.h/.cpp — bit-faithful note-priority/retrigger state machine
-status: todo
+status: in-review
 depends-on: [001, 006, 007, 067]
 component: core
 estimated-size: M
