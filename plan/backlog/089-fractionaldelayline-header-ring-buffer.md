@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 089
 title: FractionalDelayLine header-only ring buffer
-status: todo
+status: in-review
 depends-on: [001, 006, 007]
 component: core
 estimated-size: S
