@@ -11,6 +11,7 @@
 [capabilities]
 [core]
 [engineversion]
+[env_header]
 [harness]
 [hostevent]
 [paramids]
