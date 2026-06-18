@@ -95,15 +95,20 @@ TEST_CASE("modrouting_header: per-tick combine entry point is noexcept and prese
     mw101::dsp::ModRoutingCombiner c;
     c.prepare(48000.0);
 
-    ModDepths depths;          // all-zero depths => no contribution
+    ModDepths depths;          // all-zero depths => no depth contribution
     VelocityRouting vel;       // default ON
+    vel.enabled = false;       // also disable velocity so the all-zero shape holds
 
-    // The per-tick combiner is the hot-path entry point. With zero depths and a
-    // zero envelope/LFO, the pitch contribution is zero (shape check only; the
-    // depth/velocity/LPF MATH is task 12's scope, not asserted numerically here).
-    const float pitchMod = c.combine(depths, vel, /*envLevel=*/0.0f, /*lfoValue=*/0.0f,
-                                     /*velNorm=*/1.0f);
-    REQUIRE(pitchMod == 0.0f);
+    // The per-tick combiner is the hot-path entry point. With zero depths, a zero
+    // envelope/LFO and velocity OFF, every per-destination contribution is zero
+    // (shape check only; the calibrated depth/velocity/LPF MATH is task 057's scope,
+    // asserted numerically in ModRoutingCombineTest, not here).
+    const mw101::dsp::ModContributions mods =
+        c.combine(depths, vel, /*envLevel=*/0.0f, /*lfoValue=*/0.0f, /*velNorm=*/0.0f);
+    REQUIRE(mods.pitchMod == 0.0f);
+    REQUIRE(mods.cutoffMod == 0.0f);
+    REQUIRE(mods.pwMod == 0.0f);
+    REQUIRE(mods.vcaControl == 0.0f);
 
     // Hot-path RT contract: the combine entry point is noexcept (ADR-001 / ADR-020).
     STATIC_REQUIRE(noexcept(c.combine(depths, vel, 0.0f, 0.0f, 1.0f)));
