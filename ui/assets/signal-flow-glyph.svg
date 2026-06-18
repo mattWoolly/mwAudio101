@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  SPDX-FileCopyrightText: 2026 Matt Woolly
+
+  Static decorative signal-flow glyph — vector art drawn once into the cached
+  BackgroundLayer (it never animates) and loaded via
+  juce::Drawable::createFromSVG through BinaryData
+  [docs/design/10-ui.md §7.1/§7.2/§12; ADR-015 C11].
+
+  Original art: the MODULATOR -> VCO -> MIXER -> VCF -> VCA chain as connected
+  nodes. Non-Roland palette; teaches the modeled architecture (research/12 §7.3).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 48" width="320" height="48"
+     role="img" aria-label="signal flow: modulator to VCO to mixer to VCF to VCA">
+  <title>signal flow</title>
+  <!-- connecting patch line -->
+  <path d="M24 24 H296" fill="none" stroke="#1FB6A6" stroke-width="2"
+        stroke-linecap="round"/>
+  <!-- five stage nodes -->
+  <circle cx="24"  cy="24" r="7" fill="none" stroke="#1FB6A6" stroke-width="2"/>
+  <circle cx="92"  cy="24" r="7" fill="none" stroke="#1FB6A6" stroke-width="2"/>
+  <circle cx="160" cy="24" r="7" fill="#F2C14E"/>
+  <circle cx="228" cy="24" r="7" fill="none" stroke="#1FB6A6" stroke-width="2"/>
+  <circle cx="296" cy="24" r="7" fill="none" stroke="#1FB6A6" stroke-width="2"/>
+  <!-- flow arrowhead at the output -->
+  <path d="M300 24 L292 19 L292 29 Z" fill="#1FB6A6"/>
+</svg>

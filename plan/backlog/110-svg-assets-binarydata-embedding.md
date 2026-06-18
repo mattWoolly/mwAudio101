@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 110
 title: SVG assets + BinaryData embedding (logo + static decoration)
-status: todo
+status: in-review
 depends-on: [001, 006]
 component: ui
 estimated-size: S
