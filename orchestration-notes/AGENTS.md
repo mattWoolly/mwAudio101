@@ -1,3 +1,8 @@
+<!--
+SPDX-License-Identifier: GPL-3.0-or-later
+SPDX-FileCopyrightText: 2026 Matt Woolly
+-->
+
 # Operating rules (drop-in)
 
 Condensed rules for any agent working on this project. Copy this into the project root as

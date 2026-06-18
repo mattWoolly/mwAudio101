@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 095
 title: Validator target locator cmake/Validators.cmake
-status: todo
+status: in-review
 depends-on: [001]
 component: infra
 estimated-size: S

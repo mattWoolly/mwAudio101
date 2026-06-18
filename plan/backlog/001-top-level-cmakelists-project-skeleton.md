@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 001
 title: Top-level CMakeLists + project skeleton + options
-status: todo
+status: in-review
 depends-on: []
 component: infra
 estimated-size: S

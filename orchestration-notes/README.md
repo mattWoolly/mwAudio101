@@ -1,3 +1,8 @@
+<!--
+SPDX-License-Identifier: GPL-3.0-or-later
+SPDX-FileCopyrightText: 2026 Matt Woolly
+-->
+
 # The mwStime Playbook
 
 A reusable process for building a non-trivial software project with a **fleet of AI

@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 097
 title: Per-platform format sets in CMakePresets.json
-status: todo
+status: in-review
 depends-on: [001, 096]
 component: infra
 estimated-size: S

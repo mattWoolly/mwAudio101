@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 002
 title: CMakePresets.json schema-v6 base + sanitizer + per-platform presets
-status: todo
+status: in-review
 depends-on: [001]
 component: infra
 estimated-size: M

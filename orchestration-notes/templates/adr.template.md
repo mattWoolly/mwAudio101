@@ -1,3 +1,8 @@
+<!--
+SPDX-License-Identifier: GPL-3.0-or-later
+SPDX-FileCopyrightText: 2026 Matt Woolly
+-->
+
 # Architecture Decision Records
 
 `plan/decisions/NNN-short-slug.md` — **immutable once accepted** (supersede with a new ADR

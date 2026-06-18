@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 099
 title: HostEvent POD + NormalizedEventBuffer (plugin/host/HostEvent.h)
-status: todo
+status: in-review
 depends-on: [001, 006, 007]
 component: app
 estimated-size: S

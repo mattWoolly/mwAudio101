@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 005
 title: mwcore static-lib target + no-JUCE-in-core build guard
-status: todo
+status: in-review
 depends-on: [001, 004]
 component: infra
 estimated-size: S

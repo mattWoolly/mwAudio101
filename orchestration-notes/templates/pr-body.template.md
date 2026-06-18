@@ -1,3 +1,8 @@
+<!--
+SPDX-License-Identifier: GPL-3.0-or-later
+SPDX-FileCopyrightText: 2026 Matt Woolly
+-->
+
 <!-- PR title MUST be exactly: NNN: <task title>  (so it threads to the squash subject) -->
 
 ## What & why

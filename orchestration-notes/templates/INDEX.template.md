@@ -1,3 +1,8 @@
+<!--
+SPDX-License-Identifier: GPL-3.0-or-later
+SPDX-FileCopyrightText: 2026 Matt Woolly
+-->
+
 # Backlog index — execution order
 
 All tasks start `status: todo`. Rows are grouped into **execution waves**: every task in a
