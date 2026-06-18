@@ -52,7 +52,7 @@ verbatim, so the task can state "the contract IS the spec".
 
 ## ADR ledger
 
-All accepted 2026-06-17/18 (Phase 2). ADRs 016–024 are reconciliation/gap decisions from the
+All accepted 2026-06-17/18 (Phase 2). ADRs 016–025 are reconciliation/gap decisions from the
 coherence pass; "refined-by" notes appear in the affected ADRs' Status lines.
 
 | ADR | Title | Notes |
@@ -64,7 +64,7 @@ coherence pass; "refined-by" notes appear in the affected ADRs' Status lines.
 | 005 | Control-rate & 6-bit CV authenticity | default superseded by 016 (modern-smooth default) |
 | 006 | Voice architecture, polyphony & unison | mono default affirmed by 016 |
 | 007 | Modulation routing, arpeggiator & 100-step seq | host-sync arp/seq |
-| 008 | Parameter / state / preset schema (the contract) | Quality param via 018; load-failure via 021 |
+| 008 | Parameter / state / preset schema (the contract) | Quality param via 018; load-failure via 021; C8 accent removed by 025 |
 | 009 | Vintage variance / analog-drift model | INIT default set by 016 (subtle drift) |
 | 010 | Built-in FX section (Chorus/Delay/Drive) | Drive placement/PDC via 017 |
 | 011 | Plugin formats & wrapper strategy | LV2/AAX via 024 |
@@ -81,3 +81,4 @@ coherence pass; "refined-by" notes appear in the affected ADRs' Status lines.
 | 022 | MPE-lite & arp/seq cross-format behavior | per-format fallback contract |
 | 023 | Engine versioning, bless comms & blessed sample-rates | renderVersion in state; blessed SR set |
 | 024 | LV2 export path & AAX exclusion | LV2 via JUCE-native export; AAX out |
+| 025 | Sequencer per-step accent — removed for v1 | supersedes 008 C8 accent field; aligns docs 05/06 to 007 (no accent); accent deferred |
