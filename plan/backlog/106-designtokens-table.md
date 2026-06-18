@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 106
 title: DesignTokens table (palette/stroke/radius/typography, single reskin knob)
-status: todo
+status: in-review
 depends-on: [006]
 component: ui
 estimated-size: S
