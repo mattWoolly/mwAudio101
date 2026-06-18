@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 018
 title: renderVersion state lifecycle + opt-in flag (RenderVersionState.h/.cpp)
-status: todo
+status: in-review
 depends-on: [016, 017]
 component: core
 estimated-size: S
