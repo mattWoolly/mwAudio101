@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 107
 title: Telemetry SPSC types (Snapshot POD + Producer/Consumer, lock-free, pre-allocated)
-status: todo
+status: in-review
 depends-on: [006, 006]
 component: ui
 estimated-size: M
