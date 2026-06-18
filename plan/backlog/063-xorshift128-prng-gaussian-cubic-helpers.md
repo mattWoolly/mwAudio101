@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 063
 title: Xorshift128+ PRNG with Gaussian/cubic helpers and seed derivation
-status: todo
+status: in-review
 depends-on: [001, 006, 007]
 component: engine
 estimated-size: S
