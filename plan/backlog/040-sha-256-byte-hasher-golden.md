@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 040
 title: SHA-256 byte hasher for golden serialization
-status: todo
+status: in-review
 depends-on: [001, 006]
 component: qa
 estimated-size: S
