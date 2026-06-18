@@ -13,6 +13,7 @@
 [engineversion]
 [harness]
 [hostevent]
+[noise]
 [paramids]
 [prng]
 [rt]
