@@ -13,6 +13,7 @@
 [engineversion]
 [harness]
 [hostevent]
+[modseqtypes]
 [paramids]
 [prng]
 [rt]
