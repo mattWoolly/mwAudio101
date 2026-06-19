@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 132
 title: Engine no-alloc / no-lock / noexcept hot-path guard tests
-status: todo
+status: in-review
 depends-on: [006, 118]
 component: qa
 estimated-size: S
