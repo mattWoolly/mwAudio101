@@ -74,9 +74,9 @@ TEST_CASE("vcf-core: at k=0 the magnitude rolls off 24 dB per octave above cutof
 
     LadderFilter f;
     f.prepare(fsOs, /*maxBlockOs=*/64);
-    f.setResonance(0.0f);              // stub; k is forced to zero regardless
+    f.setResonance(0.0f);              // reso01 = 0 => loop gain k = 0 (feed-forward)
     f.setCutoffHz(static_cast<float>(fc));
-    REQUIRE(f.loopGainK() == 0.0f);    // linear core: feedback gain is zero (F-05 stub)
+    REQUIRE(f.loopGainK() == 0.0f);    // zero resonance: feedback gain is zero (F-05)
 
     // Measure the slope between +3 and +4 octaves above cutoff, where the four-pole
     // asymptote is clean and both points are well below Fs/4.
@@ -304,11 +304,15 @@ TEST_CASE("vcf-core: processBlock output is bit-identical run-to-run for fixed i
     const auto x = run();
     const auto y = run();
     REQUIRE(x == y); // bit-identical
-    // Resonance is a no-op stub in this task: make-up gain stays unity and k stays 0.
+    // Resonance is wired by task 039 (the resonance loop): at reso01 = 0 the loop gain
+    // and the make-up are still at their rest values (k = 0, make-up = unity), and the
+    // control value is stored for introspection. The reso01 = 1 self-oscillation
+    // behavior is exercised by the vcf-reso suite (LadderFilterResonanceTest.cpp).
     LadderFilter g;
     g.prepare(96000.0, 64);
-    g.setResonance(1.0f);
+    g.setResonance(0.0f);
     REQUIRE(g.loopGainK() == 0.0f);
     REQUIRE(g.makeUpGain() == 1.0f);
+    g.setResonance(1.0f);
     REQUIRE(g.resonance01() == 1.0f); // the control value is stored for introspection
 }
