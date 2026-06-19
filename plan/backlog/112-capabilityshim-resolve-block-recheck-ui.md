@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 112
 title: CapabilityShim resolve + per-block recheck + UI publish (plugin/host/CapabilityShim.h/.cpp)
-status: todo
+status: in-review
 depends-on: [001, 006, 098, 103, 087]
 component: app
 estimated-size: M
