@@ -391,6 +391,19 @@ TEST_CASE("vcf-reso: make-up gain rises monotonically with resonance, is not app
     }
     REQUIRE(f.makeUpGain() > 1.0f);      // strictly above unity at full resonance
 
+    // F-13 honest oracle: the control->loop-gain map MUST equal the documented
+    // k = kMax * reso01^exp at the calibrated anchors (this CATCHES silent taper drift —
+    // e.g. a wrong kMax/exp pair that doubles low-resonance k). reso01 = 0.5 must land on
+    // the §9 unity anchor k = 1.0 [docs/design/02 §5.1, §9; ADR-027].
+    for (const float r : {0.0f, 0.25f, 0.5f, 0.7f, 1.0f}) {
+        f.setResonance(r);
+        const float kDoc = mw::cal::vcf::kMax * std::pow(r, mw::cal::vcf::kResoCurveExp);
+        INFO("reso01 = " << r << " documented k = " << kDoc << " engine k = " << f.loopGainK());
+        REQUIRE(f.loopGainK() == Catch::Approx(kDoc).margin(1.0e-5));
+    }
+    f.setResonance(0.5f);
+    REQUIRE(f.loopGainK() == Catch::Approx(1.0f).margin(1.0e-4)); // §9 unity anchor at reso01 = 0.5
+
     // The make-up gain is NOT applied inside processSample, and the filter INPUT scaling
     // is invariant to resonance (F-06). Drive a small low-frequency tone (passband) at
     // two resonance settings; the make-up multiplier must NOT appear on the output of

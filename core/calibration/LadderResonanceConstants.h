@@ -43,16 +43,19 @@ namespace mw::cal::vcf {
 // actually REACH onset — and far enough past it to establish a STABLE oscillation whose
 // amplitude is the diode-clamp fixed point, not a knife-edge balance.
 //
-// kMax = 8.0 places reso01 = 1.0 firmly in the self-oscillating regime (well above the
-// ~4.4 discrete onset): the loop self-oscillates within ~20 ms to a clean, low-THD sine
-// (THD < 1%), the frequency tracks cutoff within the <10% bound across the audio range,
-// and the diode clamp (§5.4) governs the amplitude to a fixed point that is insensitive
-// to k perturbations near reso01 = 1 (a ~23% k change from reso01 0.9->1.0 moves the
-// amplitude only ~11%). This is (PI) and deliberate: k = 4 is a normalized MODEL value,
-// NOT an SH-101 pot value [docs/design/02 §5.1 "(PI)" note; ADR-003 Decision], and the
-// amplitude is set by the clamp fixed point, NOT by a knife-edge k, so the headroom past
-// 4 is bounded by construction [ADR-003 F-05]. (PI).
-inline constexpr float kMax = 8.0f;  // (PI) — loop gain at reso01 = 1 (firmly self-osc)
+// CALIBRATION NOTE (deviation from §9's continuous-model values — see ADR-027): §9 lists
+// kMax=4.0, exp=2.0 for the IDEAL CONTINUOUS model (onset at k=4). The shipping engine is a
+// DISCRETE forward-Euler Huovilainen cascade whose self-oscillation onset sits ABOVE k=4
+// (measured ~4.4). A uniform kMax bump would (wrongly) scale loop gain across the WHOLE
+// control range; instead the (PI) taper is re-fit so the documented low/mid anchors hold
+// while the top reaches a firmly self-oscillating gain: kMax=8.0 with exp=3.0 gives
+// reso01=0.5 -> k = 8*0.125 = 1.0 EXACTLY (the §9 anchor the F-13 cross-check validates),
+// 0.7 -> 2.74, and 1.0 -> 8.0 (firmly above the ~4.4 discrete onset, so the resonant peak
+// tracks cutoff within the <10% bound and the diode clamp §5.4 sets a bounded clean-sine
+// fixed point that is insensitive to k near the top). Steepening exp (not uniformly
+// inflating kMax) is what preserves the low/mid documented anchors while reaching robust
+// self-oscillation. reso01->k is (PI) for the unmeasured pot law [research/03 §9.1].
+inline constexpr float kMax = 8.0f;  // (PI) discrete-model loop gain at reso01 = 1 (ADR-027)
 
 // Resonance taper exponent: the control->loop-gain law is k = kMax * reso01^exp, a
 // unit-output x^p curve (resonanceCurve(1) == 1) [docs/design/02 §5.1, §9
@@ -61,7 +64,7 @@ inline constexpr float kMax = 8.0f;  // (PI) — loop gain at reso01 = 1 (firmly
 // quadratic ramp that keeps the low-resonance regime nearly linear (where the TPT
 // cross-check applies, F-13) and concentrates the steep loop-gain rise near the top of
 // the control where self-oscillation onset lives. (PI).
-inline constexpr float kResoCurveExp = 2.0f;  // (PI) — resonance taper exponent (x^p)
+inline constexpr float kResoCurveExp = 3.0f;  // (PI) — resonance taper exponent (x^p)
 
 // Output-side make-up Q depth: makeUpGain = 1 + makeUpDepth * resonanceCurve(reso01)
 // [docs/design/02 §5.3, §9 vcf::makeUpDepth; ADR-003 F-06]. OTA 4-pole filters lose
