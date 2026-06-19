@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 038
 title: LadderFilter linear core: 4-stage Huovilainen cascade + cutoff mapping (no resonance)
-status: todo
+status: in-review
 depends-on: [001, 006, 007, 033, 035]
 component: core
 estimated-size: M
