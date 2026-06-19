@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 057
 title: ModRouting.cpp: depth scaling, velocity routing, mod-bus LPF
-status: todo
+status: in-review
 depends-on: [007, 006, 049, 053]
 component: core
 estimated-size: M
