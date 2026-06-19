@@ -100,18 +100,18 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 6 | 071 | ControlCore driver — control-tick advance, VINTAGE/MODERN poles, jitter, auto-engage, crossfade | core | M | 001, 006, 007, 067, 069, 070 | done |
 | 6 | 087 | SequencerEngine: fixed-order tick + RT-safe snapshot swap | core | M | 001, 006, 007, 081, 082, 083, 084, 085, 086 | done |
 | 6 | 091 | Drive stage: oversampled asymmetric waveshaper + tilt + DC block | core | M | 001, 006, 007, 088, 090 | done |
-| 6 | 109 | Custom control subclasses (Rotary/Linear sliders, ToggleSwitch, ChoiceSelector) | ui | M | 006, 106, 108 | todo |
+| 6 | 109 | Custom control subclasses (Rotary/Linear sliders, ToggleSwitch, ChoiceSelector) | ui | M | 006, 106, 108 | done |
 | 7 | 024 | Load-failure recovery ladder (LoadFailure.h/.cpp) | core | M | 019, 023, 021, 022, 007 | todo |
 | 7 | 032 | OscillatorSection owner + per-voice HQ escalation | core | M | 001, 006, 007, 026, 027, 029, 030, 031, 028 | done |
-| 7 | 042 | Stimulus and PatchSnapshot render-input types | qa | S | 001, 006, 007, 041, 020 | todo |
+| 7 | 042 | Stimulus and PatchSnapshot render-input types | qa | S | 001, 006, 007, 041, 020 | done |
 | 7 | 044 | Provenance — honesty-label vocabulary and renderVersion governor | qa | S | 001, 006, 043 | done |
 | 7 | 047 | Oversampler zone wrapper: factor selection, OS_CEILING clamp, and CI alias-floor harness | core | M | 001, 006, 007, 039, 036 | done |
-| 7 | 061 | Env/LFO param de-zipper class verification (S2/S4 paired test) | qa | S | 007, 006, 020, 054, 055 | todo |
+| 7 | 061 | Env/LFO param de-zipper class verification (S2/S4 paired test) | qa | S | 007, 006, 020, 054, 055 | done |
 | 7 | 062 | Env/LFO/VCA real-time safety and control-rate determinism suite | qa | S | 007, 006, 058, 059, 060, 057 | done |
-| 7 | 066 | VintageMacro host-thread Age-to-target mapping | engine | S | 001, 006, 007, 020 | todo |
+| 7 | 066 | VintageMacro host-thread Age-to-target mapping | engine | S | 001, 006, 007, 020 | done |
 | 7 | 094 | FxChain orchestration: bypass, dry-pad, mono collapse, latency | core | M | 001, 006, 007, 088, 089, 091, 092, 093 | done |
-| 7 | 100 | RT-safe CC/learn map (plugin/midi/CcLearnMap.h/.cpp) | app | S | 001, 006, 020 | todo |
-| 7 | 102 | APVTS <-> ParamSnapshot marshalling (plugin/ParamBridge.h/.cpp) | app | M | 001, 006, 007, 020 | todo |
+| 7 | 100 | RT-safe CC/learn map (plugin/midi/CcLearnMap.h/.cpp) | app | S | 001, 006, 020 | done |
+| 7 | 102 | APVTS <-> ParamSnapshot marshalling (plugin/ParamBridge.h/.cpp) | app | M | 001, 006, 007, 020 | done |
 | 7 | 105 | Constant PDC LatencyReporter (plugin/latency/LatencyReporter.h/.cpp) | app | M | 001, 006, 036, 091 | done |
 | 7 | 144b | presets/ flat-POD bake loader contract — deterministic build/load-time bake, never parsed on the audio thread | core | M | 025, 040 | todo |
 | 8 | 045 | bless tool — arm64-only, BLESS_REASON-gated guarded writer | qa | M | 001, 006, 047, 044 | done |
@@ -119,12 +119,12 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 8 | 076 | RenderHarness — deterministic offline render | qa | M | 001, 006, 007, 042, 086 | todo |
 | 8 | 101 | HostEvent -> mw::core::MidiEvent translator (plugin/midi/EventTranslator.h/.cpp) | app | S | 001, 006, 007, 020, 099, 100 | todo |
 | 9 | 048 | FILTER golden corpus (EARLY freeze gate) — bless + compare across blessed rates | qa | M | 001, 006, 047, 043, 045 | done |
-| 9 | 072 | DriftModel orchestration engine (Tier1/2/3 + smoothing + reroll) | engine | M | 001, 006, 007, 020, 063, 064, 065, 073 | todo |
+| 9 | 072 | DriftModel orchestration engine (Tier1/2/3 + smoothing + reroll) | engine | M | 001, 006, 007, 020, 063, 064, 065, 073 | done |
 | 9 | 074 | VoiceManager — pool, MONO/UNISON dispatch, control-tick propagation, fixed-order render | core | M | 001, 006, 007, 067, 069, 073 | done |
 | 9 | 077 | GoldenStore — blob/sidecar keying, lookup and load | qa | M | 001, 006, 041, 076 | todo |
 | 9 | 078 | CLASS-EXACT comparer (SHA-256 hash compare) | qa | S | 001, 006, 040, 076 | todo |
 | 9 | 079 | Calibration-tool self-tests — planted-answer, disjoint cal/val, negative control | qa | M | 001, 006, 007, 076 | todo |
-| 9 | 103 | MPE-over-MIDI reconstruction parser (plugin/midi/MpeReconstructor.h/.cpp) | app | M | 001, 006, 020, 073 | todo |
+| 9 | 103 | MPE-over-MIDI reconstruction parser (plugin/midi/MpeReconstructor.h/.cpp) | app | M | 001, 006, 020, 073 | done |
 | 9 | 104 | MidiFrontEnd note/gate/bend/pressure/CC translation (plugin/midi/MidiFrontEnd.h/.cpp) | app | M | 001, 006, 007, 020, 073, 099, 100, 098 | todo |
 | 10 | 075 | VoiceManager POLY allocator + deterministic voice stealing | core | M | 001, 006, 007, 073, 074 | done |
 | 10 | 080 | Per-module CLASS-EXACT golden corpora — seq/divider/PRNG/arp/param-smooth/CC | qa | M | 001, 006, 007, 078, 045, 032, 086, 071 | todo |

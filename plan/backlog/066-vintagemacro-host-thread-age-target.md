@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 066
 title: VintageMacro host-thread Age-to-target mapping
-status: in-review
+status: done
 depends-on: [001, 006, 007, 020]
 component: engine
 estimated-size: S

@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 100
 title: RT-safe CC/learn map (plugin/midi/CcLearnMap.h/.cpp)
-status: in-review
+status: done
 depends-on: [001, 006, 020]
 component: app
 estimated-size: S
