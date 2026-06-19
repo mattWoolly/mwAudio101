@@ -153,11 +153,14 @@ TEST_CASE("vco: renderSample advances the master phase exactly once per sample a
     REQUIRE (std::abs (static_cast<double> (wraps) - expected) <= 1.0);
 }
 
-TEST_CASE("vco: the raw saw output is a rising ramp synchronous with the master phase", "[vco]") {
-    // core-osc-4 adds band-limiting; this task emits the raw ramp = 2*phase - 1.
+TEST_CASE("vco: the saw output is the band-limited PolyBLEP ramp synchronous with the master phase", "[vco]") {
+    // task 030 completed renderSample to emit the band-limited saw: away from the wrap
+    // edge the PolyBLEP residual is exactly 0, so the saw is the trivial ramp 2*phase-1;
+    // within dt of a wrap the C1 residual is subtracted. The detailed sample-for-sample
+    // C1 identity and the PWM/pulse behavior are exercised by the [vcoshape] suite.
     const double sr = 48000.0;
     Oscillator osc;
-    osc.prepare (sr, nullptr);
+    osc.prepare (sr, nullptr);   // no HQ table => PolyBLEP default tier
     osc.reset();
     OscControls c{};
     c.pitchCvVolts = static_cast<float> (mw::cal::vco::kPitchRefVolts);
@@ -165,12 +168,19 @@ TEST_CASE("vco: the raw saw output is a rising ramp synchronous with the master 
     c.aaMode = OscAaMode::PolyBlep;
     osc.setControls (c);
 
+    const double dt = osc.dt();
     for (int i = 0; i < 2000; ++i) {
         const auto out = osc.renderSample();
-        const float expectedSaw = static_cast<float> (2.0 * osc.phase() - 1.0);
-        REQUIRE (out.saw == Catch::Approx (expectedSaw));
-        REQUIRE (out.saw >= -1.0f);
-        REQUIRE (out.saw < 1.0f);
+        const double t = osc.phase();
+        // Away from the wrap windows the residual is 0 (raw ramp); near a wrap the C1
+        // residual (2*t-1) - polyBlep(t,dt) applies [§4.5; ADR-002 C1].
+        if (t >= dt && t <= 1.0 - dt) {
+            const float expectedRamp = static_cast<float> (2.0 * t - 1.0);
+            REQUIRE (out.saw == Catch::Approx (expectedRamp));
+        }
+        REQUIRE (std::isfinite (out.saw));
+        REQUIRE (out.saw > -2.0f);
+        REQUIRE (out.saw < 2.0f);   // PolyBLEP overshoot is bounded well within +-2
     }
 }
 
