@@ -14,6 +14,8 @@ stream: golden
 tag: golden
 ---
 
+> **Follow-up (QA MEDIUM):** the assembled Engine hardcodes its drift seed and exposes none on prepare(), so the GoldenKey seed reaches output via note-transpose/onset dither, not the §9.2 per-voice drift PRNG. Bless corpora encode note-per-seed, not drift-per-seed, until the Engine accepts a seed on prepare() (deferred Engine-API task).
+
 ## Objective
 
 Implement RenderHarness::render(patch, stim, key) producing a deterministic RenderResult: identical (patch,stimulus,key) yields identical bytes on the same platform, and CLASS-EXACT identical on arm64 and Linux.

@@ -120,8 +120,8 @@ bool allFinite(const std::vector<float>& v) noexcept {
 // Acceptance 1 — DETERMINISM: the same (patch, stimulus, key) renders byte-identical
 // output twice [docs/design/11 §5.4]. The harness is a pure function of its inputs.
 // ---------------------------------------------------------------------------
-TEST_CASE("renderharness: same patch stimulus and key render byte-identical output twice",
-          "[renderharness]") {
+TEST_CASE("golden: renderharness same patch stimulus and key render byte-identical output twice",
+          "[golden]") {
     const RenderHarness harness;
     const PatchSnapshot patch = fixedPatch();
     const Stimulus      stim  = fixedStim();
@@ -157,8 +157,8 @@ TEST_CASE("renderharness: same patch stimulus and key render byte-identical outp
 // each seed must still render reproducibly. This is the paired control that fails a
 // harness that ignored the seed (returning identical bytes for every seed).
 // ---------------------------------------------------------------------------
-TEST_CASE("renderharness: changing the GoldenKey seed changes the rendered bytes",
-          "[renderharness]") {
+TEST_CASE("golden: renderharness changing the GoldenKey seed changes the rendered bytes",
+          "[golden]") {
     const RenderHarness harness;
     const PatchSnapshot patch = fixedPatch();
     const Stimulus      stim  = fixedStim();
@@ -193,8 +193,8 @@ TEST_CASE("renderharness: changing the GoldenKey seed changes the rendered bytes
 // selection happens once in the render setup (prepare analogue), so the per-sample loop
 // never reselects.
 // ---------------------------------------------------------------------------
-TEST_CASE("renderharness: renderVersion selects the matching frozen constant-set at setup",
-          "[renderharness]") {
+TEST_CASE("golden: renderharness renderVersion selects the matching frozen constant-set at setup",
+          "[golden]") {
     const RenderHarness harness;
     const PatchSnapshot patch = fixedPatch();
     const Stimulus      stim  = fixedStim();
@@ -234,8 +234,8 @@ TEST_CASE("renderharness: renderVersion selects the matching frozen constant-set
 // harness drives the engine at the KEYED sample rate (prepare(SR,...)) rather than a
 // hard-coded one — a mis-pinned SR would silently bless the wrong rate's audio.
 // ---------------------------------------------------------------------------
-TEST_CASE("renderharness: the keyed sample rate is pinned into prepare and the result",
-          "[renderharness]") {
+TEST_CASE("golden: renderharness the keyed sample rate is pinned into prepare and the result",
+          "[golden]") {
     const RenderHarness harness;
     const PatchSnapshot patch = fixedPatch();
     const Stimulus      stim  = fixedStim();
