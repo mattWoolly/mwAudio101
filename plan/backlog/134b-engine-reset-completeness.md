@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 134b
 title: Complete Engine::reset() to a deterministic fixed point (reset all consumed modules)
-status: todo
+status: in-review
 depends-on: [118, 118b, 074, 071]
 component: core
 estimated-size: S

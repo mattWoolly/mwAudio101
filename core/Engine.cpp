@@ -102,6 +102,12 @@ private:
     return true;
 }
 
+// The fixed per-instance drift-PRNG seed (§9.2; ADR-001 Decision). A constant so
+// prepare() and reset() seed the voice pool to the IDENTICAL byte-stable known start;
+// the plugin overrides it per instance off the audio thread (out of scope here). (PI) —
+// an internal assembly constant, not a public calibration surface.
+constexpr std::uint32_t kInstanceSeed = 0x6d77656eu;
+
 } // namespace
 
 void Engine::prepare(double sampleRate, int maxBlockSize, int maxVoices) noexcept {
@@ -129,7 +135,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize, int maxVoices) noexcep
     // per instance off the audio thread (out of scope here).
     // VoiceManager prepares its OWN sole KeyAssigner (the single MONO/UNISON authority,
     // doc 04 §5.1/§9) — the engine owns no second KeyAssigner (task 118b reconcile).
-    voices_.prepare(sampleRate_, oversampleFactor_, /*instanceSeed=*/0x6d77656eu);
+    voices_.prepare(sampleRate_, oversampleFactor_, kInstanceSeed);
     control_.prepare(sampleRate_);
     fx_.prepare(sampleRate_, maxBlockSize_);
 
@@ -139,10 +145,38 @@ void Engine::prepare(double sampleRate, int maxBlockSize, int maxVoices) noexcep
 }
 
 void Engine::reset() noexcept {
-    // Clear state to a known silent start; no allocation (§5.5 reset; ADR-001 Decision).
-    // VoiceManager::reset clears its SOLE KeyAssigner (panic / all-notes-off) and
-    // releases any sounding voice — the single authority, no duplicate (task 118b).
-    voices_.reset();
+    // Return EVERY consumed module to the SAME known start prepare() establishes, so
+    // reset() — not only prepare() — is a deterministic fixed point: two divergent play
+    // histories + reset() + the same input block produce BIT-IDENTICAL output to a
+    // freshly-prepared engine (§5.5 known-start contract via reset(); task 134b). RT hot
+    // path: no allocation, no lock [ADR-001 Decision / C2-C4].
+    //
+    // WHY a re-seed of the voice pool, not the soft VoiceManager::reset() panic: the
+    // wave-12 QA finding on PR #75 (task 134) is that the as-built bare reset() left the
+    // VoiceManager dirty — VoiceManager::reset() de-asserts the gate and RELEASES sounding
+    // voices "in place", so a voice survives as Releasing with a non-zero envelope level
+    // AND residual oscillator phase / filter state / drift-PRNG position; its decaying
+    // tail then bleeds into the next block, so two histories + reset() diverged (~0.28
+    // max-abs). Only re-deriving each voice's seed-keyed known start (the same Idle/
+    // zero-phase state prepare() sets) makes reset() an actual fixed point. We reuse the
+    // already-prepared sample-rate / oversample-factor / instance-seed, so this re-seeds
+    // (re-establishes the known start) WITHOUT growing any buffer: every container the
+    // voice pool / control core / FX chain own was sized at the first prepare() and is
+    // unchanged here, so this path is allocation-free at steady state — asserted under an
+    // armed AudioThreadGuard by the engine_reset RT test [ADR-001 C2; §9.1 RT-6]. The
+    // hqTable build short-circuits (already built), so no DSP table is rebuilt.
+    //
+    //   - voices_ : re-derive the seed-keyed per-voice known start (Idle, zero phase,
+    //     fresh drift PRNG) and the MONO/unison=1 default topology — the canonical fresh
+    //     pool state. This subsumes the panic clear (the KeyAssigner is re-prepared too).
+    //   - control_.reset() : re-derive the control-tick known start (sample/tick counters,
+    //     jitter PRNG seed, crossfade blend, first tick boundary) WITHOUT re-sizing, so
+    //     the residual control-tick phase that previously survived a bare reset() is wiped
+    //     (task 134b; the macro pole + jitter toggle are preserved — a reset is not a
+    //     parameter change).
+    //   - fx_.reset() : clear the FX delay/modulation state.
+    voices_.prepare(sampleRate_, oversampleFactor_, kInstanceSeed);
+    control_.reset();
     fx_.reset();
     std::fill(mixL_.begin(), mixL_.end(), 0.0f);
     std::fill(mixR_.begin(), mixR_.end(), 0.0f);
