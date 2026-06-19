@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 104b
 title: Tuning + bend-range wiring: A4 440/442 duality, TUNE cents, per-channel + MPE bend ranges, optional MTS-ESP
-status: in-review
+status: done
 depends-on: [104, 103, 102]
 component: app
 estimated-size: M

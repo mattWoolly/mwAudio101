@@ -128,7 +128,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 9 | 104 | MidiFrontEnd note/gate/bend/pressure/CC translation (plugin/midi/MidiFrontEnd.h/.cpp) | app | M | 001, 006, 007, 020, 073, 099, 100, 098 | done |
 | 10 | 075 | VoiceManager POLY allocator + deterministic voice stealing | core | M | 001, 006, 007, 073, 074 | done |
 | 10 | 080 | Per-module CLASS-EXACT golden corpora — seq/divider/PRNG/arp/param-smooth/CC | qa | M | 001, 006, 007, 078, 045, 032, 086, 071 | todo |
-| 10 | 104b | Tuning + bend-range wiring: A4 440/442 duality, TUNE cents, per-channel + MPE bend ranges, optional MTS-ESP | app | M | 104, 103, 102 | todo |
+| 10 | 104b | Tuning + bend-range wiring: A4 440/442 duality, TUNE cents, per-channel + MPE bend ranges, optional MTS-ESP | app | M | 104, 103, 102 | done |
 | 10 | 112 | CapabilityShim resolve + per-block recheck + UI publish (plugin/host/CapabilityShim.h/.cpp) | app | M | 001, 006, 098, 103, 087 | done |
 | 10 | 152 | KeyAssignerReference.{h,cpp} — disassembly-semantics golden reference | qa | M | 001, 006, 007, 067, 077 | todo |
 | 11 | 118 | Wire all engine modules into Engine::prepare/process/reset assembly | engine | M | 006, 073, 075, 071, 091, 092, 093, 006 | done |
