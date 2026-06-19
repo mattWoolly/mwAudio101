@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 109
 title: Custom control subclasses (Rotary/Linear sliders, ToggleSwitch, ChoiceSelector)
-status: todo
+status: in-review
 depends-on: [006, 106, 108]
 component: ui
 estimated-size: M
