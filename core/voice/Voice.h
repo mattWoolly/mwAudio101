@@ -62,7 +62,7 @@ namespace mw {
 // This file owns ONLY the seed derivation and where the state lives; the drift DSP law
 // (walk coefficients, depth scaling, vintage.age) is ADR-009's (DriftConstants.h).
 struct VoiceDrift {
-    std::uint32_t seed = 0;                      // = hashCombine(instanceSeed, voiceIndex) (§4.4)
+    std::uint64_t seed = 0;                      // = seedFromInstance(instanceSeed, voiceIndex) (ADR-009 VV-17; §8.2)
     mw::dsp::drift::Xorshift128p rng;            // deterministic PRNG; never wall-clock [C18]
     mw::params::OnePoleSmoother tuneWalk;        // slow random-walk -> tuning drift
     mw::params::OnePoleSmoother pwWalk;          // -> pulse-width drift
@@ -110,7 +110,7 @@ public:
 
     // Per-voice deterministic drift seed (§4.4). Exposed for the determinism tests
     // and for the drift DSP (ADR-009) to consume.
-    [[nodiscard]] std::uint32_t driftSeed() const noexcept { return drift_.seed; }
+    [[nodiscard]] std::uint64_t driftSeed() const noexcept { return drift_.seed; }
 
 private:
     // --- modulation section: ONE each per Voice [research/04 §2.1, §3.1] ---

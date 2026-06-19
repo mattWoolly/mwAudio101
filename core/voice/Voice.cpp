@@ -48,11 +48,14 @@ void Voice::prepare(double sampleRate, int oversampleFactor,
     sampleRate_ = sampleRate;
     oversample_ = std::max(1, oversampleFactor);
 
-    // --- Per-voice deterministic drift seed (§4.4; ADR-006 C18). Derived ONLY from
-    // voiceIndex + instanceSeed, never wall-clock, so renders are byte-stable. ---
-    drift_.seed = cal::voice::hashCombine(instanceSeed,
-                                          static_cast<std::uint32_t>(voiceIndex));
-    drift_.rng.seed(static_cast<std::uint64_t>(drift_.seed));
+    // --- Per-voice deterministic drift seed: the CANONICAL cross-module derivation
+    // seedFromInstance = splitmix64(instanceSeed ^ goldenMix(voiceIndex)) [ADR-009 VV-17;
+    // docs/design/08 §8.2]. This reconciles §4.4's illustrative hashCombine/uint32 to the
+    // seeding the drift DSP (DriftState, task 063/064/065) actually uses, so this voice's
+    // drift PRNG stream is bit-identical to the drift module's for the same (instanceSeed,
+    // voiceIndex). Derived ONLY from voiceIndex + instanceSeed (never wall-clock). ---
+    drift_.seed = mw::dsp::drift::seedFromInstance(static_cast<std::uint64_t>(instanceSeed), voiceIndex);
+    drift_.rng.seed(drift_.seed);
 
     // The drift walk smoothers exist as wired one-poles; their walk COEFFICIENTS /
     // depth scaling are ADR-009's (out of scope). Reset them to a clean start so the

@@ -97,12 +97,13 @@ TEST_CASE("voice: starts Idle and inactive before any note", "[voice]") {
 
 // --- §4.4 / ADR-006 C18: deterministic per-voice drift seed ----------------------
 
-TEST_CASE("voice: drift seed is hashCombine of instanceSeed and voiceIndex", "[voice]") {
-    // The seed MUST be exactly hashCombine(instanceSeed, voiceIndex) (§4.4).
+TEST_CASE("voice: drift seed is the canonical seedFromInstance(instanceSeed, voiceIndex)", "[voice]") {
+    // The seed MUST be exactly the canonical cross-module derivation (ADR-009 VV-17;
+    // docs/design/08 §8.2) so the voice's drift PRNG stream matches the drift module's.
     Voice v;
     v.prepare(kSampleRate, kOversample, 3, kSeed);
-    const std::uint32_t expected =
-        mw::cal::voice::hashCombine(kSeed, static_cast<std::uint32_t>(3));
+    const std::uint64_t expected =
+        mw::dsp::drift::seedFromInstance(static_cast<std::uint64_t>(kSeed), 3);
     REQUIRE(v.driftSeed() == expected);
 }
 
@@ -113,9 +114,9 @@ TEST_CASE("voice: drift seed is byte-stable across runs", "[voice]") {
     b.prepare(kSampleRate, kOversample, 5, kSeed);
     REQUIRE(a.driftSeed() == b.driftSeed());
 
-    // A fixed-input expectation pins the value so a future mixer change is caught.
-    const std::uint32_t pinned =
-        mw::cal::voice::hashCombine(0xC0FFEEu, 5u);
+    // A fixed-input expectation pins the value so a future derivation change is caught.
+    const std::uint64_t pinned =
+        mw::dsp::drift::seedFromInstance(static_cast<std::uint64_t>(0xC0FFEEu), 5);
     REQUIRE(a.driftSeed() == pinned);
 }
 
