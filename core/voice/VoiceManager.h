@@ -26,8 +26,16 @@
 //     ADR-019 VT-02); mode/unison-count changes apply only at prepare or a block
 //     boundary via a lock-free pending flag, NEVER mid-block (§8 RT7; ADR-006 C17).
 //
+// POLY drive (task 075b): the POLY path is wired by COMPOSING the task-075
+// PolyAllocator (the deterministic per-note allocator + steal scan over this pool). The
+// allocator's policy (idle -> re-strike -> deterministic steal) is NOT re-implemented
+// here; handleNoteEvent routes POLY note-ons/offs straight into polyAlloc_, so
+// VoiceMode::Poly actually allocates and SOUNDS voices through the shared render path
+// instead of the old early-return that rendered silence (closes the wave-16 QA finding
+// on PR #101/076b) [docs/design/04 §6.4; ADR-006 C12-C16].
+//
 // OUT OF SCOPE (other tasks own these — this file does NOT implement them):
-//   - POLY allocation, re-strike, stealing, unison-group steal (task 075);
+//   - PolyAllocator internals — the allocate/release/steal policy (task 075, composed here);
 //   - KeyAssigner resolution internals (task 069) and ControlCore's control tick
 //     (task 071) — VoiceManager consumes their outputs;
 //   - Voice DSP internals (task 073);
@@ -48,6 +56,7 @@
 #include "VoiceTypes.h"
 #include "Voice.h"
 #include "KeyAssigner.h"
+#include "PolyAllocator.h"
 
 namespace mw {
 
@@ -81,7 +90,10 @@ public:
     void reset() noexcept;
 
     // Note events demultiplexed from MIDI/MPE/arp-seq (§9). MONO/UNISON forward to the
-    // KeyAssigner; POLY (task 075) is not handled here. Sample-accurate; noexcept.
+    // KeyAssigner (the sole note-priority authority); POLY bypasses it and routes
+    // straight into the composed PolyAllocator (allocate on note-on, release on
+    // note-off, deterministic steal at capacity) so VoiceMode::Poly sounds (task 075b)
+    // [docs/design/04 §6.4; ADR-006 C12]. Sample-accurate; noexcept, alloc-free.
     void handleNoteEvent(const NoteEvent& e) noexcept;
 
     // Propagate one resolved NoteDecision to the active voice(s) for MONO/UNISON
@@ -122,6 +134,11 @@ private:
     std::array<Voice, kMaxVoices> pool_{};       // preallocated; no heap on the audio thread
     KeyAssigner  keyAssigner_{};                 // sole authority for MONO/UNISON (§5)
 
+    // The composed POLY allocator (task 075): the deterministic per-note allocator +
+    // steal scan over pool_. Bound to pool_ and nextSerial_ in prepare and re-bound at a
+    // POLY-affecting reconfig boundary; drives the POLY path (§6.4) [ADR-006 C12-C16].
+    PolyAllocator polyAlloc_{};
+
     VoiceMode    mode_       = VoiceMode::Mono;   // default [ADR-016 R-3]
     int          unison_     = 1;
     std::uint64_t nextSerial_ = 0;               // monotonic; for poly steal ordering [ADR-006 C14]
@@ -155,6 +172,12 @@ private:
     // Drive one voice slot verbatim from a NoteDecision (the MONO pass-through used by
     // both driveMono and, per-voice, driveUnison) [§6.2].
     void applyDecisionToVoice(int voiceIndex, const NoteDecision& d) noexcept;
+
+    // (Re)bind the composed PolyAllocator to pool_ + nextSerial_ for the current
+    // unison count (groups of U contiguous slots, floor(maxPoly/U) groups) [§6.4;
+    // ADR-006 C16]. Called off the audio thread (prepare) and at a POLY-affecting
+    // reconfig boundary (mode -> POLY or a unison-count change), never mid-block (§8 RT7).
+    void configurePolyAllocator() noexcept;
 };
 
 } // namespace mw
