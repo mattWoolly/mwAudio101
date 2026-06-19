@@ -18,6 +18,24 @@ tag: wrappers
 
 Define the single juce_add_plugin target (VST3/AU/Standalone native + CLAP via clap-juce-extensions + LV2 via JUCE native exporter) over the one MwAudioProcessor, with formats supplied by the cmake/Formats.cmake resolution.
 
+> **MINIMAL-bootstrap status (in-review).** A MINIMAL version was landed by the
+> JUCE-phase bootstrap (branch `task/juce-bootstrap`): `plugin/CMakeLists.txt` now
+> defines the real `juce_add_plugin(mwAudio101 ...)` target (`IS_SYNTH`,
+> `NEEDS_MIDI_INPUT`) over the one shared `MwAudioProcessor`, links
+> `mwcore` + `mw_fp_discipline` + the JUCE synth modules (`juce_audio_utils`,
+> `juce_audio_processors`, `juce_dsp`) and the recommended config/warning/LTO flags,
+> sets the `JUCE_*` config defines, and feeds `FORMATS` through the
+> `cmake/Formats.cmake` validator gate. **Bootstrap constrains FORMATS to Standalone
+> only** — the one format whose validator (`standalone-smoke`) is unconditionally
+> wired; the gate hard-removed VST3/AU/CLAP here (their validators are not installed on
+> the dev box). Proven GREEN: `mwAudio101_Standalone` builds and links to a real arm64
+> `.app`. Also enabled C/OBJC/OBJCXX languages at the top level (guarded by
+> `MW_BUILD_PLUGIN`) since JUCE needs them on Apple platforms. **Deferred to the full
+> task 113:** enabling VST3/AU/CLAP (once pluginval/auval/Steinberg validator/
+> clap-validator are wired in CI) and LV2 via the JUCE native exporter behind
+> `MW_BUILD_LV2`; CLAP via `clap-juce-extensions` on the same processor. AAX stays
+> permanently excluded (ADR-024 C6).
+
 ## Context
 
 - `docs/design/09 §2.1` — read first
