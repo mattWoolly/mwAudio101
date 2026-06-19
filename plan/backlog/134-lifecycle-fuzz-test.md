@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 134
 title: Lifecycle/fuzz test: prepare/process/reset over random valid blocks and params
-status: todo
+status: in-review
 depends-on: [006, 118]
 component: qa
 estimated-size: S
