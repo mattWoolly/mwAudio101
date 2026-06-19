@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 104
 title: MidiFrontEnd note/gate/bend/pressure/CC translation (plugin/midi/MidiFrontEnd.h/.cpp)
-status: todo
+status: in-review
 depends-on: [001, 006, 007, 020, 073, 099, 100, 098]
 component: app
 estimated-size: M
