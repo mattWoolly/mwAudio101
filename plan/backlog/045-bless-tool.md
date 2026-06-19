@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 045
 title: bless tool — arm64-only, BLESS_REASON-gated guarded writer
-status: in-review
+status: done
 depends-on: [001, 006, 047, 044]
 component: qa
 estimated-size: M

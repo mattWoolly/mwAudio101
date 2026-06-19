@@ -114,8 +114,8 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 7 | 102 | APVTS <-> ParamSnapshot marshalling (plugin/ParamBridge.h/.cpp) | app | M | 001, 006, 007, 020 | todo |
 | 7 | 105 | Constant PDC LatencyReporter (plugin/latency/LatencyReporter.h/.cpp) | app | M | 001, 006, 036, 091 | todo |
 | 7 | 144b | presets/ flat-POD bake loader contract — deterministic build/load-time bake, never parsed on the audio thread | core | M | 025, 040 | todo |
-| 8 | 045 | bless tool — arm64-only, BLESS_REASON-gated guarded writer | qa | M | 001, 006, 047, 044 | todo |
-| 8 | 073 | Voice.h/.cpp — circuit-accurate signal-path assembly + drift seed | core | M | 001, 006, 007, 067, 068, 032, 047, 062 | todo |
+| 8 | 045 | bless tool — arm64-only, BLESS_REASON-gated guarded writer | qa | M | 001, 006, 047, 044 | done |
+| 8 | 073 | Voice.h/.cpp — circuit-accurate signal-path assembly + drift seed | core | M | 001, 006, 007, 067, 068, 032, 047, 062 | done |
 | 8 | 076 | RenderHarness — deterministic offline render | qa | M | 001, 006, 007, 042, 086 | todo |
 | 8 | 101 | HostEvent -> mw::core::MidiEvent translator (plugin/midi/EventTranslator.h/.cpp) | app | S | 001, 006, 007, 020, 099, 100 | todo |
 | 9 | 048 | FILTER golden corpus (EARLY freeze gate) — bless + compare across blessed rates | qa | M | 001, 006, 047, 043, 045 | todo |
