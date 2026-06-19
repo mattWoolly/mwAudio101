@@ -78,6 +78,22 @@ void VoiceManager::setGateTrigMode(GateTrigMode m) noexcept {
     keyAssigner_.setMode(m);
 }
 
+void VoiceManager::reset() noexcept {
+    // Panic / transport reset: clear the sole KeyAssigner's held/scan state (doc 04
+    // §5.2) and de-assert the gate on any sounding voice so its tail releases in place,
+    // then refresh the active list. RT-safe: no allocation, no lock, bounded
+    // O(kMaxVoices) (§8 RT3/RT6; ADR-001 C3/C4). The S7 selector itself is preserved
+    // (a reset is not a parameter change).
+    keyAssigner_.reset();
+    for (int i = 0; i < kMaxVoices; ++i) {
+        Voice& v = pool_[static_cast<std::size_t>(i)];
+        if (v.isActive()) {
+            v.noteOff();
+        }
+    }
+    rebuildActiveList();
+}
+
 void VoiceManager::handleNoteEvent(const NoteEvent& e) noexcept {
     // Single ingress for all note sources (§9). MONO/UNISON flow through the
     // KeyAssigner (the sole note-priority authority); POLY (task 075) bypasses it and
@@ -113,6 +129,22 @@ void VoiceManager::controlTick(const NoteDecision& d) noexcept {
             break;  // task 075
     }
     rebuildActiveList();
+}
+
+void VoiceManager::controlTick() noexcept {
+    // The ControlCore-driven control tick (task 118b reconcile): resolve THIS manager's
+    // own keyAssigner_ — the single MONO/UNISON note-priority authority (doc 04 §5.1/§9,
+    // ADR-006 C12) — and apply the decision, so there is exactly ONE KeyAssigner in the
+    // engine's path. POLY bypasses the KeyAssigner entirely [ADR-006 C12]; resolving it
+    // for the bypassed mode would be wasted work and could surface a stale decision, so
+    // POLY takes no decision here (its allocator is task 075). The resolve() snapshot
+    // bookkeeping (prevScan_/lastActive_) advances only when the authority is actually
+    // in the path. noexcept, alloc-free, lock-free [§8 RT3/RT6; ADR-001 C3-C5].
+    if (mode_ == VoiceMode::Poly) {
+        rebuildActiveList();
+        return;
+    }
+    controlTick(keyAssigner_.resolve());
 }
 
 void VoiceManager::applyDecisionToVoice(int voiceIndex, const NoteDecision& d) noexcept {
