@@ -117,7 +117,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 8 | 045 | bless tool — arm64-only, BLESS_REASON-gated guarded writer | qa | M | 001, 006, 047, 044 | done |
 | 8 | 073 | Voice.h/.cpp — circuit-accurate signal-path assembly + drift seed | core | M | 001, 006, 007, 067, 068, 032, 047, 062 | done |
 | 8 | 076 | RenderHarness — deterministic offline render | qa | M | 001, 006, 007, 042, 086 | todo |
-| 8 | 101 | HostEvent -> mw::core::MidiEvent translator (plugin/midi/EventTranslator.h/.cpp) | app | S | 001, 006, 007, 020, 099, 100 | todo |
+| 8 | 101 | HostEvent -> mw::core::MidiEvent translator (plugin/midi/EventTranslator.h/.cpp) | app | S | 001, 006, 007, 020, 099, 100 | done |
 | 9 | 048 | FILTER golden corpus (EARLY freeze gate) — bless + compare across blessed rates | qa | M | 001, 006, 047, 043, 045 | done |
 | 9 | 072 | DriftModel orchestration engine (Tier1/2/3 + smoothing + reroll) | engine | M | 001, 006, 007, 020, 063, 064, 065, 073 | done |
 | 9 | 074 | VoiceManager — pool, MONO/UNISON dispatch, control-tick propagation, fixed-order render | core | M | 001, 006, 007, 067, 069, 073 | done |
@@ -125,11 +125,11 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 9 | 078 | CLASS-EXACT comparer (SHA-256 hash compare) | qa | S | 001, 006, 040, 076 | todo |
 | 9 | 079 | Calibration-tool self-tests — planted-answer, disjoint cal/val, negative control | qa | M | 001, 006, 007, 076 | todo |
 | 9 | 103 | MPE-over-MIDI reconstruction parser (plugin/midi/MpeReconstructor.h/.cpp) | app | M | 001, 006, 020, 073 | done |
-| 9 | 104 | MidiFrontEnd note/gate/bend/pressure/CC translation (plugin/midi/MidiFrontEnd.h/.cpp) | app | M | 001, 006, 007, 020, 073, 099, 100, 098 | todo |
+| 9 | 104 | MidiFrontEnd note/gate/bend/pressure/CC translation (plugin/midi/MidiFrontEnd.h/.cpp) | app | M | 001, 006, 007, 020, 073, 099, 100, 098 | done |
 | 10 | 075 | VoiceManager POLY allocator + deterministic voice stealing | core | M | 001, 006, 007, 073, 074 | done |
 | 10 | 080 | Per-module CLASS-EXACT golden corpora — seq/divider/PRNG/arp/param-smooth/CC | qa | M | 001, 006, 007, 078, 045, 032, 086, 071 | todo |
 | 10 | 104b | Tuning + bend-range wiring: A4 440/442 duality, TUNE cents, per-channel + MPE bend ranges, optional MTS-ESP | app | M | 104, 103, 102 | todo |
-| 10 | 112 | CapabilityShim resolve + per-block recheck + UI publish (plugin/host/CapabilityShim.h/.cpp) | app | M | 001, 006, 098, 103, 087 | todo |
+| 10 | 112 | CapabilityShim resolve + per-block recheck + UI publish (plugin/host/CapabilityShim.h/.cpp) | app | M | 001, 006, 098, 103, 087 | done |
 | 10 | 152 | KeyAssignerReference.{h,cpp} — disassembly-semantics golden reference | qa | M | 001, 006, 007, 067, 077 | todo |
 | 11 | 118 | Wire all engine modules into Engine::prepare/process/reset assembly | engine | M | 006, 073, 075, 071, 091, 092, 093, 006 | done |
 | 11 | 153 | KeyAssigner golden-trace conformance (K17) test battery | qa | S | 001, 006, 077, 069, 152 | todo |

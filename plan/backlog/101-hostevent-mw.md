@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 101
 title: HostEvent -> mw::core::MidiEvent translator (plugin/midi/EventTranslator.h/.cpp)
-status: in-review
+status: done
 depends-on: [001, 006, 007, 020, 099, 100]
 component: app
 estimated-size: S
