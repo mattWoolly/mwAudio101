@@ -83,3 +83,4 @@ coherence pass; "refined-by" notes appear in the affected ADRs' Status lines.
 | 024 | LV2 export path & AAX exclusion | LV2 via JUCE-native export; AAX out |
 | 026 | Float-domain range/saturation clamps | noise/tanh clamp to honor binding ranges (wave-4 TDD finding) |
 | 025 | Sequencer per-step accent — removed for v1 | supersedes 008 C8 accent field; aligns docs 05/06 to 007 (no accent); accent deferred |
+| 027 | Resonance taper discrete calibration | kMax=8/exp=3 (vs §9 4/2); reso01=0.5->k=1.0 anchor; honest F-13 oracle |

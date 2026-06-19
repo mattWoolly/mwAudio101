@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 071
 title: ControlCore driver — control-tick advance, VINTAGE/MODERN poles, jitter, auto-engage, crossfade
-status: in-review
+status: done
 depends-on: [001, 006, 007, 067, 069, 070]
 component: core
 estimated-size: M

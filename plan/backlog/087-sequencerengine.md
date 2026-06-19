@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 087
 title: SequencerEngine: fixed-order tick + RT-safe snapshot swap
-status: in-review
+status: done
 depends-on: [001, 006, 007, 081, 082, 083, 084, 085, 086]
 component: core
 estimated-size: M

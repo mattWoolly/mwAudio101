@@ -88,18 +88,18 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 5 | 093 | Delay stage: tempo-synced mono-core stereo delay with damped feedback | core | M | 001, 006, 007, 088, 089 | done |
 | 5 | 108 | MwAudioLookAndFeel vector drawing parameterized by DesignTokens | ui | M | 006, 106 | todo |
 | 6 | 020 | APVTS ParameterLayout generator (ParameterLayout.cpp) | core | S | 019, 007 | todo |
-| 6 | 021 | INIT patch builder (out-of-box defaults, ADR-016) | core | S | 019, 017, 007 | todo |
+| 6 | 021 | INIT patch builder (out-of-box defaults, ADR-016) | core | S | 019, 017, 007 | done |
 | 6 | 025 | .mw101preset JSON projection + validator (PresetFormat.h/.cpp) | core | M | 019, 023, 022, 007 | todo |
-| 6 | 030 | VCO band-limited saw + variable PWM pulse | core | M | 001, 006, 007, 026, 027, 029 | todo |
-| 6 | 039 | LadderFilter resonance: inverting feedback + phase comp + diode clamp + self-osc + make-up Q | core | M | 001, 006, 007, 033, 034, 035, 038 | todo |
-| 6 | 043 | CLASS-FP two-stage comparer (scalar fingerprint + FFT/NMSE + alias floor) | qa | M | 001, 006, 007, 041 | todo |
-| 6 | 049c | core/calibration: prepareToPlay constant-set SELECTOR keyed by renderVersion (legacy-render path) | core | M | 005b, 033, 035, 029 | todo |
-| 6 | 058 | Envelope trigger state machine: GateTrig/Gate/Lfo retrigger | core | S | 006, 054 | todo |
-| 6 | 059 | Lfo Random S/H, Noise source, and cycleEdge flag | core | M | 007, 006, 055 | todo |
-| 6 | 060 | Vca anti-thump gate fade + ENV/GATE mode handling | core | S | 007, 006, 056 | todo |
-| 6 | 071 | ControlCore driver — control-tick advance, VINTAGE/MODERN poles, jitter, auto-engage, crossfade | core | M | 001, 006, 007, 067, 069, 070 | todo |
-| 6 | 087 | SequencerEngine: fixed-order tick + RT-safe snapshot swap | core | M | 001, 006, 007, 081, 082, 083, 084, 085, 086 | todo |
-| 6 | 091 | Drive stage: oversampled asymmetric waveshaper + tilt + DC block | core | M | 001, 006, 007, 088, 090 | todo |
+| 6 | 030 | VCO band-limited saw + variable PWM pulse | core | M | 001, 006, 007, 026, 027, 029 | done |
+| 6 | 039 | LadderFilter resonance: inverting feedback + phase comp + diode clamp + self-osc + make-up Q | core | M | 001, 006, 007, 033, 034, 035, 038 | done |
+| 6 | 043 | CLASS-FP two-stage comparer (scalar fingerprint + FFT/NMSE + alias floor) | qa | M | 001, 006, 007, 041 | done |
+| 6 | 049c | core/calibration: prepareToPlay constant-set SELECTOR keyed by renderVersion (legacy-render path) | core | M | 005b, 033, 035, 029 | done |
+| 6 | 058 | Envelope trigger state machine: GateTrig/Gate/Lfo retrigger | core | S | 006, 054 | done |
+| 6 | 059 | Lfo Random S/H, Noise source, and cycleEdge flag | core | M | 007, 006, 055 | done |
+| 6 | 060 | Vca anti-thump gate fade + ENV/GATE mode handling | core | S | 007, 006, 056 | done |
+| 6 | 071 | ControlCore driver — control-tick advance, VINTAGE/MODERN poles, jitter, auto-engage, crossfade | core | M | 001, 006, 007, 067, 069, 070 | done |
+| 6 | 087 | SequencerEngine: fixed-order tick + RT-safe snapshot swap | core | M | 001, 006, 007, 081, 082, 083, 084, 085, 086 | done |
+| 6 | 091 | Drive stage: oversampled asymmetric waveshaper + tilt + DC block | core | M | 001, 006, 007, 088, 090 | done |
 | 6 | 109 | Custom control subclasses (Rotary/Linear sliders, ToggleSwitch, ChoiceSelector) | ui | M | 006, 106, 108 | todo |
 | 7 | 024 | Load-failure recovery ladder (LoadFailure.h/.cpp) | core | M | 019, 023, 021, 022, 007 | todo |
 | 7 | 032 | OscillatorSection owner + per-voice HQ escalation | core | M | 001, 006, 007, 026, 027, 029, 030, 031, 028 | todo |

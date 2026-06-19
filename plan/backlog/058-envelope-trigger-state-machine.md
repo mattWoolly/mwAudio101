@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 058
 title: Envelope trigger state machine: GateTrig/Gate/Lfo retrigger
-status: in-review
+status: done
 depends-on: [006, 054]
 component: core
 estimated-size: S

@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 021
 title: INIT patch builder (out-of-box defaults, ADR-016)
-status: in-review
+status: done
 depends-on: [019, 017, 007]
 component: core
 estimated-size: S

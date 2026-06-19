@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 060
 title: Vca anti-thump gate fade + ENV/GATE mode handling
-status: in-review
+status: done
 depends-on: [007, 006, 056]
 component: core
 estimated-size: S

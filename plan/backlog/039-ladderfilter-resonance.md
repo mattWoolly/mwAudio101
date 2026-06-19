@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 039
 title: LadderFilter resonance: inverting feedback + phase comp + diode clamp + self-osc + make-up Q
-status: in-review
+status: done
 depends-on: [001, 006, 007, 033, 034, 035, 038]
 component: core
 estimated-size: M

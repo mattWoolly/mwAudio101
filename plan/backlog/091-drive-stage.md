@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 091
 title: Drive stage: oversampled asymmetric waveshaper + tilt + DC block
-status: in-review
+status: done
 depends-on: [001, 006, 007, 088, 090]
 component: core
 estimated-size: M
