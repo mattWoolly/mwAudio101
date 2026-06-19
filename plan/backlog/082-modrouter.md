@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 082
 title: ModRouter: fixed LFO/ADSR modulation routing
-status: todo
+status: in-review
 depends-on: [001, 006, 007, 081]
 component: core
 estimated-size: S
