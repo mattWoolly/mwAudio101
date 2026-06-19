@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 043
 title: CLASS-FP two-stage comparer (scalar fingerprint + FFT/NMSE + alias floor)
-status: todo
+status: in-review
 depends-on: [001, 006, 007, 041]
 component: qa
 estimated-size: M
