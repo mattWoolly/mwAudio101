@@ -188,6 +188,8 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 
 | 13 | 102b | Define core/params/ParamSnapshot.h POD (closes seam gap) | core | S | 019, 007 | done |
 
+| 13 | 075b | Wire PolyAllocator into VoiceManager/Engine POLY path | core | S | 075, 074, 118, 069 | todo |
+
 ## Notes (standing rationale ledger — why the DAG is shaped this way)
 
 - **Waves 0–3 = infra bootstrap.** `001` (top-level CMake) is the universal root; presets/CPM/
@@ -211,3 +213,4 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 - Waves were recomputed by topological longest-path layering after breaking 3 bad integrator edges
   (Voice↔DriftModel cycle; SVG-assets←BackgroundLayer and CapabilityShim←editor-telemetry reversed).
 - **072 warm-up follow-up:** DriftModel's warm-up chassis is per-voice; ADR-009 D6/§5.3 require it GLOBAL. Dormant (warm-up OFF by default, §13 open gap) — reconcile when the warm-up path is exercised.
+- **Calibration-model ownership (079 MEDIUM):** design 11 §12 says core/calibration owns a Calibrator/synthesize model, but no task delivered it; 079 authored a JUCE-free stand-in for the self-tests. With the no-physical-oracle decision (1.7) there is no real fitting to do, so the stand-in is acceptable harness infra — revisit only if a measured oracle is ever introduced.

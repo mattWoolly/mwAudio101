@@ -6688,5 +6688,29 @@
     "scope": [],
     "outOfScope": [],
     "acceptance": []
+  },
+  {
+    "id": "075b",
+    "wave": 13,
+    "dependsOn": [
+      "075",
+      "074",
+      "118",
+      "069"
+    ],
+    "title": "Wire PolyAllocator into VoiceManager/Engine POLY path",
+    "component": "core",
+    "stream": "voice-control",
+    "size": "S",
+    "tag": "polywire",
+    "slug": "wire-polyallocator-into-voicemanager",
+    "designRefs": [
+      "docs/design/04-voice-and-control.md \u00a76.4",
+      "plan/decisions/006-voice-poly-unison-model.md C14"
+    ],
+    "objective": "POLY mode allocates+sounds voices via PolyAllocator.",
+    "scope": [],
+    "outOfScope": [],
+    "acceptance": []
   }
 ]
