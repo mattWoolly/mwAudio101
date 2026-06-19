@@ -127,10 +127,10 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 9 | 103 | MPE-over-MIDI reconstruction parser (plugin/midi/MpeReconstructor.h/.cpp) | app | M | 001, 006, 020, 073 | done |
 | 9 | 104 | MidiFrontEnd note/gate/bend/pressure/CC translation (plugin/midi/MidiFrontEnd.h/.cpp) | app | M | 001, 006, 007, 020, 073, 099, 100, 098 | done |
 | 10 | 075 | VoiceManager POLY allocator + deterministic voice stealing | core | M | 001, 006, 007, 073, 074 | done |
-| 10 | 080 | Per-module CLASS-EXACT golden corpora — seq/divider/PRNG/arp/param-smooth/CC | qa | M | 001, 006, 007, 078, 045, 032, 086, 071 | todo |
+| 10 | 080 | Per-module CLASS-EXACT golden corpora — seq/divider/PRNG/arp/param-smooth/CC | qa | M | 001, 006, 007, 078, 045, 032, 086, 071 | done |
 | 10 | 104b | Tuning + bend-range wiring: A4 440/442 duality, TUNE cents, per-channel + MPE bend ranges, optional MTS-ESP | app | M | 104, 103, 102 | done |
 | 10 | 112 | CapabilityShim resolve + per-block recheck + UI publish (plugin/host/CapabilityShim.h/.cpp) | app | M | 001, 006, 098, 103, 087 | done |
-| 10 | 152 | KeyAssignerReference.{h,cpp} — disassembly-semantics golden reference | qa | M | 001, 006, 007, 067, 077 | todo |
+| 10 | 152 | KeyAssignerReference.{h,cpp} — disassembly-semantics golden reference | qa | M | 001, 006, 007, 067, 077 | done |
 | 11 | 118 | Wire all engine modules into Engine::prepare/process/reset assembly | engine | M | 006, 073, 075, 071, 091, 092, 093, 006 | done |
 | 11 | 153 | KeyAssigner golden-trace conformance (K17) test battery | qa | S | 001, 006, 077, 069, 152 | todo |
 | 12 | 076b | CPU-budget regression golden ctest — measureWorstCaseBlockMicros HARD gate at max poly+unison @2x | qa | M | 118, 076, 046 | done |
@@ -138,7 +138,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 12 | 132 | Engine no-alloc / no-lock / noexcept hot-path guard tests | qa | S | 006, 118 | done |
 | 12 | 133 | End-to-end audio smoke test (note-on to non-silent output) | qa | S | 006, 118 | done |
 | 12 | 134 | Lifecycle/fuzz test: prepare/process/reset over random valid blocks and params | qa | S | 006, 118 | done |
-| 12 | 135 | End-to-end determinism test (same seed + same BlockContext sequence) | qa | S | 006, 118, 077 | todo |
+| 12 | 135 | End-to-end determinism test (same seed + same BlockContext sequence) | qa | S | 006, 118, 077 | done |
 | 12 | 144 | INIT/baseline preset + authoring conventions for the ~64-preset bank | docs | S | 118, 025 | todo |
 | 13 | 025b | presets_roundtrip ctest — every preset round-trips schema + checksum | qa | S | 025, 119, 040, 144b | todo |
 | 13 | 111 | MwAudioProcessor shell: prepare/process/reset + block-split + setLatencySamples (plugin/PluginProcessor.h/.cpp) | app | M | 001, 006, 007, 118, 020, 119, 099, 104, 101, 102, 112, 105 | todo |
@@ -188,7 +188,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 
 | 13 | 102b | Define core/params/ParamSnapshot.h POD (closes seam gap) | core | S | 019, 007 | done |
 
-| 13 | 075b | Wire PolyAllocator into VoiceManager/Engine POLY path | core | S | 075, 074, 118, 069 | todo |
+| 13 | 075b | Wire PolyAllocator into VoiceManager/Engine POLY path | core | S | 075, 074, 118, 069 | done |
 
 ## Notes (standing rationale ledger — why the DAG is shaped this way)
 

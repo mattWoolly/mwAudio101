@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 152
 title: KeyAssignerReference.{h,cpp} — disassembly-semantics golden reference
-status: in-review
+status: done
 depends-on: [001, 006, 007, 067, 077]
 component: qa
 estimated-size: M
