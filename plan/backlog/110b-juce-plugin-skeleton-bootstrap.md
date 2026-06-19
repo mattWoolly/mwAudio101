@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 110b
 title: JUCE plugin skeleton bootstrap — juce_add_plugin Standalone + minimal processor wrapping Engine
-status: in-review
+status: done
 depends-on: [001, 096, 118]
 component: app
 estimated-size: M

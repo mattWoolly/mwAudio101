@@ -184,6 +184,8 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 
 | 16 | 134b | Complete Engine::reset() to a deterministic fixed point | core | S | 118, 118b, 074, 071 | done |
 
+| 14 | 110b | JUCE plugin skeleton bootstrap (Standalone + min processor) | app | M | 001, 096, 118 | done |
+
 ## Notes (standing rationale ledger — why the DAG is shaped this way)
 
 - **Waves 0–3 = infra bootstrap.** `001` (top-level CMake) is the universal root; presets/CPM/

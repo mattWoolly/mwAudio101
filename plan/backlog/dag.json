@@ -6641,5 +6641,29 @@
     "scope": [],
     "outOfScope": [],
     "acceptance": []
+  },
+  {
+    "id": "110b",
+    "wave": 14,
+    "dependsOn": [
+      "001",
+      "096",
+      "118"
+    ],
+    "title": "JUCE plugin skeleton bootstrap",
+    "component": "app",
+    "stream": "plugin",
+    "size": "M",
+    "tag": "juce_bootstrap",
+    "slug": "juce-plugin-skeleton-bootstrap",
+    "designRefs": [
+      "docs/design/00 \u00a73.2",
+      "docs/design/09",
+      "plan/decisions/011-plugin-formats-wrappers.md"
+    ],
+    "objective": "Buildable juce_add_plugin Standalone + minimal Engine-wrapping processor.",
+    "scope": [],
+    "outOfScope": [],
+    "acceptance": []
   }
 ]
