@@ -58,7 +58,7 @@ void Oscillator::recompute() noexcept
     const double driftScaleOct =
         warmupSettle_
         * static_cast<double> (scaleErr_)
-        * (mw::cal::vco::kDriftScalePpmMax / 1.0e6);   // ppm-of-octave -> octaves
+        * (mw::cal::drift::kDriftScalePpmMax / 1.0e6);   // ppm-of-octave -> octaves
 
     // (c) progressive top-octave sharpness is compensated when HF tracking (pin 7)
     // is modeled [§4.7; research/02 §2.7]. With kHfTrackEnable (default true) the
@@ -66,7 +66,7 @@ void Oscillator::recompute() noexcept
     // therefore zero in the default build. The hook is kept explicit so disabling
     // HF tracking later reintroduces the documented top-octave sharpening.
     const double hfSharpenOct =
-        mw::cal::vco::kHfTrackEnable ? 0.0 : 0.0;   // tracked => 0 (hook for variance doc)
+        mw::cal::drift::kHfTrackEnable ? 0.0 : 0.0;   // tracked => 0 (hook for variance doc)
 
     const double exponent =
         static_cast<double> (controls_.pitchCvVolts)
@@ -107,9 +107,9 @@ Oscillator::Output Oscillator::renderSample() noexcept
     // the default zero seeds this changes nothing audible; the hook advances on the
     // audio thread so a nonzero-seed voice settles deterministically. Bounded, no
     // allocation, no branch on the parameter store.
-    if (warmupSettle_ < 1.0 && sampleRate_ > 0.0 && mw::cal::vco::kWarmupTauSec > 0.0)
+    if (warmupSettle_ < 1.0 && sampleRate_ > 0.0 && mw::cal::warmup::kWarmupTauSec > 0.0)
     {
-        const double tauSamples = mw::cal::vco::kWarmupTauSec * sampleRate_;
+        const double tauSamples = mw::cal::warmup::kWarmupTauSec * sampleRate_;
         warmupSettle_ += (1.0 - warmupSettle_) / tauSamples;
         if (warmupSettle_ > 1.0) warmupSettle_ = 1.0;
     }

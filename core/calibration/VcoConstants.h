@@ -87,12 +87,17 @@ inline constexpr double kFootageOffsetTwoV     =  2.0;
 // ---------------------------------------------------------------------------
 inline constexpr double kDtMax = 0.5;
 
+} // namespace mw::cal::vco
+
+namespace mw::cal::drift {
+
 // ---------------------------------------------------------------------------
 // Drift / stability model [docs/design/01 §4.7]. The CEM3340 is intrinsically
 // stable (same-die expo + tempco); model only a SMALL, slow drift, NOT large free-
-// running wander. All four are (PI) tuning values BOUNDED by the cited datasheet
+// running wander. These are (PI) tuning values BOUNDED by the cited datasheet
 // figures. The default build ships drift effectively at zero (the per-voice
-// scaleErr_/offsetErr_ seeds default to 0); the HOOKS must exist regardless.
+// scaleErr_/offsetErr_ seeds default to 0); the HOOKS must exist regardless. These
+// extend the mw::cal::drift placeholder declared in Calibration.h.
 // ---------------------------------------------------------------------------
 
 // Max scale (gain) drift, expressed in ppm of the 1V/oct slope [research/02 §2.9,
@@ -103,12 +108,22 @@ inline constexpr double kDriftScalePpmMax = 50.0;
 // [research/02 §2.9, 0.05% typ]. (PI) — carried for the variance doc to consume.
 inline constexpr double kDriftScaleErrPct = 0.05;
 
+// HF (top-octave) tracking flag (CEM3340 pin 7 model). When true, progressive
+// top-octave sharpness is compensated [research/02 §2.7, §7.1]. (PI). Part of the
+// drift/stability model (§4.7 item (c)), NOT a warm-up transient time constant.
+inline constexpr bool kHfTrackEnable = true;
+
+} // namespace mw::cal::drift
+
+namespace mw::cal::warmup {
+
+// ---------------------------------------------------------------------------
+// Warm-up transient [docs/design/01 §4.7 item (a)]. Extends the mw::cal::warmup
+// placeholder declared in Calibration.h.
+// ---------------------------------------------------------------------------
+
 // Warm-up transient time constant: a first-order settle of the tiny scale/offset
 // error over "tens of seconds" from a cold start [research/02 §7.1]. (PI).
 inline constexpr double kWarmupTauSec = 30.0;
 
-// HF (top-octave) tracking flag (CEM3340 pin 7 model). When true, progressive
-// top-octave sharpness is compensated [research/02 §2.7, §7.1]. (PI).
-inline constexpr bool kHfTrackEnable = true;
-
-} // namespace mw::cal::vco
+} // namespace mw::cal::warmup

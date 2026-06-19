@@ -26,17 +26,19 @@
 #pragma once
 
 #include "../calibration/VcoConstants.h"
+#include "OscAaMode.h"   // canonical mw101::dsp::OscAaMode { PolyBlep, MinBlepHq } (task 031)
 
 namespace mw101::dsp {
 
 class MinBlepTable;   // fwd: the shared HQ residual table (band-limiting, core-osc-4)
 
 // Anti-aliasing mode, derived from mw101.quality (Eco/Standard -> PolyBlep,
-// HQ -> MinBlepHq) [docs/design/01 §2.2; ADR-018 Q-table]. Mirrors the ADR-018 enum;
-// the canonical definition lives in docs/design/06. The phase core stores the
-// selected mode for core-osc-4 to consume; this task does not branch on it per
-// sample. Set in prepare()/setControls() (per block), never per-sample [ADR-018 Q5].
-enum class OscAaMode : unsigned char { PolyBlep = 0, MinBlepHq = 1 };
+// HQ -> MinBlepHq) [docs/design/01 §2.2; ADR-018 Q-table]. The CANONICAL definition
+// is the shared mw101::dsp::OscAaMode in OscAaMode.h (task 031) — included above and
+// consumed here so the VCO and the sub-oscillator share ONE type (no ODR violation).
+// The phase core stores the selected mode for core-osc-4 to consume; this task does
+// not branch on it per sample. Set in prepare()/setControls() (per block), never
+// per-sample [ADR-018 Q5].
 
 // Snapshot of smoothed/derived control values, supplied PER BLOCK (not per sample)
 // [docs/design/01 §4.2]. pitchCvVolts is the already-summed 1V/oct CV

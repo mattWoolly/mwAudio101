@@ -219,12 +219,12 @@ TEST_CASE("vco: a nonzero drift scale seed detunes the fundamental within the bo
 
     // Bound: the max scale drift is kDriftScalePpmMax ppm of an octave's worth of CV,
     // i.e. the detune ratio must not exceed 2^(kDriftScalePpmMax/1e6) beyond unity.
-    const double maxRatio = std::pow (2.0, mw::cal::vco::kDriftScalePpmMax / 1.0e6);
+    const double maxRatio = std::pow (2.0, mw::cal::drift::kDriftScalePpmMax / 1.0e6);
     REQUIRE (sharp <= mw::cal::vco::kPitchRefHz * maxRatio * 1.0001);
 
-    REQUIRE (mw::cal::vco::kDriftScalePpmMax == 50.0);
-    REQUIRE (mw::cal::vco::kWarmupTauSec == 30.0);
-    REQUIRE (mw::cal::vco::kHfTrackEnable == true);
+    REQUIRE (mw::cal::drift::kDriftScalePpmMax == 50.0);
+    REQUIRE (mw::cal::warmup::kWarmupTauSec == 30.0);
+    REQUIRE (mw::cal::drift::kHfTrackEnable == true);
 }
 
 TEST_CASE("vco: every PI pitch and footage and drift constant is referenced from the calibration header", "[vco]") {
@@ -232,10 +232,10 @@ TEST_CASE("vco: every PI pitch and footage and drift constant is referenced from
     // regression in the DSP source fails here.
     REQUIRE (mw::cal::vco::kPitchRefHz == 442.0);
     REQUIRE (mw::cal::vco::kDtMax == 0.5);
-    REQUIRE (mw::cal::vco::kDriftScalePpmMax == 50.0);
-    REQUIRE (mw::cal::vco::kDriftScaleErrPct == 0.05);
-    REQUIRE (mw::cal::vco::kWarmupTauSec == 30.0);
-    REQUIRE (mw::cal::vco::kHfTrackEnable == true);
+    REQUIRE (mw::cal::drift::kDriftScalePpmMax == 50.0);
+    REQUIRE (mw::cal::drift::kDriftScaleErrPct == 0.05);
+    REQUIRE (mw::cal::warmup::kWarmupTauSec == 30.0);
+    REQUIRE (mw::cal::drift::kHfTrackEnable == true);
 
     // Footage octave offsets (volts == octaves at 1V/oct): -1/0/+1/+2 about 8'.
     REQUIRE (mw::cal::vco::footageOffsetV (Footage::Sixteen) == -1.0);
