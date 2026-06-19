@@ -19,6 +19,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "../invariants/AudioThreadGuard.h"
 #include "BlockContext.h"
 #include "calibration/ClockConstants.h"
 #include "control/Clock.h"
@@ -532,19 +533,10 @@ TEST_CASE("clock: resetToKeypress re-phases the host next-boundary reference", "
 // never overruns the caller's pre-sized span.
 // ===========================================================================
 
-namespace {
-// Minimal allocation sentinel: count global new/delete around the hot call. Built
-// without arming any global operator new override (that lives in the project RT
-// guard); here we assert structurally that renderEdges only touches the caller span.
-struct AllocCounter {
-    static inline int allocations = 0;
-};
-} // namespace
-
-TEST_CASE("clock: renderEdges writes only into the pre-sized span and respects its capacity", "[clock]") {
+TEST_CASE("clock: renderEdges writes only into the pre-sized span and does no heap alloc under the sentinel", "[clock]") {
     const double sr = 96000.0;
     Clock c;
-    c.prepare(sr);
+    c.prepare(sr);                       // prepare may size; happens BEFORE arming
     c.setSource(ClockSource::HostSync);
     c.setHostRate(HostRate::ThirtySecond);  // dense rate
     c.setSwing(0.5f);
@@ -555,7 +547,26 @@ TEST_CASE("clock: renderEdges writes only into the pre-sized span and respects i
     for (auto& e : out) e.sampleOffset = -123;   // sentinel fill
     int n = 0;
     auto t = makeTransport(200.0, 0.0, true, sr);
+
+    // §7.7 / C27 / RT-1: prove the hot path allocates nothing. Arm the project RT
+    // sentinel (the test-binary global operator new/delete override consults it) and
+    // exercise renderEdges + resetToKeypress (the keypress re-phase reuses this path).
+    mw::test::AudioThreadGuard guard;
+    guard.arm();
+    c.resetToKeypress(0);
     c.renderEdges(t, std::span<const int>{}, std::span<ClockEdge>{out}, 1 << 20, n);
+
+    // Ext with more pulses than capacity also clamps to capacity — still under the guard.
+    c.setSource(ClockSource::Ext);
+    std::array<int, 32> manyPulses{};
+    for (int i = 0; i < 32; ++i) manyPulses[i] = i * 100;
+    int n2 = 0;
+    c.renderEdges(t, std::span<const int>{manyPulses}, std::span<ClockEdge>{out}, 1 << 20, n2);
+    guard.disarm();
+
+    // The acceptance criterion (renderEdges does no heap alloc under the sentinel).
+    REQUIRE_FALSE(guard.violated());
+    REQUIRE(guard.violations().empty());
 
     REQUIRE(n <= static_cast<int>(out.size()));
     REQUIRE(n >= 1);
@@ -564,13 +575,6 @@ TEST_CASE("clock: renderEdges writes only into the pre-sized span and respects i
     for (int i = 0; i < n; ++i) {
         REQUIRE(out[i].sampleOffset >= 0);
     }
-
-    // Ext with more pulses than capacity also clamps to capacity.
-    c.setSource(ClockSource::Ext);
-    std::array<int, 32> manyPulses{};
-    for (int i = 0; i < 32; ++i) manyPulses[i] = i * 100;
-    int n2 = 0;
-    c.renderEdges(t, std::span<const int>{manyPulses}, std::span<ClockEdge>{out}, 1 << 20, n2);
     REQUIRE(n2 <= static_cast<int>(out.size()));
 }
 
