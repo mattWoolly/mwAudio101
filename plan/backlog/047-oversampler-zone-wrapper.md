@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 047
 title: Oversampler zone wrapper: factor selection, OS_CEILING clamp, and CI alias-floor harness
-status: in-review
+status: done
 depends-on: [001, 006, 007, 039, 036]
 component: core
 estimated-size: M

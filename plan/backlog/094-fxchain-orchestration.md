@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 094
 title: FxChain orchestration: bypass, dry-pad, mono collapse, latency
-status: in-review
+status: done
 depends-on: [001, 006, 007, 088, 089, 091, 092, 093]
 component: core
 estimated-size: M

@@ -102,14 +102,14 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 6 | 091 | Drive stage: oversampled asymmetric waveshaper + tilt + DC block | core | M | 001, 006, 007, 088, 090 | done |
 | 6 | 109 | Custom control subclasses (Rotary/Linear sliders, ToggleSwitch, ChoiceSelector) | ui | M | 006, 106, 108 | todo |
 | 7 | 024 | Load-failure recovery ladder (LoadFailure.h/.cpp) | core | M | 019, 023, 021, 022, 007 | todo |
-| 7 | 032 | OscillatorSection owner + per-voice HQ escalation | core | M | 001, 006, 007, 026, 027, 029, 030, 031, 028 | todo |
+| 7 | 032 | OscillatorSection owner + per-voice HQ escalation | core | M | 001, 006, 007, 026, 027, 029, 030, 031, 028 | done |
 | 7 | 042 | Stimulus and PatchSnapshot render-input types | qa | S | 001, 006, 007, 041, 020 | todo |
-| 7 | 044 | Provenance — honesty-label vocabulary and renderVersion governor | qa | S | 001, 006, 043 | todo |
-| 7 | 047 | Oversampler zone wrapper: factor selection, OS_CEILING clamp, and CI alias-floor harness | core | M | 001, 006, 007, 039, 036 | todo |
+| 7 | 044 | Provenance — honesty-label vocabulary and renderVersion governor | qa | S | 001, 006, 043 | done |
+| 7 | 047 | Oversampler zone wrapper: factor selection, OS_CEILING clamp, and CI alias-floor harness | core | M | 001, 006, 007, 039, 036 | done |
 | 7 | 061 | Env/LFO param de-zipper class verification (S2/S4 paired test) | qa | S | 007, 006, 020, 054, 055 | todo |
-| 7 | 062 | Env/LFO/VCA real-time safety and control-rate determinism suite | qa | S | 007, 006, 058, 059, 060, 057 | todo |
+| 7 | 062 | Env/LFO/VCA real-time safety and control-rate determinism suite | qa | S | 007, 006, 058, 059, 060, 057 | done |
 | 7 | 066 | VintageMacro host-thread Age-to-target mapping | engine | S | 001, 006, 007, 020 | todo |
-| 7 | 094 | FxChain orchestration: bypass, dry-pad, mono collapse, latency | core | M | 001, 006, 007, 088, 089, 091, 092, 093 | todo |
+| 7 | 094 | FxChain orchestration: bypass, dry-pad, mono collapse, latency | core | M | 001, 006, 007, 088, 089, 091, 092, 093 | done |
 | 7 | 100 | RT-safe CC/learn map (plugin/midi/CcLearnMap.h/.cpp) | app | S | 001, 006, 020 | todo |
 | 7 | 102 | APVTS <-> ParamSnapshot marshalling (plugin/ParamBridge.h/.cpp) | app | M | 001, 006, 007, 020 | todo |
 | 7 | 105 | Constant PDC LatencyReporter (plugin/latency/LatencyReporter.h/.cpp) | app | M | 001, 006, 036, 091 | todo |

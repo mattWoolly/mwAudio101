@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 032
 title: OscillatorSection owner + per-voice HQ escalation
-status: in-review
+status: done
 depends-on: [001, 006, 007, 026, 027, 029, 030, 031, 028]
 component: core
 estimated-size: M
