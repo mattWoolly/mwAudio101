@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 046
 title: Manifest — parse/validate MANIFEST.toml with completeness, orphan, honesty-label and renderVersion checks
-status: in-review
+status: done
 depends-on: [001, 006, 040]
 component: qa
 estimated-size: M

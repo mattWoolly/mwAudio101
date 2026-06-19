@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 065
 title: DriftState POD struct and Tier-1/Tier-3/variance draw helpers
-status: in-review
+status: done
 depends-on: [001, 006, 007, 063]
 component: engine
 estimated-size: M

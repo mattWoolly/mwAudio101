@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 041
 title: GoldenKey / EngineTag types, hashing, and engine-context refusal
-status: in-review
+status: done
 depends-on: [001, 006, 007, 040]
 component: qa
 estimated-size: S

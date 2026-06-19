@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 019
 title: Declarative parameter registry (ParamDefs.h)
-status: in-review
+status: done
 depends-on: [014, 015, 007]
 component: core
 estimated-size: M

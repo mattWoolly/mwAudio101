@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 055
 title: Lfo rate/phase + SmoothTri and Square cores
-status: in-review
+status: done
 depends-on: [007, 006, 049, 051]
 component: core
 estimated-size: M

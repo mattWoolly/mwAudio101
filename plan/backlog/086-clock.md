@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 086
 title: Clock: single H->L edge node, 3 sources, swing, keypress reset
-status: in-review
+status: done
 depends-on: [001, 006, 007, 081]
 component: core
 estimated-size: M

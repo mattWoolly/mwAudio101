@@ -59,33 +59,33 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 4 | 106 | DesignTokens table (palette/stroke/radius/typography, single reskin knob) | ui | S | 006 | done |
 | 4 | 107 | Telemetry SPSC types (Snapshot POD + Producer/Consumer, lock-free, pre-allocated) | ui | M | 006, 006 | done |
 | 4 | 110 | SVG assets + BinaryData embedding (logo + static decoration) | ui | S | 001, 006 | done |
-| 5 | 018 | renderVersion state lifecycle + opt-in flag (RenderVersionState.h/.cpp) | core | S | 016, 017 | todo |
-| 5 | 019 | Declarative parameter registry (ParamDefs.h) | core | M | 014, 015, 007 | todo |
-| 5 | 022 | Migration chain (Migration.h/.cpp) | core | S | 016, 017, 007 | todo |
-| 5 | 023 | Canonical state (de)serializer (StateSerializer.h/.cpp) | core | M | 016, 017, 007 | todo |
-| 5 | 029 | VCO: phase core, exp pitch, footage, drift | core | M | 001, 006, 007, 027 | todo |
-| 5 | 031 | Sub-oscillator: 4013 divider + diode-OR 25% pulse | core | M | 001, 006, 007, 026, 027 | todo |
-| 5 | 037 | Oversampler: offline linear-phase FIR halfband + reported latency (render tier) | core | S | 001, 006, 007, 036 | todo |
-| 5 | 038 | LadderFilter linear core: 4-stage Huovilainen cascade + cutoff mapping (no resonance) | core | M | 001, 006, 007, 033, 035 | todo |
-| 5 | 041 | GoldenKey / EngineTag types, hashing, and engine-context refusal | qa | S | 001, 006, 007, 040 | todo |
-| 5 | 046 | Manifest — parse/validate MANIFEST.toml with completeness, orphan, honesty-label and renderVersion checks | qa | M | 001, 006, 040 | todo |
-| 5 | 054 | Envelope.cpp: ADSR one-pole segment curve + stage machine | core | M | 007, 006, 049, 050 | todo |
-| 5 | 055 | Lfo rate/phase + SmoothTri and Square cores | core | M | 007, 006, 049, 051 | todo |
-| 5 | 056 | Vca.cpp: OTA control-law taper + tanh drive | core | M | 007, 006, 049, 052 | todo |
-| 5 | 057 | ModRouting.cpp: depth scaling, velocity routing, mod-bus LPF | core | M | 007, 006, 049, 053 | todo |
-| 5 | 064 | ThermalState OU/pink/warm-up shared thermal integrator | engine | M | 001, 006, 007, 063 | todo |
-| 5 | 065 | DriftState POD struct and Tier-1/Tier-3/variance draw helpers | engine | M | 001, 006, 007, 063 | todo |
-| 5 | 068 | Glide.h/.cpp — per-voice portamento slew | core | S | 001, 006, 007, 067 | todo |
-| 5 | 069 | KeyAssigner.h/.cpp — bit-faithful note-priority/retrigger state machine | core | M | 001, 006, 007, 067 | todo |
-| 5 | 070 | ControlCore pitch assembly — 6-bit integer DAC-count pitch (VINTAGE quantization) | core | S | 001, 006, 007, 067 | todo |
-| 5 | 082 | ModRouter: fixed LFO/ADSR modulation routing | core | S | 001, 006, 007, 081 | todo |
-| 5 | 083 | TriggerSource (S7): coupled note-priority + retrigger | core | S | 001, 006, 007, 081 | todo |
-| 5 | 084 | Arpeggiator: UP/U&D/DOWN over 32-key bitmap | core | S | 001, 006, 007, 081 | todo |
-| 5 | 085 | StepSequencer: 100-slot note/rest/tie record & play | core | M | 001, 006, 007, 081 | todo |
-| 5 | 086 | Clock: single H->L edge node, 3 sources, swing, keypress reset | core | M | 001, 006, 007, 081 | todo |
-| 5 | 090 | FxOversampler2x dedicated post-voice 2x halfband pair | core | M | 001, 006, 007, 036 | todo |
-| 5 | 092 | Chorus stage: Juno-style anti-phase BBD widener | core | M | 001, 006, 007, 088, 089 | todo |
-| 5 | 093 | Delay stage: tempo-synced mono-core stereo delay with damped feedback | core | M | 001, 006, 007, 088, 089 | todo |
+| 5 | 018 | renderVersion state lifecycle + opt-in flag (RenderVersionState.h/.cpp) | core | S | 016, 017 | done |
+| 5 | 019 | Declarative parameter registry (ParamDefs.h) | core | M | 014, 015, 007 | done |
+| 5 | 022 | Migration chain (Migration.h/.cpp) | core | S | 016, 017, 007 | done |
+| 5 | 023 | Canonical state (de)serializer (StateSerializer.h/.cpp) | core | M | 016, 017, 007 | blocked |
+| 5 | 029 | VCO: phase core, exp pitch, footage, drift | core | M | 001, 006, 007, 027 | done |
+| 5 | 031 | Sub-oscillator: 4013 divider + diode-OR 25% pulse | core | M | 001, 006, 007, 026, 027 | done |
+| 5 | 037 | Oversampler: offline linear-phase FIR halfband + reported latency (render tier) | core | S | 001, 006, 007, 036 | done |
+| 5 | 038 | LadderFilter linear core: 4-stage Huovilainen cascade + cutoff mapping (no resonance) | core | M | 001, 006, 007, 033, 035 | done |
+| 5 | 041 | GoldenKey / EngineTag types, hashing, and engine-context refusal | qa | S | 001, 006, 007, 040 | done |
+| 5 | 046 | Manifest — parse/validate MANIFEST.toml with completeness, orphan, honesty-label and renderVersion checks | qa | M | 001, 006, 040 | done |
+| 5 | 054 | Envelope.cpp: ADSR one-pole segment curve + stage machine | core | M | 007, 006, 049, 050 | done |
+| 5 | 055 | Lfo rate/phase + SmoothTri and Square cores | core | M | 007, 006, 049, 051 | done |
+| 5 | 056 | Vca.cpp: OTA control-law taper + tanh drive | core | M | 007, 006, 049, 052 | done |
+| 5 | 057 | ModRouting.cpp: depth scaling, velocity routing, mod-bus LPF | core | M | 007, 006, 049, 053 | done |
+| 5 | 064 | ThermalState OU/pink/warm-up shared thermal integrator | engine | M | 001, 006, 007, 063 | done |
+| 5 | 065 | DriftState POD struct and Tier-1/Tier-3/variance draw helpers | engine | M | 001, 006, 007, 063 | done |
+| 5 | 068 | Glide.h/.cpp — per-voice portamento slew | core | S | 001, 006, 007, 067 | done |
+| 5 | 069 | KeyAssigner.h/.cpp — bit-faithful note-priority/retrigger state machine | core | M | 001, 006, 007, 067 | done |
+| 5 | 070 | ControlCore pitch assembly — 6-bit integer DAC-count pitch (VINTAGE quantization) | core | S | 001, 006, 007, 067 | done |
+| 5 | 082 | ModRouter: fixed LFO/ADSR modulation routing | core | S | 001, 006, 007, 081 | done |
+| 5 | 083 | TriggerSource (S7): coupled note-priority + retrigger | core | S | 001, 006, 007, 081 | done |
+| 5 | 084 | Arpeggiator: UP/U&D/DOWN over 32-key bitmap | core | S | 001, 006, 007, 081 | done |
+| 5 | 085 | StepSequencer: 100-slot note/rest/tie record & play | core | M | 001, 006, 007, 081 | done |
+| 5 | 086 | Clock: single H->L edge node, 3 sources, swing, keypress reset | core | M | 001, 006, 007, 081 | done |
+| 5 | 090 | FxOversampler2x dedicated post-voice 2x halfband pair | core | M | 001, 006, 007, 036 | done |
+| 5 | 092 | Chorus stage: Juno-style anti-phase BBD widener | core | M | 001, 006, 007, 088, 089 | done |
+| 5 | 093 | Delay stage: tempo-synced mono-core stereo delay with damped feedback | core | M | 001, 006, 007, 088, 089 | done |
 | 5 | 108 | MwAudioLookAndFeel vector drawing parameterized by DesignTokens | ui | M | 006, 106 | todo |
 | 6 | 020 | APVTS ParameterLayout generator (ParameterLayout.cpp) | core | S | 019, 007 | todo |
 | 6 | 021 | INIT patch builder (out-of-box defaults, ADR-016) | core | S | 019, 017, 007 | todo |

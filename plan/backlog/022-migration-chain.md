@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 022
 title: Migration chain (Migration.h/.cpp)
-status: in-review
+status: done
 depends-on: [016, 017, 007]
 component: core
 estimated-size: S

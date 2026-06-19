@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 068
 title: Glide.h/.cpp — per-voice portamento slew
-status: in-review
+status: done
 depends-on: [001, 006, 007, 067]
 component: core
 estimated-size: S

@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 092
 title: Chorus stage: Juno-style anti-phase BBD widener
-status: in-review
+status: done
 depends-on: [001, 006, 007, 088, 089]
 component: core
 estimated-size: M

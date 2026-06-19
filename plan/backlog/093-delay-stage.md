@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 093
 title: Delay stage: tempo-synced mono-core stereo delay with damped feedback
-status: in-review
+status: done
 depends-on: [001, 006, 007, 088, 089]
 component: core
 estimated-size: M

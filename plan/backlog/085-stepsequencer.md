@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 085
 title: StepSequencer: 100-slot note/rest/tie record & play
-status: in-review
+status: done
 depends-on: [001, 006, 007, 081]
 component: core
 estimated-size: M

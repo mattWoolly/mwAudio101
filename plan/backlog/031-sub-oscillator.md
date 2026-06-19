@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 031
 title: Sub-oscillator: 4013 divider + diode-OR 25% pulse
-status: in-review
+status: done
 depends-on: [001, 006, 007, 026, 027]
 component: core
 estimated-size: M

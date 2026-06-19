@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 083
 title: TriggerSource (S7): coupled note-priority + retrigger
-status: in-review
+status: done
 depends-on: [001, 006, 007, 081]
 component: core
 estimated-size: S

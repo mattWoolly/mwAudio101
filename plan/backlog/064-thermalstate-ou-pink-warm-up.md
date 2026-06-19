@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 064
 title: ThermalState OU/pink/warm-up shared thermal integrator
-status: in-review
+status: done
 depends-on: [001, 006, 007, 063]
 component: engine
 estimated-size: M
