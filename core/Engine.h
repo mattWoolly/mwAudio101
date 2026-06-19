@@ -12,11 +12,21 @@
 // primitive), and the §9 global RT invariants [ADR-001 C2-C6, C11; ADR-019 VT-01/VT-02/
 // VT-03; ADR-017 §Decision (post-voice FX once on the mono sum)].
 //
-// WHAT THIS OWNS (task 118 scope): the Engine seam class itself — it consumes the
-// already-built VoiceManager (task 074), ControlCore (task 071), and FxChain (task 094)
-// and assembles them behind the seam. prepare() is the ONLY allocation site; process()
-// chunks the host block, walks active voices in fixed index order summing into a mono
-// mix, then runs the shared FX once on that mono sum; reset() clears to a known start.
+// WHAT THIS OWNS (task 118 scope; task 118b reconcile): the Engine seam class itself —
+// it consumes the already-built VoiceManager (task 074), ControlCore (task 071), and
+// FxChain (task 094) and assembles them behind the seam. prepare() is the ONLY
+// allocation site; process() chunks the host block, walks active voices in fixed index
+// order summing into a mono mix, then runs the shared FX once on that mono sum; reset()
+// clears to a known start.
+//
+// NOTE-PRIORITY OWNERSHIP (task 118b): the engine routes note events through
+// VoiceManager::handleNoteEvent into the VoiceManager's SOLE KeyAssigner — the
+// documented single MONO/UNISON note-priority authority (doc 04 §5.1, §9; ADR-006 C12)
+// — and the ControlCore clocks that same KeyAssigner via the no-arg
+// VoiceManager::controlTick(). The engine holds NO second/duplicate KeyAssigner, and
+// the S7 selector (GATE / GATE+TRIG / LFO, incl. LFO clock-reset, ADR-006 C17) is
+// reachable through Engine::setGateTrigMode. This closes the wave-11 QA MEDIUM on
+// PR #71, where an Engine-owned adapter KeyAssigner left the VoiceManager's own dead.
 //
 // OUT OF SCOPE (other streams own these): the DSP internals of any consumed module;
 // the JUCE/plugin marshalling of host events -> BlockContext and the setLatencySamples
@@ -31,8 +41,7 @@
 
 #include "BlockContext.h"
 
-#include "voice/VoiceManager.h"
-#include "voice/KeyAssigner.h"
+#include "voice/VoiceManager.h"   // owns the SOLE KeyAssigner (doc 04 §5.1/§9); GateTrigMode via VoiceTypes
 #include "control/ControlCore.h"
 #include "dsp/fx/FxChain.h"
 
@@ -61,6 +70,14 @@ public:
     // Clears state to a known start. No allocation [§5.5; ADR-001 Decision].
     void reset() noexcept;
 
+    // Set the coupled S7 selector (note priority + envelope trigger) through the seam:
+    // GATE (lowest-note, no legato retrigger), GATE+TRIG (last-note, retrigger every
+    // key), or LFO (lowest-note, clock-reset on keypress) [docs/design/04 §5.1, §5;
+    // ADR-006 C12/C17]. Forwards to the VoiceManager's SOLE KeyAssigner — the single
+    // MONO/UNISON note-priority authority that the engine's render path resolves
+    // (task 118b reconcile). A lock-free flag write; safe from the audio thread.
+    void setGateTrigMode(GateTrigMode m) noexcept { voices_.setGateTrigMode(m); }
+
     // --- accessors (for tests; no audio-thread state mutation) -----------------------
     [[nodiscard]] bool   isPrepared() const noexcept { return prepared_; }
     [[nodiscard]] double sampleRate() const noexcept { return sampleRate_; }
@@ -77,26 +94,20 @@ public:
 private:
     // Render one already-bounded segment [n0, n0+len) (len <= kRenderBlock) of the host
     // block into the output channels. Applies the events whose offset lands at the head
-    // of this segment, advances the control core (which fires the control tick into the
-    // voice manager), renders active voices in fixed index order into the mono mix, and
-    // runs the FX once on that mono sum. noexcept, alloc-free, lock-free.
+    // of this segment through the VoiceManager's SINGLE note ingress (handleNoteEvent ->
+    // its sole KeyAssigner), advances the control core (which fires the control tick,
+    // clocking that same KeyAssigner via VoiceManager::controlTick()), renders active
+    // voices in fixed index order into the mono mix, and runs the FX once on that mono
+    // sum. noexcept, alloc-free, lock-free.
     void renderChunk(const BlockContext& ctx, int n0, int len) noexcept;
 
-    // The per-control-tick bridge: ControlCore::advance() is duck-typed on a no-arg
-    // controlTick(); the as-built VoiceManager::controlTick takes a resolved
-    // NoteDecision. The KeyAssigner that produces that decision is owned HERE (the
-    // ControlCore's owner, per VoiceManager.h §6.1 / docs/design/04 §7), so this thin
-    // adapter resolves the engine's KeyAssigner and forwards the decision into the
-    // VoiceManager on every control tick. noexcept, alloc-free, lock-free.
-    struct ControlTickBridge {
-        KeyAssigner*  keys;
-        VoiceManager* voices;
-        void controlTick() noexcept { voices->controlTick(keys->resolve()); }
-    };
-
-    // The consumed modules — assembled, not re-implemented, by this task.
+    // The consumed modules — assembled, not re-implemented, by this task. The
+    // VoiceManager owns the SOLE note-priority KeyAssigner for MONO/UNISON (doc 04
+    // §5.1/§9, ADR-006 C12); the engine routes notes into it via handleNoteEvent and the
+    // ControlCore clocks its resolution via the no-arg controlTick() — there is no
+    // second/duplicate KeyAssigner here (task 118b reconcile of the wave-11 PR #71
+    // finding).
     VoiceManager voices_{};
-    KeyAssigner  keys_{};            // note-priority authority for the control tick (§6.1)
     ControlCore  control_{};
     fx::FxChain  fx_{};
 

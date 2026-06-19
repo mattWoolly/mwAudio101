@@ -127,8 +127,9 @@ void Engine::prepare(double sampleRate, int maxBlockSize, int maxVoices) noexcep
     // Prepare the consumed modules. A fixed instance seed keeps per-voice drift PRNG
     // state byte-stable across runs (§9.2; ADR-001 Decision); the plugin overrides it
     // per instance off the audio thread (out of scope here).
+    // VoiceManager prepares its OWN sole KeyAssigner (the single MONO/UNISON authority,
+    // doc 04 §5.1/§9) — the engine owns no second KeyAssigner (task 118b reconcile).
     voices_.prepare(sampleRate_, oversampleFactor_, /*instanceSeed=*/0x6d77656eu);
-    keys_.prepare();
     control_.prepare(sampleRate_);
     fx_.prepare(sampleRate_, maxBlockSize_);
 
@@ -139,7 +140,9 @@ void Engine::prepare(double sampleRate, int maxBlockSize, int maxVoices) noexcep
 
 void Engine::reset() noexcept {
     // Clear state to a known silent start; no allocation (§5.5 reset; ADR-001 Decision).
-    keys_.reset();
+    // VoiceManager::reset clears its SOLE KeyAssigner (panic / all-notes-off) and
+    // releases any sounding voice — the single authority, no duplicate (task 118b).
+    voices_.reset();
     fx_.reset();
     std::fill(mixL_.begin(), mixL_.end(), 0.0f);
     std::fill(mixR_.begin(), mixR_.end(), 0.0f);
@@ -147,32 +150,31 @@ void Engine::reset() noexcept {
 }
 
 void Engine::renderChunk(const BlockContext& ctx, int n0, int len) noexcept {
-    // 1. Apply the note events that fall within this chunk sample-accurately into the
-    //    note-priority authority (§4.4). The block is split at event offsets so events
-    //    land at chunk heads; the resolved decision is consumed by the control tick
-    //    below. Non-note events are not voice-routed by this assembly.
+    // 1. Apply the note events that fall within this chunk sample-accurately through the
+    //    VoiceManager's SINGLE note ingress (§4.4, §9): handleNoteEvent feeds the
+    //    VoiceManager's OWN KeyAssigner — the documented sole MONO/UNISON note-priority
+    //    authority (doc 04 §5.1/§9; ADR-006 C12). The block is split at event offsets so
+    //    events land at chunk heads; the control tick below resolves that same authority.
+    //    Non-note events are not voice-routed by this assembly (task 118b reconcile: the
+    //    engine no longer owns a duplicate KeyAssigner).
     const MidiEventView& midi = ctx.midi;
     for (int i = 0; i < midi.numEvents; ++i) {
         const MidiEvent& e = midi.events[i];
         if (e.sampleOffset < n0 || e.sampleOffset >= n0 + len) continue;
         NoteEvent ne{};
         if (toNoteEvent(e, n0, ne)) {
-            switch (ne.type) {
-                case NoteEvent::Type::NoteOn:      keys_.noteOn(static_cast<int>(ne.note));  break;
-                case NoteEvent::Type::NoteOff:     keys_.noteOff(static_cast<int>(ne.note)); break;
-                case NoteEvent::Type::AllNotesOff: keys_.reset();                            break;
-            }
+            voices_.handleNoteEvent(ne);
         }
     }
 
     // 2. Advance the control core over this chunk; it fires the control tick(s) at the
-    //    (PI) sub-block cadence. Each fired tick resolves the engine's KeyAssigner and
-    //    forwards the decision into the VoiceManager via the thin bridge — the SOLE call
-    //    into the VoiceManager from the control side (§4.2; ControlCore owns no VM
-    //    internals; VoiceManager.h §6.1 the resolved decision comes from the ControlCore's
-    //    owner).
-    ControlTickBridge bridge{ &keys_, &voices_ };
-    control_.advance(len, bridge);
+    //    (PI) sub-block cadence. Each fired tick calls VoiceManager::controlTick(), which
+    //    resolves the VoiceManager's OWN KeyAssigner (the single authority) and applies
+    //    the decision to the active voice(s) — the SOLE call into the VoiceManager from
+    //    the control side (§4.2; ControlCore owns no VM internals, ControlCore.h §7.8).
+    //    There is exactly ONE KeyAssigner in the path, so the S7 selector set via
+    //    Engine::setGateTrigMode (incl. LFO clock-reset) audibly takes effect.
+    control_.advance(len, voices_);
 
     // 3. Render every active voice for this chunk, ACCUMULATING into the mono mix in
     //    FIXED voice-index order; single-threaded, no synchronization primitive

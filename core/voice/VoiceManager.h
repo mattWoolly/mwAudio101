@@ -74,14 +74,31 @@ public:
     void setUnisonCount(int u) noexcept;           // clamped to 1..kMaxUnison [ADR-006 C9]
     void setGateTrigMode(GateTrigMode m) noexcept; // forwards to keyAssigner_ (S7)
 
+    // Clear note-priority + voice state to a known start: reset the sole KeyAssigner
+    // (panic / all-notes-off, doc 04 §5.2) and de-assert the gate on any sounding
+    // voice so its tail releases in place, then rebuild the active list. RT-safe
+    // (noexcept, alloc-free, lock-free); used by the engine seam's reset() (§5.5).
+    void reset() noexcept;
+
     // Note events demultiplexed from MIDI/MPE/arp-seq (§9). MONO/UNISON forward to the
     // KeyAssigner; POLY (task 075) is not handled here. Sample-accurate; noexcept.
     void handleNoteEvent(const NoteEvent& e) noexcept;
 
     // Propagate one resolved NoteDecision to the active voice(s) for MONO/UNISON
-    // (§6.1). Called once per control tick by the ControlCore (task 071), which owns
-    // the KeyAssigner::resolve() that produces the decision. noexcept, alloc-free.
+    // (§6.1). Used by direct unit tests that supply the decision explicitly; the
+    // KeyAssigner::resolve() that produces it lives here (keyAssigner_) per doc 04
+    // §5.1/§9 — the sole MONO/UNISON note-priority authority. noexcept, alloc-free.
     void controlTick(const NoteDecision& d) noexcept;
+
+    // The control-tick surface the ControlCore drives (task 071): advance() is
+    // duck-typed on a NO-ARG controlTick(). This overload resolves the manager's OWN
+    // keyAssigner_ (the single authority — doc 04 §5.1/§9, ADR-006 C12/C17) and applies
+    // the decision, so the engine has exactly ONE KeyAssigner in the path: notes enter
+    // via handleNoteEvent into keyAssigner_, and the ControlCore clocks resolution here
+    // (task 118b reconcile of the wave-11 PR #71 finding — no dead duplicate). The Lfo
+    // (clock-reset) selector is therefore reachable through the engine. noexcept,
+    // alloc-free, lock-free.
+    void controlTick() noexcept;
 
     // Render all active voices for `numSamples`, ACCUMULATING the sum in FIXED
     // voice-index order into outL/outR [§8 RT1/RT2; ADR-019 VT-01/VT-02]. Applies any
