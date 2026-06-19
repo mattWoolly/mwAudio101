@@ -13,6 +13,7 @@
 [core]
 [e2e_smoke]
 [engine_assembly]
+[engine_reset]
 [engine_rtsafe]
 [engine_s7]
 [engineversion]

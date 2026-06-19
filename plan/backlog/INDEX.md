@@ -182,7 +182,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 
 | 15 | 118b | Reconcile KeyAssigner ownership — GateTrigMode via Engine | core | S | 118, 069, 071, 074 | done |
 
-| 16 | 134b | Complete Engine::reset() to a deterministic fixed point | core | S | 118, 118b, 074, 071 | todo |
+| 16 | 134b | Complete Engine::reset() to a deterministic fixed point | core | S | 118, 118b, 074, 071 | done |
 
 ## Notes (standing rationale ledger — why the DAG is shaped this way)
 
