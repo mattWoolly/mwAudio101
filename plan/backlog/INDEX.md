@@ -126,7 +126,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 9 | 079 | Calibration-tool self-tests — planted-answer, disjoint cal/val, negative control | qa | M | 001, 006, 007, 076 | todo |
 | 9 | 103 | MPE-over-MIDI reconstruction parser (plugin/midi/MpeReconstructor.h/.cpp) | app | M | 001, 006, 020, 073 | todo |
 | 9 | 104 | MidiFrontEnd note/gate/bend/pressure/CC translation (plugin/midi/MidiFrontEnd.h/.cpp) | app | M | 001, 006, 007, 020, 073, 099, 100, 098 | todo |
-| 10 | 075 | VoiceManager POLY allocator + deterministic voice stealing | core | M | 001, 006, 007, 073, 074 | todo |
+| 10 | 075 | VoiceManager POLY allocator + deterministic voice stealing | core | M | 001, 006, 007, 073, 074 | done |
 | 10 | 080 | Per-module CLASS-EXACT golden corpora — seq/divider/PRNG/arp/param-smooth/CC | qa | M | 001, 006, 007, 078, 045, 032, 086, 071 | todo |
 | 10 | 104b | Tuning + bend-range wiring: A4 440/442 duality, TUNE cents, per-channel + MPE bend ranges, optional MTS-ESP | app | M | 104, 103, 102 | todo |
 | 10 | 112 | CapabilityShim resolve + per-block recheck + UI publish (plugin/host/CapabilityShim.h/.cpp) | app | M | 001, 006, 098, 103, 087 | todo |
