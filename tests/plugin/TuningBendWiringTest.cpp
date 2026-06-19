@@ -104,8 +104,8 @@ void setEngineering(juce::AudioProcessorValueTreeState& apvts, const char* id, f
 // [docs/design/09 §5; ADR-012 C21-C23]
 // ============================================================================
 
-TEST_CASE("tuningbend: A4 defaults to 440 Hz and TUNE to 0 cents from the stock params",
-          "[tuningbend]")
+TEST_CASE("midi_tuning: A4 defaults to 440 Hz and TUNE to 0 cents from the stock params",
+          "[midi_tuning]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -123,8 +123,8 @@ TEST_CASE("tuningbend: A4 defaults to 440 Hz and TUNE to 0 cents from the stock 
     REQUIRE(fe.tuneCents() == Catch::Approx(0.0f).margin(1.0e-3));
 }
 
-TEST_CASE("tuningbend: A4 of 442 is reachable through the param (the hardware-accurate preset value)",
-          "[tuningbend]")
+TEST_CASE("midi_tuning: A4 of 442 is reachable through the param (the hardware-accurate preset value)",
+          "[midi_tuning]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -149,8 +149,8 @@ TEST_CASE("tuningbend: A4 of 442 is reachable through the param (the hardware-ac
     REQUIRE(fe.a4Hz() == Catch::Approx(460.0f).margin(1.0e-2));
 }
 
-TEST_CASE("tuningbend: TUNE comes from mw101.vco.fine as plus/minus 1 semitone = plus/minus 100 cents",
-          "[tuningbend]")
+TEST_CASE("midi_tuning: TUNE comes from mw101.vco.fine as plus/minus 1 semitone = plus/minus 100 cents",
+          "[midi_tuning]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -183,8 +183,8 @@ TEST_CASE("tuningbend: TUNE comes from mw101.vco.fine as plus/minus 1 semitone =
 // [docs/design/09 §4.4; ADR-012 C8, C11]
 // ============================================================================
 
-TEST_CASE("tuningbend: channel bend range comes from mw101.mod.bend_range_vco (cents) defaulting to plus/minus 2 semitones",
-          "[tuningbend]")
+TEST_CASE("midi_tuning: channel bend range comes from mw101.mod.bend_range_vco (cents) defaulting to plus/minus 2 semitones",
+          "[midi_tuning]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -210,8 +210,8 @@ TEST_CASE("tuningbend: channel bend range comes from mw101.mod.bend_range_vco (c
     REQUIRE(fe.channelBendRangeSemis() == Catch::Approx(0.0f).margin(1.0e-2));
 }
 
-TEST_CASE("tuningbend: MPE per-note and master bend ranges both come from mw101.mpe.bend_range, default plus/minus 48",
-          "[tuningbend]")
+TEST_CASE("midi_tuning: MPE per-note and master bend ranges both come from mw101.mpe.bend_range, default plus/minus 48",
+          "[midi_tuning]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -235,8 +235,8 @@ TEST_CASE("tuningbend: MPE per-note and master bend ranges both come from mw101.
     REQUIRE(fe.mpeMasterBendRangeSemis() == Catch::Approx(96.0f).margin(1.0e-2));
 }
 
-TEST_CASE("tuningbend: the channel bend range fed by the param drives the actual Pre-Q pitch offset",
-          "[tuningbend]")
+TEST_CASE("midi_tuning: the channel bend range fed by the param drives the actual Pre-Q pitch offset",
+          "[midi_tuning]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -272,8 +272,8 @@ TEST_CASE("tuningbend: the channel bend range fed by the param drives the actual
 // channel bend [docs/design/09 §4.4; ADR-012 C13]
 // ============================================================================
 
-TEST_CASE("tuningbend: mono voice mode collapses MPE to channel bend",
-          "[tuningbend]")
+TEST_CASE("midi_tuning: mono voice mode collapses MPE to channel bend",
+          "[midi_tuning]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -306,8 +306,8 @@ TEST_CASE("tuningbend: mono voice mode collapses MPE to channel bend",
 // [docs/design/09 §5; ADR-012 §Decision item 7]
 // ============================================================================
 
-TEST_CASE("tuningbend: with no MTS-ESP provider the single A4 float param is authoritative",
-          "[tuningbend]")
+TEST_CASE("midi_tuning: with no MTS-ESP provider the single A4 float param is authoritative",
+          "[midi_tuning]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -324,8 +324,8 @@ TEST_CASE("tuningbend: with no MTS-ESP provider the single A4 float param is aut
     REQUIRE(fe.a4Hz() == Catch::Approx(445.0f).margin(1.0e-2));   // param, not MTS
 }
 
-TEST_CASE("tuningbend: a present + cheap MTS-ESP provider overrides A4; an absent/expensive one defers to the param",
-          "[tuningbend]")
+TEST_CASE("midi_tuning: a present + cheap MTS-ESP provider overrides A4; an absent/expensive one defers to the param",
+          "[midi_tuning]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -362,8 +362,8 @@ TEST_CASE("tuningbend: a present + cheap MTS-ESP provider overrides A4; an absen
     REQUIRE(fe.a4Hz() == Catch::Approx(440.0f).margin(1.0e-2));   // still the param
 }
 
-TEST_CASE("tuningbend: a present-but-absent provider (present == false) defers to the param even if cheap",
-          "[tuningbend]")
+TEST_CASE("midi_tuning: a present-but-absent provider (present == false) defers to the param even if cheap",
+          "[midi_tuning]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -385,8 +385,8 @@ TEST_CASE("tuningbend: a present-but-absent provider (present == false) defers t
     REQUIRE(fe.a4Hz() == Catch::Approx(450.0f).margin(1.0e-2));   // defers to the param
 }
 
-TEST_CASE("tuningbend: apply() performs zero heap allocation on the audio thread (RT-safe)",
-          "[tuningbend]")
+TEST_CASE("midi_tuning: apply() performs zero heap allocation on the audio thread (RT-safe)",
+          "[midi_tuning]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
