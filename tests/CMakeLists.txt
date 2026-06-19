@@ -141,11 +141,15 @@ if(MW_BUILD_PLUGIN)
   juce_add_console_app(mw101_plugin_tests
     PRODUCT_NAME "mw101_plugin_tests")
 
-  # The plugin test sources + the processor-under-test (compiled directly into the
-  # test binary so the seam is exercised against the real JUCE compile environment).
+  # The plugin test sources + ALL plugin/ sources-under-test (CONFIGURE_DEPENDS glob,
+  # matching plugin/CMakeLists.txt) compiled directly into the test binary so the seam
+  # is exercised against the real JUCE compile environment. JUCE-phase tasks drop a
+  # plugin/**/*.cpp and a tests/plugin/*Test.cpp; both are auto-discovered on reconfigure.
+  file(GLOB_RECURSE MW_PLUGIN_UNDER_TEST CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/plugin/*.cpp")
   target_sources(mw101_plugin_tests PRIVATE
     ${MW_PLUGIN_TEST_SOURCES}
-    "${CMAKE_SOURCE_DIR}/plugin/PluginProcessor.cpp")
+    ${MW_PLUGIN_UNDER_TEST})
 
   # plugin/ for PluginProcessor.h; core/ for the JUCE-free seam headers it includes.
   target_include_directories(mw101_plugin_tests PRIVATE
