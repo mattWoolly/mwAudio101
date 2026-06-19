@@ -121,9 +121,9 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 9 | 048 | FILTER golden corpus (EARLY freeze gate) — bless + compare across blessed rates | qa | M | 001, 006, 047, 043, 045 | done |
 | 9 | 072 | DriftModel orchestration engine (Tier1/2/3 + smoothing + reroll) | engine | M | 001, 006, 007, 020, 063, 064, 065, 073 | done |
 | 9 | 074 | VoiceManager — pool, MONO/UNISON dispatch, control-tick propagation, fixed-order render | core | M | 001, 006, 007, 067, 069, 073 | done |
-| 9 | 077 | GoldenStore — blob/sidecar keying, lookup and load | qa | M | 001, 006, 041, 076 | todo |
-| 9 | 078 | CLASS-EXACT comparer (SHA-256 hash compare) | qa | S | 001, 006, 040, 076 | todo |
-| 9 | 079 | Calibration-tool self-tests — planted-answer, disjoint cal/val, negative control | qa | M | 001, 006, 007, 076 | todo |
+| 9 | 077 | GoldenStore — blob/sidecar keying, lookup and load | qa | M | 001, 006, 041, 076 | done |
+| 9 | 078 | CLASS-EXACT comparer (SHA-256 hash compare) | qa | S | 001, 006, 040, 076 | done |
+| 9 | 079 | Calibration-tool self-tests — planted-answer, disjoint cal/val, negative control | qa | M | 001, 006, 007, 076 | done |
 | 9 | 103 | MPE-over-MIDI reconstruction parser (plugin/midi/MpeReconstructor.h/.cpp) | app | M | 001, 006, 020, 073 | done |
 | 9 | 104 | MidiFrontEnd note/gate/bend/pressure/CC translation (plugin/midi/MidiFrontEnd.h/.cpp) | app | M | 001, 006, 007, 020, 073, 099, 100, 098 | done |
 | 10 | 075 | VoiceManager POLY allocator + deterministic voice stealing | core | M | 001, 006, 007, 073, 074 | done |
@@ -133,7 +133,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 10 | 152 | KeyAssignerReference.{h,cpp} — disassembly-semantics golden reference | qa | M | 001, 006, 007, 067, 077 | todo |
 | 11 | 118 | Wire all engine modules into Engine::prepare/process/reset assembly | engine | M | 006, 073, 075, 071, 091, 092, 093, 006 | done |
 | 11 | 153 | KeyAssigner golden-trace conformance (K17) test battery | qa | S | 001, 006, 077, 069, 152 | todo |
-| 12 | 076b | CPU-budget regression golden ctest — measureWorstCaseBlockMicros HARD gate at max poly+unison @2x | qa | M | 118, 076, 046 | todo |
+| 12 | 076b | CPU-budget regression golden ctest — measureWorstCaseBlockMicros HARD gate at max poly+unison @2x | qa | M | 118, 076, 046 | done |
 | 12 | 119 | PresetManager in-memory bank + per-slot INIT fallback (PresetManager.h/.cpp) | core | M | 001, 006, 021, 022, 024, 025, 118 | todo |
 | 12 | 132 | Engine no-alloc / no-lock / noexcept hot-path guard tests | qa | S | 006, 118 | done |
 | 12 | 133 | End-to-end audio smoke test (note-on to non-silent output) | qa | S | 006, 118 | done |

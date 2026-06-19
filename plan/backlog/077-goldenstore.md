@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 077
 title: GoldenStore — blob/sidecar keying, lookup and load
-status: in-review
+status: done
 depends-on: [001, 006, 041, 076]
 component: qa
 estimated-size: M

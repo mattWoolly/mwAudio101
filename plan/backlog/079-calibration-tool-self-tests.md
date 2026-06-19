@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 079
 title: Calibration-tool self-tests — planted-answer, disjoint cal/val, negative control
-status: in-review
+status: done
 depends-on: [001, 006, 007, 076]
 component: qa
 estimated-size: M

@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 078
 title: CLASS-EXACT comparer (SHA-256 hash compare)
-status: in-review
+status: done
 depends-on: [001, 006, 040, 076]
 component: qa
 estimated-size: S
