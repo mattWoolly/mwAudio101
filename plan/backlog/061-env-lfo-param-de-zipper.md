@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 061
 title: Env/LFO param de-zipper class verification (S2/S4 paired test)
-status: todo
+status: in-review
 depends-on: [007, 006, 020, 054, 055]
 component: qa
 estimated-size: S
