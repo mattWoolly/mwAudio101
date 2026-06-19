@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 084
 title: Arpeggiator: UP/U&D/DOWN over 32-key bitmap
-status: todo
+status: in-review
 depends-on: [001, 006, 007, 081]
 component: core
 estimated-size: S
