@@ -186,7 +186,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 
 | 14 | 110b | JUCE plugin skeleton bootstrap (Standalone + min processor) | app | M | 001, 096, 118 | done |
 
-| 13 | 102b | Define core/params/ParamSnapshot.h POD (closes seam gap) | core | S | 019, 007 | todo |
+| 13 | 102b | Define core/params/ParamSnapshot.h POD (closes seam gap) | core | S | 019, 007 | done |
 
 ## Notes (standing rationale ledger — why the DAG is shaped this way)
 
