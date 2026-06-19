@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 105
 title: Constant PDC LatencyReporter (plugin/latency/LatencyReporter.h/.cpp)
-status: todo
+status: in-review
 depends-on: [001, 006, 036, 091]
 component: app
 estimated-size: M
