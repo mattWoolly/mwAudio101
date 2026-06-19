@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 102b
 title: Define core/params/ParamSnapshot.h — the concrete normalized param POD the engine reads
-status: todo
+status: in-review
 depends-on: [019, 007]
 component: core
 estimated-size: S
