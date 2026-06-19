@@ -5056,7 +5056,8 @@
       "101",
       "102",
       "112",
-      "105"
+      "105",
+      "102b"
     ],
     "title": "MwAudioProcessor shell: prepare/process/reset + block-split + setLatencySamples (plugin/PluginProcessor.h/.cpp)",
     "component": "app",

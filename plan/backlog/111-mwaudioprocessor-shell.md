@@ -7,7 +7,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 id: 111
 title: MwAudioProcessor shell: prepare/process/reset + block-split + setLatencySamples (plugin/PluginProcessor.h/.cpp)
 status: todo
-depends-on: [001, 006, 007, 118, 020, 119, 099, 104, 101, 102, 112, 105]
+depends-on: [001, 006, 007, 118, 020, 119, 099, 104, 101, 102, 112, 105, 102b]
 component: app
 estimated-size: M
 stream: plugin
