@@ -105,6 +105,7 @@ private:
     // Per-voice expression (NO timbre matrix: pitch offset + ONE pressure value only).
     std::array<float, kVoiceCapacity> voiceBendSemis_{};   // per-note member bend
     std::array<float, kVoiceCapacity> voicePressure_{};    // per-note member pressure
+    std::array<bool,  kVoiceCapacity> voiceHasPressure_{}; // member pressure SET? (0.0 is valid)
     std::array<bool,  kVoiceCapacity> voiceActive_{};      // voice currently held?
 
     // The lower-zone MASTER (channel 1) global offset/pressure (Collapsed floor +

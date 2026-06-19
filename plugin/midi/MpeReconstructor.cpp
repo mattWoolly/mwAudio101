@@ -28,6 +28,7 @@ void MpeReconstructor::reset() noexcept
     channelToVoice_.fill(cal::kUnassignedVoice);
     voiceBendSemis_.fill(cal::kInitialPitchOffsetSemis);
     voicePressure_.fill(cal::kInitialPressureNorm);
+    voiceHasPressure_.fill(false);
     voiceActive_.fill(false);
     masterBendSemis_ = cal::kInitialPitchOffsetSemis;
     masterPressure_  = cal::kInitialPressureNorm;
@@ -80,9 +81,10 @@ void MpeReconstructor::noteOn(std::uint8_t channel, std::uint8_t /*note*/, std::
 
     // Fresh note on this voice: clear its per-note expression to the rest state so a
     // stale member bend/pressure from a prior note does not leak in.
-    voiceBendSemis_[static_cast<std::size_t>(voice)] = cal::kInitialPitchOffsetSemis;
-    voicePressure_[static_cast<std::size_t>(voice)]  = cal::kInitialPressureNorm;
-    voiceActive_[static_cast<std::size_t>(voice)]    = true;
+    voiceBendSemis_[static_cast<std::size_t>(voice)]   = cal::kInitialPitchOffsetSemis;
+    voicePressure_[static_cast<std::size_t>(voice)]    = cal::kInitialPressureNorm;
+    voiceHasPressure_[static_cast<std::size_t>(voice)] = false;  // until a member sends pressure
+    voiceActive_[static_cast<std::size_t>(voice)]      = true;
 }
 
 void MpeReconstructor::noteOff(std::uint8_t channel, std::uint8_t /*note*/) noexcept
@@ -124,7 +126,8 @@ void MpeReconstructor::pressure(std::uint8_t channel, float norm) noexcept
     if (! isEnabledMember(channel)) return;
     const int voice = channelToVoice_[static_cast<std::size_t>(channel - 1)];
     if (voice == cal::kUnassignedVoice) return;
-    voicePressure_[static_cast<std::size_t>(voice)] = norm;
+    voicePressure_[static_cast<std::size_t>(voice)]    = norm;
+    voiceHasPressure_[static_cast<std::size_t>(voice)] = true;  // 0.0 is a VALID value, not "unset"
 }
 
 int MpeReconstructor::voiceForChannel(std::uint8_t channel) const noexcept
@@ -145,8 +148,11 @@ float MpeReconstructor::voicePressure(int voice) const noexcept
     if (voice < 0 || voice >= maxVoices_) return cal::kInitialPressureNorm;
     // A voice carrying its own per-note member pressure uses it; otherwise the global
     // master-channel pressure applies (Collapsed floor) [ADR-012 C12, C13].
-    const float perNote = voicePressure_[static_cast<std::size_t>(voice)];
-    return (perNote != cal::kInitialPressureNorm) ? perNote : masterPressure_;
+    // Use the per-note member pressure IFF a member channel actually sent one (0.0 — fully
+    // released aftertouch — is a VALID value, so we track "set" explicitly, never overload 0.0).
+    return voiceHasPressure_[static_cast<std::size_t>(voice)]
+               ? voicePressure_[static_cast<std::size_t>(voice)]
+               : masterPressure_;
 }
 
 } // namespace mw::plugin
