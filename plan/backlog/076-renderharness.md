@@ -6,13 +6,15 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 076
 title: RenderHarness — deterministic offline render
-status: todo
+status: in-review
 depends-on: [001, 006, 007, 042, 086]
 component: qa
 estimated-size: M
 stream: golden
 tag: golden
 ---
+
+> **Follow-up (QA MEDIUM):** the assembled Engine hardcodes its drift seed and exposes none on prepare(), so the GoldenKey seed reaches output via note-transpose/onset dither, not the §9.2 per-voice drift PRNG. Bless corpora encode note-per-seed, not drift-per-seed, until the Engine accepts a seed on prepare() (deferred Engine-API task).
 
 ## Objective
 
