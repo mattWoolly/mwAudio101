@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 054
 title: Envelope.cpp: ADSR one-pole segment curve + stage machine
-status: todo
+status: in-review
 depends-on: [007, 006, 049, 050]
 component: core
 estimated-size: M
