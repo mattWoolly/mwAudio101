@@ -62,7 +62,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 5 | 018 | renderVersion state lifecycle + opt-in flag (RenderVersionState.h/.cpp) | core | S | 016, 017 | done |
 | 5 | 019 | Declarative parameter registry (ParamDefs.h) | core | M | 014, 015, 007 | done |
 | 5 | 022 | Migration chain (Migration.h/.cpp) | core | S | 016, 017, 007 | done |
-| 5 | 023 | Canonical state (de)serializer (StateSerializer.h/.cpp) | core | M | 016, 017, 007 | blocked |
+| 5 | 023 | Canonical state (de)serializer (StateSerializer.h/.cpp) | core | M | 016, 017, 007 | todo |
 | 5 | 029 | VCO: phase core, exp pitch, footage, drift | core | M | 001, 006, 007, 027 | done |
 | 5 | 031 | Sub-oscillator: 4013 divider + diode-OR 25% pulse | core | M | 001, 006, 007, 026, 027 | done |
 | 5 | 037 | Oversampler: offline linear-phase FIR halfband + reported latency (render tier) | core | S | 001, 006, 007, 036 | done |

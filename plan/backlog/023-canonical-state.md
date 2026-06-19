@@ -6,15 +6,13 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 023
 title: Canonical state (de)serializer (StateSerializer.h/.cpp)
-status: blocked
+status: todo
 depends-on: [016, 017, 007]
 component: core
 estimated-size: M
 stream: params
 tag: serializer
 ---
-
-> **Deferred to the JUCE phase** (requires juce::AudioProcessorValueTreeState round-trip; mwcore is JUCE-free per ADR-001). Unblocks when MW_BUILD_PLUGIN is enabled.
 
 ## Objective
 
