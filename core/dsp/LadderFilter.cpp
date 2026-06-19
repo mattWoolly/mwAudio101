@@ -2,24 +2,54 @@
 // SPDX-FileCopyrightText: 2026 Matt Woolly
 //
 // core/dsp/LadderFilter.cpp — the shipping per-voice Huovilainen four-stage one-pole
-// OTA cascade (task 038, LINEAR core). See LadderFilter.h and docs/design/02 §3, §5.2,
-// §5.5 under ADR-003 F-01, F-02, F-08, F-10, F-11, F-12.
+// OTA cascade. See LadderFilter.h and docs/design/02 §3, §5.1-§5.6 under ADR-003
+// F-01..F-08, F-10, F-11, F-12.
 //
-// This task wires the cascade with the global feedback gain k FORCED TO ZERO: the
-// inverting feedback, the +0.5-sample phase compensation, the diode-clamp limiter,
-// self-oscillation and the output-side make-up Q are core-filter-5 scope. The
-// per-sample structure below is the §5.5 cascade with the feedback term set to zero.
+// Task 038 (the LINEAR core) built the four-stage cascade with the global feedback
+// gain k FORCED TO ZERO. Task 039 (this resonance task) WIRES THE FEEDBACK LOOP into
+// the same surface without changing the header (as task 038 anticipated): setResonance
+// maps reso01 -> normalized loop gain k via the calibrated taper and computes the
+// output-side make-up Q scalar (§5.1, §5.3, ADR-003 F-05/F-06); processSample now
+// realizes the §5.5 inverting feedback with the +0.5-sample two-sample-average phase
+// compensation (F-03), the feedback-path diode clamp as the amplitude governor (§5.4,
+// F-04), and the residual half-sample tuning compensation (§7.3) applied to the
+// effective loop gain.
 //
 // All (PI) constants are read from core/calibration/* (the mw::cal::vcf namespace):
 //   - the OTA knee scaler invTwoVt and the tanh approximation come from FastTanh.h /
 //     FastTanhConstants.h (task 033);
-//   - the cutoff->g map comes from FilterTables (task 035);
-//   - the anti-denormal bias comes from LadderFilterConstants.h (this task).
+//   - the cutoff->g map and the resoTuningComp(g) factor come from FilterTables
+//     (task 035);
+//   - the anti-denormal bias comes from LadderFilterConstants.h (task 038);
+//   - the resonance->k taper (kMax, kResoCurveExp), the make-up depth (makeUpDepth) and
+//     the diode-clamp threshold (vClamp) come from LadderResonanceConstants.h (this
+//     task).
 // No (PI) numeric literal is inlined here [ADR-003 F-15; docs/design/02 §10 F-15].
 
 #include "dsp/LadderFilter.h"
 
+#include <cmath> // std::pow — control-rate only (setResonance), never the audio hot path
+
+#include "calibration/LadderResonanceConstants.h"
+
 namespace mw::dsp {
+
+namespace {
+
+// Symmetric diode-clamp feedback limiter [docs/design/02 §5.4; ADR-003 F-04;
+// docs/research/03 §4.2]. Memoryless soft saturator on the (inverting) feedback signal:
+// it passes small feedback with unit slope (so it does NOT shift the resonant onset)
+// but limits large excursions, "reducing the level as soon as it starts to conduct" and
+// bounding the loop to a fixed point. Realized with the shared fastTanh so NO std::tanh
+// reaches the audio thread (F-10): out = vClamp * fastTanh(fb / vClamp), bounded to
+// +/- vClamp. The (PI) shape is one of the acceptable realizations the design names
+// ("a tanh-with-larger-knee or a polynomial soft-clip"); the normative requirement is
+// that it lives in the FEEDBACK path and is the amplitude governor [docs/design/02 §5.4].
+[[nodiscard]] inline float diodeClamp(float fb, float vClamp) noexcept {
+    return vClamp * fastTanh(fb / vClamp);
+}
+
+} // namespace
 
 void LadderFilter::prepare(double fsOsHz, int maxBlockOs) noexcept {
     (void) maxBlockOs;  // no extra per-block scratch in the linear core
@@ -58,21 +88,43 @@ void LadderFilter::setCutoffHz(float fcHz) noexcept {
 }
 
 void LadderFilter::setResonance(float reso01) noexcept {
-    // STUB (task 038): store the control for introspection. The resonance->k taper,
-    // the inverting feedback path and the output-side make-up gain are wired by
-    // core-filter-5; here the loop gain is FORCED to zero and make-up stays unity so
-    // the cascade is feed-forward (the LINEAR core).
-    reso01_     = reso01;
-    k_          = 0.0f;   // linear core: no feedback
-    makeUpGain_ = 1.0f;   // make-up curve is core-filter-5 scope
+    // Control-rate setter (§5.1, §5.3; ADR-003 F-05/F-06). Maps the normalized control
+    // reso01 in [0,1] to the normalized loop gain k in [0, kMax] via the calibrated
+    // taper, and computes the output-side make-up Q scalar from the SAME taper.
+    //
+    // Clamp the control to [0,1]; reso01 == 1 reaches self-oscillation onset
+    // [docs/design/02 §5.1]. std::pow runs here (control rate, once per control block),
+    // NOT on the audio hot path — consistent with setCutoffHz's table-index log2 (F-10
+    // governs the audio thread, not the setters).
+    float r = reso01;
+    if (r < 0.0f) r = 0.0f;
+    if (r > 1.0f) r = 1.0f;
+    reso01_ = r;
+
+    // resonanceCurve(reso01) = reso01^kResoCurveExp, a unit-output x^p taper
+    // (resonanceCurve(1) == 1) [docs/design/02 §5.1, §9]. kResoCurveExp is (PI).
+    const float curve = std::pow(r, cal::vcf::kResoCurveExp);
+
+    // k = kMax * resonanceCurve(reso01); kMax is the (PI) normalized self-osc loop gain
+    // reached at reso01 = 1 [docs/design/02 §5.1; ADR-003 F-05]. This is the DOCUMENTED
+    // normalized loop gain in [0, kMax] that loopGainK() reports; the residual
+    // half-sample feedback-tuning compensation (§7.3) is applied to the effective loop
+    // gain per sample in processSample (where the current g is in hand), not baked in
+    // here, so it always tracks the live cutoff [docs/design/02 §7.3; ADR-003 F-14].
+    k_ = cal::vcf::kMax * curve;
+
+    // makeUpGain = 1 + makeUpDepth * resonanceCurve(reso01); rises monotonically with
+    // resonance [docs/design/02 §5.3; ADR-003 F-06]. Exposed via makeUpGain() for the
+    // downstream VCA drive; it is NOT applied inside processSample and the filter INPUT
+    // is never scaled with resonance [docs/design/02 §5.3 "(PI)"; ADR-003 F-06].
+    makeUpGain_ = 1.0f + cal::vcf::makeUpDepth * curve;
 }
 
 float LadderFilter::processSample(float x) noexcept {
-    // §5.5 forward-Euler four-stage tanh cascade with the global feedback gain k = 0,
-    // so the inverting-feedback term (fb = diodeClamp(k * fbComp, vClamp)) is zero and
-    // the stage-1 input is the bare input transconductor. The structure, evaluation
-    // order and the ~5 tanh evals/sample budget match §5.5 / Huovilainen so the full
-    // feedback wiring (core-filter-5) drops in without restructuring.
+    // §5.5 forward-Euler four-stage tanh cascade with the SH-101 resonance topology:
+    // inverting global feedback with the +0.5-sample two-sample-average phase
+    // compensation (F-03), diode-clamped in the feedback path (F-04). The structure,
+    // evaluation order and the ~5 tanh evals/sample budget match §5.5 / Huovilainen.
     const float invTwoVt = cal::vcf::invTwoVt;   // OTA knee scaler (PI), from calibration
     const float bias     = cal::vcf::kAntiDenorm; // anti-denormal bias (PI)
 
@@ -89,9 +141,25 @@ float LadderFilter::processSample(float x) noexcept {
     // this is a constant divide, not a data-dependent branch (F-02).
     const float gc = g_ / invTwoVt;
 
-    // Step 3 (k = 0): stage-1 input transconductor. With feedback off this is just the
-    // OTA-knee tanh of the input.
-    const float in0 = fastTanhKnee(x, invTwoVt);
+    // Step 1: feedback-phase compensation. The +0.5-sample delay is the average of the
+    // last two stage-4 outputs, holding the feedback phase ~180 deg at cutoff up to
+    // Fs/4 [docs/design/02 §5.5 step 1; docs/research/10 §3.8; ADR-003 F-03]. At the top
+    // of this sample y_[3] holds the output from sample n-1 and fbPrev_ from sample n-2.
+    const float fbComp = 0.5f * (y_[3] + fbPrev_);
+
+    // Step 2: diode-clamp the INVERTING feedback (F-04). The effective loop gain folds
+    // in the residual half-sample tuning compensation for the CURRENT cutoff coefficient
+    // (§7.3, F-14); resoTuningComp is a per-SR table lookup built in prepare, near unity
+    // by construction, allocation-free and noexcept (F-11). The clamp is the amplitude
+    // governor: self-oscillation amplitude is its fixed point [docs/design/02 §5.4;
+    // ADR-003 F-04/F-05].
+    const float kEff = k_ * tables_.resoTuningComp(g_);
+    const float fb   = diodeClamp(kEff * fbComp, cal::vcf::vClamp);
+
+    // Step 3: stage-1 input transconductor with the global inverting feedback subtracted
+    // (F-03). The make-up gain is NOT applied to the input — input scaling is invariant
+    // to resonance [docs/design/02 §5.3, §5.5 step 3; ADR-003 F-06].
+    const float in0 = fastTanhKnee(x - fb, invTwoVt);
 
     // Forward-Euler one-poles: y[i] += gc*(w[i-1] - w[i]); w[i] = fastTanhKnee(y[i]).
     // A tiny anti-denormal bias is folded into each accumulation so a decay-to-silence
@@ -103,7 +171,6 @@ float LadderFilter::processSample(float x) noexcept {
     y_[3] += gc * (w_[2] - w_[3]) + bias;  w_[3] = fastTanhKnee(y_[3], invTwoVt);
 
     // Step 4: maintain the feedback history for the next sample's two-sample average.
-    // Unused while k == 0, but kept valid so core-filter-5 reads a consistent history.
     fbPrev_ = y_[3];
 
     // Step 5: stage-4 output (the lowpass). The make-up gain is NOT applied here — it
