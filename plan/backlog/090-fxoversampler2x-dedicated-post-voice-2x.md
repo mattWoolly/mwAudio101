@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 090
 title: FxOversampler2x dedicated post-voice 2x halfband pair
-status: todo
+status: in-review
 depends-on: [001, 006, 007, 036]
 component: core
 estimated-size: M
