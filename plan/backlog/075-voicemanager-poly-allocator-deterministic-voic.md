@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 075
 title: VoiceManager POLY allocator + deterministic voice stealing
-status: todo
+status: in-review
 depends-on: [001, 006, 007, 073, 074]
 component: core
 estimated-size: M
