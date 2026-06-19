@@ -60,9 +60,11 @@ public:
     // Append an event. Returns false if full (drop, NEVER grow). Never allocates.
     bool push(const HostEvent& e) noexcept {
         if (count_ >= static_cast<int>(storage_.size())) {
-            // Overflow: drop and assert in debug; the lowest-priority drop policy
-            // (ParamValue before NoteOn/Off) is applied by the drain layer (task 113).
-            assert(false && "NormalizedEventBuffer overflow — event dropped [ADR-011 C9]");
+            // Overflow is a LEGITIMATE runtime drop policy (drop-never-grow), NOT a
+            // programming error: the lowest-priority drop (ParamValue before NoteOn/Off)
+            // is applied by the drain layer (task 113). We drop and return false WITHOUT
+            // aborting — asserting here would terminate asserts-on / sanitizer builds on a
+            // contractually-valid overflow path [ADR-011 C9; docs/design/09 §3.2].
             return false;
         }
         storage_[static_cast<std::size_t>(count_)] = e;
