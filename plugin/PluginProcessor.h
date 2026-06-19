@@ -7,7 +7,7 @@
 // BOOTSTRAP SCOPE: this is the thin JUCE shell from docs/design/09 §3.1, reduced to
 // the minimum that proves the build+link works: it owns a mw::Engine, drives the
 // three-call seam [docs/design/00 §5.1; ADR-001 C2-C5] —
-//   prepareToPlay(sr, block) -> engine.prepare(sr, oversample, block)
+//   prepareToPlay(sr, block) -> engine.prepare(sr, maxBlockSize=block, maxVoices=kMaxVoices)
 //   processBlock(buffer, midi) -> translate JUCE MIDI + playhead into the core POD
 //                                  BlockContext / mw::MidiEvent seam, call
 //                                  engine.process(ctx), write the engine's stereo

@@ -13,6 +13,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>   // GenericAudioProcessorEditor
 
 #include "params/ParamIDs.h"   // mwcore: the stable mw101.* string IDs
+#include "calibration/Calibration.h"   // mwcore: centralized (PI) event-buffer sizing
 
 namespace mw::plugin {
 
@@ -112,8 +113,11 @@ void MwAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     juce::ignoreUnused(kOversample); // documented seam intent; engine owns the factor
 
     // Pre-size the MIDI translation scratch off the audio thread (stand-in for the
-    // §3.2 NormalizedEventBuffer; ADR-011 C9). Generous head room for dense input.
-    events_.reserve(static_cast<size_t>(samplesPerBlock) * 4 + 256);
+    // §3.2 NormalizedEventBuffer; ADR-011 C9 — the lock-free buffer is task 104/111).
+    // Capacity from the centralized (PI) constants, not inlined [design 09 §3.2; AGENTS.md].
+    events_.reserve(static_cast<size_t>(samplesPerBlock)
+                        * static_cast<size_t>(mw::cal::host::kEventBufferBlockFactor)
+                    + static_cast<size_t>(mw::cal::host::kEventBufferSlack));
 }
 
 void MwAudioProcessor::releaseResources()
