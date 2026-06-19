@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 111
 title: MwAudioProcessor shell: prepare/process/reset + block-split + setLatencySamples (plugin/PluginProcessor.h/.cpp)
-status: todo
+status: in-review
 depends-on: [001, 006, 007, 118, 020, 119, 099, 104, 101, 102, 112, 105]
 component: app
 estimated-size: M
@@ -17,6 +17,19 @@ tag: processor
 ## Objective
 
 Implement MwAudioProcessor: own Engine/MidiFrontEnd/CapabilityShim/LatencyReporter/ParamBridge, drain each wrapper's native event surface into the NormalizedEventBuffer, assemble BlockContext (split at event offsets), drive Engine::prepare/process/reset, and call setLatencySamples from prepare.
+
+> **MINIMAL-bootstrap status (in-review).** A MINIMAL version was landed by the
+> JUCE-phase bootstrap (branch `task/juce-bootstrap`): `plugin/PluginProcessor.{h,cpp}`
+> with an `MwAudioProcessor` that owns a `mw::Engine`, drives the three-call seam
+> (`prepareToPlay`->`prepare`, `processBlock`->build `BlockContext`+`process`,
+> `releaseResources`->`reset`), translates the JUCE `MidiBuffer`+playhead into the core
+> POD `mw::MidiEvent`/`BlockContext` seam (allocation-free, pre-sized scratch), exposes a
+> single-param APVTS (master gain) + a `GenericAudioProcessorEditor`, and provides
+> `createPluginFilter()`. Proven GREEN by building the Standalone. **Deferred to the full
+> task 111 / leaf tasks:** the full §3.2 lock-free `NormalizedEventBuffer` + compiled
+> no-alloc assertion, the `MidiFrontEnd`/CC-learn map/MPE/note-expression rungs (104), the
+> `CapabilityShim` (102), the `LatencyReporter`+`setLatencySamples` PDC (105), the
+> `ParamSnapshot` bridge for the full APVTS (020), and ProgramChange preset recall.
 
 ## Context
 

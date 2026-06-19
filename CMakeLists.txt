@@ -13,6 +13,20 @@ project(mwAudio101
   DESCRIPTION "Circuit-accurate SH-101-inspired software synthesizer"
   LANGUAGES CXX)
 
+# JUCE on Apple platforms compiles C and Objective-C/Objective-C++ translation units
+# (CoreAudio/CoreMIDI/Cocoa glue), and C generally on every platform. The headless
+# core/test build stays pure C++ (LANGUAGES CXX above); we only enable the extra
+# languages when the JUCE shell is requested, so a core-only configure never pays for
+# them [docs/design/11 §9.1; ADR-014]. This MUST precede the cmake/* includes and the
+# add_subdirectory(plugin) so the JUCE targets have a C/ObjC compiler available.
+if(MW_BUILD_PLUGIN)
+  enable_language(C)
+  if(APPLE)
+    enable_language(OBJC)
+    enable_language(OBJCXX)
+  endif()
+endif()
+
 # --- Language standard: C++20, extensions OFF (docs/design/11 §9.1) -----------
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
