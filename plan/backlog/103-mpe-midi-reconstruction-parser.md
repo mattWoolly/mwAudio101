@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 103
 title: MPE-over-MIDI reconstruction parser (plugin/midi/MpeReconstructor.h/.cpp)
-status: todo
+status: in-review
 depends-on: [001, 006, 020, 073]
 component: app
 estimated-size: M
