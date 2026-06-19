@@ -6665,5 +6665,27 @@
     "scope": [],
     "outOfScope": [],
     "acceptance": []
+  },
+  {
+    "id": "102b",
+    "wave": 13,
+    "dependsOn": [
+      "019",
+      "007"
+    ],
+    "title": "Define core/params/ParamSnapshot.h POD",
+    "component": "core",
+    "stream": "params",
+    "size": "S",
+    "tag": "paramsnapshot",
+    "slug": "core-paramsnapshot-pod",
+    "designRefs": [
+      "docs/design/06-parameters-state-presets.md \u00a75.2",
+      "plan/decisions/001-core-plugin-boundary.md C7"
+    ],
+    "objective": "Concrete core ParamSnapshot POD the engine reads.",
+    "scope": [],
+    "outOfScope": [],
+    "acceptance": []
   }
 ]

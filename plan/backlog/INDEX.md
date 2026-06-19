@@ -186,6 +186,8 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 
 | 14 | 110b | JUCE plugin skeleton bootstrap (Standalone + min processor) | app | M | 001, 096, 118 | done |
 
+| 13 | 102b | Define core/params/ParamSnapshot.h POD (closes seam gap) | core | S | 019, 007 | todo |
+
 ## Notes (standing rationale ledger — why the DAG is shaped this way)
 
 - **Waves 0–3 = infra bootstrap.** `001` (top-level CMake) is the universal root; presets/CPM/
@@ -208,3 +210,4 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
   gates, never CI steps (mark in the relevant task's Out-of-scope).
 - Waves were recomputed by topological longest-path layering after breaking 3 bad integrator edges
   (Voice↔DriftModel cycle; SVG-assets←BackgroundLayer and CapabilityShim←editor-telemetry reversed).
+- **072 warm-up follow-up:** DriftModel's warm-up chassis is per-voice; ADR-009 D6/§5.3 require it GLOBAL. Dormant (warm-up OFF by default, §13 open gap) — reconcile when the warm-up path is exercised.
