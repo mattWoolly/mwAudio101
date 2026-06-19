@@ -58,6 +58,37 @@ ctest --preset default -R fp_discipline_guard --no-tests=error
 ctest --preset default -R audiothreadguard --no-tests=error
 ```
 
+## JUCE-linked plugin tests (`mw101_plugin_tests`)
+
+The headless `mw101_tests` binary links `mwcore` + Catch2 only — **no JUCE**. To
+unit-test plugin-side code (the `MwAudioProcessor` seam, the JUCE-MIDI translation,
+APVTS state) there is a **second** Catch2 target, `mw101_plugin_tests`, that links
+the real JUCE modules. It is built **only when `MW_BUILD_PLUGIN=ON`**, so the
+core/default cycle never pays for it (and never fetches JUCE).
+
+It is wired with JUCE's `juce_add_console_app()` helper so the JUCE module compile
+environment (the `JUCE_*` defines, module include dirs) is set up correctly for the
+linked `juce_*` modules; the processor under test is compiled in by adding
+`plugin/PluginProcessor.cpp` directly to the target. A headless run brackets JUCE's
+globals with a `juce::ScopedJuceInitialiser_GUI` — no message loop, no audio device.
+
+Drop a `tests/plugin/*Test.cpp` (e.g. `tests/plugin/FooTest.cpp`) and re-run
+configure; the `file(GLOB_RECURSE … CONFIGURE_DEPENDS "tests/plugin/*.cpp")` picks it
+up with **no `CMakeLists.txt` edit** (same pattern as `tests/unit`). Name each
+test-case after its selector word so `ctest -R <word>` selects it.
+
+```sh
+export CPM_SOURCE_CACHE=$HOME/.cache/CPM
+cmake -S . -B build/plugin -DMW_BUILD_PLUGIN=ON -DMW101_TESTS=ON -G "Unix Makefiles"
+cmake --build build/plugin --target mw101_plugin_tests
+ctest --test-dir build/plugin -R plugin_harness --no-tests=error --output-on-failure
+```
+
+The smoke test `tests/plugin/PluginHarnessTest.cpp` (`[plugin_harness]`) instantiates
+the processor, runs `prepareToPlay → processBlock → releaseResources` on a silent
+block, and asserts the output is all finite. The first run is slow (~30 s) because
+the JUCE GUI initialiser performs a one-time font/graphics scan on macOS.
+
 ## Source discovery (CONFIGURE_DEPENDS globs)
 
 `mwcore` and the `mw101_tests` binary discover their sources via `file(GLOB_RECURSE

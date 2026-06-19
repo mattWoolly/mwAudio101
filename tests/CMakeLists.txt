@@ -107,3 +107,85 @@ add_test(NAME formats
 # binary and is a fast smoke that the build produced a working test artifact.
 add_test(NAME build_smoke
   COMMAND mw101_tests "[harness]")
+
+# === JUCE-linked plugin test harness (mw101_plugin_tests) ========================
+# A SECOND Catch2 target that — unlike mw101_tests — links the real JUCE modules so
+# future JUCE-phase tasks can unit-test plugin-side code (the AudioProcessor seam,
+# the JUCE-MIDI translation, APVTS state) headlessly. It is built ONLY when
+# MW_BUILD_PLUGIN is ON, so the core/default cycle (which never fetches JUCE) is
+# completely untouched: with the plugin off this whole block is skipped.
+#
+# We use JUCE's juce_add_console_app() helper (available once CPMAddPackage(JUCE)
+# has run) rather than a bare add_executable so the JUCE module compile environment
+# (the JUCE_* defines, module include dirs, AppConfig machinery) is set up correctly
+# for the linked juce_* modules — the same way juce_add_plugin sets it up for the
+# shell. The processor-under-test is compiled in by adding plugin/PluginProcessor.cpp
+# directly to this target's sources.
+if(MW_BUILD_PLUGIN)
+  if(NOT TARGET juce::juce_audio_processors)
+    message(FATAL_ERROR
+      "tests/: MW_BUILD_PLUGIN is ON but JUCE was not fetched. Check cmake/Dependencies.cmake.")
+  endif()
+
+  # Source discovery for the plugin test suite mirrors the tests/unit glob: future
+  # JUCE tasks just drop tests/plugin/*Test.cpp and re-run configure — no edit here.
+  file(GLOB_RECURSE MW_PLUGIN_TEST_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/plugin/*.cpp")
+
+  # Empty-list guard so a freshly-globbed tree never fails configure (belt-and-
+  # suspenders; PluginHarnessTest.cpp is always present today).
+  if(NOT MW_PLUGIN_TEST_SOURCES)
+    set(MW_PLUGIN_TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/plugin/PluginHarnessTest.cpp")
+  endif()
+
+  juce_add_console_app(mw101_plugin_tests
+    PRODUCT_NAME "mw101_plugin_tests")
+
+  # The plugin test sources + the processor-under-test (compiled directly into the
+  # test binary so the seam is exercised against the real JUCE compile environment).
+  target_sources(mw101_plugin_tests PRIVATE
+    ${MW_PLUGIN_TEST_SOURCES}
+    "${CMAKE_SOURCE_DIR}/plugin/PluginProcessor.cpp")
+
+  # plugin/ for PluginProcessor.h; core/ for the JUCE-free seam headers it includes.
+  target_include_directories(mw101_plugin_tests PRIVATE
+    "${CMAKE_SOURCE_DIR}/plugin"
+    "${CMAKE_SOURCE_DIR}/core")
+
+  target_compile_features(mw101_plugin_tests PRIVATE cxx_std_20)
+
+  # JUCE compile-time config. Headless console run: no curl, no web browser; allow
+  # JUCE's modal-loop guard to pass in a non-message-thread context. These mirror the
+  # licit GPL-tier flags the plugin shell sets (plugin/CMakeLists.txt).
+  target_compile_definitions(mw101_plugin_tests PRIVATE
+    JUCE_USE_CURL=0
+    JUCE_WEB_BROWSER=0
+    JUCE_MODAL_LOOPS_PERMITTED=0
+    JUCE_STANDALONE_APPLICATION=1
+    JUCE_REPORT_APP_USAGE=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+    JUCE_STRICT_REFCOUNTEDPOINTER=1)
+
+  # Link Catch2-with-main + the JUCE-free core/fp-discipline + the JUCE modules the
+  # processor needs (matching plugin/CMakeLists.txt's link set).
+  target_link_libraries(mw101_plugin_tests PRIVATE
+    Catch2::Catch2WithMain
+    mwcore
+    mw_fp_discipline
+    juce::juce_audio_utils
+    juce::juce_audio_processors
+    juce::juce_dsp
+    juce::juce_audio_basics
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+  # ctest discovery under the silent-pass rules: test-case names begin with the
+  # selector word `plugin_harness` so `-R plugin_harness` selects what we expect, and
+  # the FAIL_REGULAR_EXPRESSION turns a "No tests ran" Catch2 result red. The
+  # ctest-level `--no-tests=error` (passed on the verify `ctest -R` line, mirrored by
+  # the testPresets noTestsAction in CMakePresets.json) makes a selector matching
+  # nothing a hard failure — that flag is a ctest flag, not a Catch2 EXTRA_ARG.
+  catch_discover_tests(mw101_plugin_tests
+    TEST_PREFIX "mw101_plugin."
+    PROPERTIES FAIL_REGULAR_EXPRESSION "No tests ran")
+endif()
