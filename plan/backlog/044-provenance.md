@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 044
 title: Provenance — honesty-label vocabulary and renderVersion governor
-status: todo
+status: in-review
 depends-on: [001, 006, 043]
 component: qa
 estimated-size: S
