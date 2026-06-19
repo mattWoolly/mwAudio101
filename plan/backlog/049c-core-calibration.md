@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 049c
 title: core/calibration: prepareToPlay constant-set SELECTOR keyed by renderVersion (legacy-render path)
-status: todo
+status: in-review
 depends-on: [005b, 033, 035, 029]
 component: core
 estimated-size: M
