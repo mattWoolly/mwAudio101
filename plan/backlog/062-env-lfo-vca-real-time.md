@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 062
 title: Env/LFO/VCA real-time safety and control-rate determinism suite
-status: todo
+status: in-review
 depends-on: [007, 006, 058, 059, 060, 057]
 component: qa
 estimated-size: S
