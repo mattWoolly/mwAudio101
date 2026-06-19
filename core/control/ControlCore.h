@@ -100,6 +100,19 @@ public:
     // jitter-OFF fixed-tick VINTAGE config is the bit-exact reference [ADR-005 C1].
     void setJitterEnabled(bool on) noexcept;
 
+    // Return the control-tick driver to the SAME known start prepare() establishes,
+    // WITHOUT re-deriving the sample-rate sizing (a reset is a runtime transport reset,
+    // not a re-prepare): zero the sample/tick counters, re-seed the deterministic
+    // loop-time-jitter PRNG, re-snap the macro crossfade blend to the current pole, and
+    // re-schedule the first tick boundary — exactly the post-sizing tail of prepare().
+    // The macro pole and the jitter-enabled toggle are PRESERVED (a reset is not a
+    // parameter change), mirroring VoiceManager::reset() keeping the S7 selector. This is
+    // the §5.5 known-start contract via reset(), not only prepare(); it makes the
+    // assembled Engine::reset() a deterministic fixed point (task 134b). RT-safe:
+    // noexcept, allocation-free, lock-free; the only state it touches is pre-sized in
+    // prepare() [docs/design/00 §5.5; ADR-001 Decision / C2-C5].
+    void reset() noexcept;
+
     // -----------------------------------------------------------------------
     // §7.4-§7.7 — advance one processBlock chunk.
     //
@@ -200,6 +213,12 @@ public:
     double sampleRate() const noexcept { return sampleRate_; }
 
 private:
+    // Establish the post-sizing known start shared by prepare() and reset() (§5.5):
+    // zero the sample/tick counters, re-seed the jitter PRNG, snap the crossfade blend
+    // to the current macro pole, and schedule the first tick boundary. Touches only
+    // state already sized in prepare(); noexcept, alloc-free, lock-free (task 134b).
+    void establishKnownStart() noexcept;
+
     // Advance the crossfade blend one tick toward the macro pole target (§7.7). One
     // pole-IIR slew step + a snap-to-target so the steady-state branch is exact and
     // the "is-crossfading" state is deterministic. Branchless.

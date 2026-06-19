@@ -49,6 +49,14 @@ namespace {
 // At least one sample between ticks (a tick period is never zero), so the per-chunk
 // tick loop is bounded by numSamples / 1 and can never spin [ADR-001 C3 bounded loop].
 constexpr int kMinTickSamples = 1;
+
+// Fixed deterministic loop-time-jitter PRNG seed (never wall-clock) [§7.4; ADR-005 C1;
+// docs/design/00 §9.2]. Shared by prepare() and reset() so a reset re-seeds to the same
+// reproducible jitter stream as a fresh prepare — defined once here so the two known-start
+// derivations cannot drift apart. The plugin overrides the per-instance seed off the
+// audio thread (out of scope here). (PI) — an internal implementation constant, not a
+// public calibration surface.
+constexpr std::uint32_t kJitterSeed = 0x5ce10101u;
 } // namespace
 
 void ControlCore::prepare(double sampleRate) noexcept {
@@ -78,9 +86,28 @@ void ControlCore::prepare(double sampleRate) noexcept {
         ? static_cast<float>(1.0 - std::exp(-tickSeconds / tau))
         : 1.0f;  // tau == 0 => instant (still snaps via the epsilon)
 
+    // Establish the post-sizing known start (counters, jitter PRNG seed, crossfade
+    // blend, first tick boundary). Factored so reset() re-derives the IDENTICAL start
+    // without repeating the sample-rate sizing above (§5.5; task 134b).
+    establishKnownStart();
+}
+
+void ControlCore::reset() noexcept {
+    // §5.5 runtime reset: return the tick driver to the SAME known start prepare()
+    // establishes, but WITHOUT re-deriving the sample-rate sizing (sizing is a prepare
+    // concern). The macro pole and the jitter toggle are preserved (a reset is not a
+    // parameter change) — exactly as VoiceManager::reset() preserves the S7 selector.
+    // Touches only state pre-sized in prepare(): noexcept, alloc-free, lock-free
+    // [docs/design/00 §5.5; ADR-001 Decision / C2-C5]. This is what makes the assembled
+    // Engine::reset() a deterministic fixed point (task 134b).
+    establishKnownStart();
+}
+
+void ControlCore::establishKnownStart() noexcept {
     // Seed the deterministic loop-time-jitter PRNG (never wall-clock) [§7.4; ADR-005
-    // C1; docs/design/00 §9.2]. A fixed seed keeps jitter-ON renders reproducible.
-    jitterRng_.seed(0x5ce10101u);
+    // C1; docs/design/00 §9.2]. A fixed seed keeps jitter-ON renders reproducible AND
+    // makes a reset() re-seed to the same stream as a fresh prepare().
+    jitterRng_.seed(kJitterSeed);
 
     // Reset the sample counter and schedule the first tick boundary for the current
     // pole. The crossfade blend starts AT the current macro pole so there is no
