@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 102
 title: APVTS <-> ParamSnapshot marshalling (plugin/ParamBridge.h/.cpp)
-status: todo
+status: in-review
 depends-on: [001, 006, 007, 020]
 component: app
 estimated-size: M
