@@ -131,7 +131,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 10 | 104b | Tuning + bend-range wiring: A4 440/442 duality, TUNE cents, per-channel + MPE bend ranges, optional MTS-ESP | app | M | 104, 103, 102 | todo |
 | 10 | 112 | CapabilityShim resolve + per-block recheck + UI publish (plugin/host/CapabilityShim.h/.cpp) | app | M | 001, 006, 098, 103, 087 | todo |
 | 10 | 152 | KeyAssignerReference.{h,cpp} — disassembly-semantics golden reference | qa | M | 001, 006, 007, 067, 077 | todo |
-| 11 | 118 | Wire all engine modules into Engine::prepare/process/reset assembly | engine | M | 006, 073, 075, 071, 091, 092, 093, 006 | todo |
+| 11 | 118 | Wire all engine modules into Engine::prepare/process/reset assembly | engine | M | 006, 073, 075, 071, 091, 092, 093, 006 | done |
 | 11 | 153 | KeyAssigner golden-trace conformance (K17) test battery | qa | S | 001, 006, 077, 069, 152 | todo |
 | 12 | 076b | CPU-budget regression golden ctest — measureWorstCaseBlockMicros HARD gate at max poly+unison @2x | qa | M | 118, 076, 046 | todo |
 | 12 | 119 | PresetManager in-memory bank + per-slot INIT fallback (PresetManager.h/.cpp) | core | M | 001, 006, 021, 022, 024, 025, 118 | todo |
@@ -179,6 +179,8 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 16 | 157 | CI verification gate steps: discovery, label-snapshot, MANIFEST, no-network | infra | M | 001, 006, 077, 156 | todo |
 | 17 | 154 | Adversarial multi-dimension QA audit report (docs/QA-REPORT.md) | qa | M | 118, 006, 077, 006, 139, 140, 141, 142, 143 | todo |
 | 18 | 155 | (PI) pragmatic-invention ledger sweep section in docs/QA-REPORT.md | qa | S | 118, 077, 006, 154 | todo |
+
+| 15 | 118b | Reconcile KeyAssigner ownership — GateTrigMode via Engine | core | S | 118, 069, 071, 074 | todo |
 
 ## Notes (standing rationale ledger — why the DAG is shaped this way)
 

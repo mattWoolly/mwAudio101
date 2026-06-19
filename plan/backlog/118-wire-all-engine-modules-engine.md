@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 118
 title: Wire all engine modules into Engine::prepare/process/reset assembly
-status: in-review
+status: done
 depends-on: [006, 073, 075, 071, 091, 092, 093, 006]
 component: engine
 estimated-size: M

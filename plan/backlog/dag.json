@@ -6593,5 +6593,30 @@
       "The sweep is appended to docs/QA-REPORT.md under the SPDX GPL-3.0-or-later header so the \u00a713.2 license gate stays green (C18)."
     ],
     "slug": "qa"
+  },
+  {
+    "id": "118b",
+    "wave": 15,
+    "dependsOn": [
+      "118",
+      "069",
+      "071",
+      "074"
+    ],
+    "title": "Reconcile KeyAssigner ownership \u2014 GateTrigMode reachable through Engine",
+    "component": "core",
+    "stream": "voice-control",
+    "size": "S",
+    "tag": "engine_s7",
+    "slug": "keyassigner-ownership-reconcile",
+    "designRefs": [
+      "docs/design/04-voice-and-control.md \u00a75.1",
+      "docs/design/04-voice-and-control.md \u00a79",
+      "plan/decisions/006-voice-poly-unison-model.md C12"
+    ],
+    "objective": "Single note-priority authority; S7 GateTrigMode settable through Engine.",
+    "scope": [],
+    "outOfScope": [],
+    "acceptance": []
   }
 ]

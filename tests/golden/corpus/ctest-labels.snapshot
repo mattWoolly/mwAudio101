@@ -11,6 +11,7 @@
 [clock]
 [controlcore]
 [core]
+[engine_assembly]
 [engineversion]
 [env_curve]
 [env_header]
