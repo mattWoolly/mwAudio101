@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 020
 title: APVTS ParameterLayout generator (ParameterLayout.cpp)
-status: in-review
+status: done
 depends-on: [019, 007]
 component: core
 estimated-size: S

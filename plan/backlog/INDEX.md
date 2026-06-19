@@ -86,8 +86,8 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 5 | 090 | FxOversampler2x dedicated post-voice 2x halfband pair | core | M | 001, 006, 007, 036 | done |
 | 5 | 092 | Chorus stage: Juno-style anti-phase BBD widener | core | M | 001, 006, 007, 088, 089 | done |
 | 5 | 093 | Delay stage: tempo-synced mono-core stereo delay with damped feedback | core | M | 001, 006, 007, 088, 089 | done |
-| 5 | 108 | MwAudioLookAndFeel vector drawing parameterized by DesignTokens | ui | M | 006, 106 | todo |
-| 6 | 020 | APVTS ParameterLayout generator (ParameterLayout.cpp) | core | S | 019, 007 | todo |
+| 5 | 108 | MwAudioLookAndFeel vector drawing parameterized by DesignTokens | ui | M | 006, 106 | done |
+| 6 | 020 | APVTS ParameterLayout generator (ParameterLayout.cpp) | core | S | 019, 007 | done |
 | 6 | 021 | INIT patch builder (out-of-box defaults, ADR-016) | core | S | 019, 017, 007 | done |
 | 6 | 025 | .mw101preset JSON projection + validator (PresetFormat.h/.cpp) | core | M | 019, 023, 022, 007 | todo |
 | 6 | 030 | VCO band-limited saw + variable PWM pulse | core | M | 001, 006, 007, 026, 027, 029 | done |
@@ -112,7 +112,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 7 | 094 | FxChain orchestration: bypass, dry-pad, mono collapse, latency | core | M | 001, 006, 007, 088, 089, 091, 092, 093 | done |
 | 7 | 100 | RT-safe CC/learn map (plugin/midi/CcLearnMap.h/.cpp) | app | S | 001, 006, 020 | todo |
 | 7 | 102 | APVTS <-> ParamSnapshot marshalling (plugin/ParamBridge.h/.cpp) | app | M | 001, 006, 007, 020 | todo |
-| 7 | 105 | Constant PDC LatencyReporter (plugin/latency/LatencyReporter.h/.cpp) | app | M | 001, 006, 036, 091 | todo |
+| 7 | 105 | Constant PDC LatencyReporter (plugin/latency/LatencyReporter.h/.cpp) | app | M | 001, 006, 036, 091 | done |
 | 7 | 144b | presets/ flat-POD bake loader contract — deterministic build/load-time bake, never parsed on the audio thread | core | M | 025, 040 | todo |
 | 8 | 045 | bless tool — arm64-only, BLESS_REASON-gated guarded writer | qa | M | 001, 006, 047, 044 | done |
 | 8 | 073 | Voice.h/.cpp — circuit-accurate signal-path assembly + drift seed | core | M | 001, 006, 007, 067, 068, 032, 047, 062 | done |
