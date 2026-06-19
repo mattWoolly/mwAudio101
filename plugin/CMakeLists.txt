@@ -69,9 +69,11 @@ juce_add_plugin(mwAudio101
   EDITOR_WANTS_KEYBOARD_FOCUS FALSE
   COPY_PLUGIN_AFTER_BUILD FALSE)
 
-# --- The shared processor sources (task 111, minimal) ---------------------------
-target_sources(mwAudio101 PRIVATE
-  "${CMAKE_CURRENT_SOURCE_DIR}/PluginProcessor.cpp")
+# --- The shared plugin sources (CONFIGURE_DEPENDS glob; JUCE-phase tasks just drop
+# plugin/**/*.cpp and re-run configure — no edit here) ---------------------------
+file(GLOB_RECURSE MW_PLUGIN_SOURCES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
+target_sources(mwAudio101 PRIVATE ${MW_PLUGIN_SOURCES})
 
 target_include_directories(mwAudio101 PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}")
