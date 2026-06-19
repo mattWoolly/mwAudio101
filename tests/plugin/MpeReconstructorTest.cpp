@@ -293,9 +293,9 @@ TEST_CASE("mpereconstruct: member pressure of exactly 0.0 reports 0.0, not the m
     mpe.prepare(kMaxVoices);
     mpe.setMemberCount(3);                          // members 1..3 -> MIDI channels 2..4
     mpe.pressure(1, 0.8f);                          // master-channel pressure (the fallback)
+    mpe.noteOn(2, 60, 100);                         // rotation assigns channel 2 -> a voice
     const int v = mpe.voiceForChannel(2);
     REQUIRE(v != cal::kUnassignedVoice);
-    mpe.noteOn(2, 60, 100);
     REQUIRE(nearly(mpe.voicePressure(v), 0.8f));    // no member pressure yet -> master fallback
     mpe.pressure(2, 0.0f);                          // fully-released aftertouch: VALID 0.0
     REQUIRE(nearly(mpe.voicePressure(v), 0.0f));    // must NOT fall back to master 0.8
