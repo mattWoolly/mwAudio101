@@ -11,15 +11,19 @@
 // laws and defaults live in core/calibration/VoiceManagerConstants.h [docs/design/00
 // §1.2; ADR-020 S13].
 //
-// POLY allocation / re-strike / stealing (and unison-group steal) are NOT implemented
-// here — they are task 075 [plan/backlog/074 §Out of scope]. This file drives only
-// the MONO and UNISON paths, both fed by the single KeyAssigner.
+// The POLY drive path is WIRED here (task 075b) by COMPOSING the task-075 PolyAllocator:
+// POLY note events bypass the KeyAssigner and route straight into polyAlloc_ (allocate on
+// note-on, release on note-off, deterministic steal at capacity), so VoiceMode::Poly
+// allocates and SOUNDS voices through the shared render path. The allocator's policy
+// (idle -> re-strike -> deterministic steal, §6.4 / ADR-006 C12-C16) is owned by task 075
+// and is NOT re-implemented here. MONO/UNISON are unchanged.
 
 #include "voice/VoiceManager.h"
 
 #include <algorithm>
 #include <cmath>
 
+#include "calibration/VoiceConstants.h"        // kMaxPoly (the POLY group budget)
 #include "calibration/VoiceManagerConstants.h"
 
 namespace mw {
@@ -57,6 +61,19 @@ void VoiceManager::prepare(double sampleRate, int oversampleFactor,
 
     active_.fill(0);
     activeCount_ = 0;
+
+    // Bind the composed POLY allocator to THIS pool + the shared note-serial counter for
+    // the current unison count (§6.4; ADR-006 C16). Off the audio thread; this is the
+    // allocator's prepare-time configuration, never mid-block (§8 RT7).
+    configurePolyAllocator();
+}
+
+void VoiceManager::configurePolyAllocator() noexcept {
+    // (Re)bind polyAlloc_ to pool_ and the shared monotonic note-serial counter. The poly
+    // group budget is the (PI) v1 poly cap kMaxPoly; the allocator forms floor(kMaxPoly/U)
+    // groups of U contiguous slots, clamped so groups*U <= kMaxVoices [ADR-006 C16].
+    // Pure integer configuration; noexcept, alloc-free, lock-free.
+    polyAlloc_.configure(pool_, nextSerial_, /*maxPoly=*/cal::voice::kMaxPoly, unison_);
 }
 
 void VoiceManager::setMode(VoiceMode m) noexcept {
@@ -96,10 +113,38 @@ void VoiceManager::reset() noexcept {
 
 void VoiceManager::handleNoteEvent(const NoteEvent& e) noexcept {
     // Single ingress for all note sources (§9). MONO/UNISON flow through the
-    // KeyAssigner (the sole note-priority authority); POLY (task 075) bypasses it and
-    // is not handled here.
+    // KeyAssigner (the sole note-priority authority); POLY bypasses it entirely and
+    // routes straight into the composed PolyAllocator (§6.4; ADR-006 C12), so a POLY
+    // note-on allocates/steals its own voice group and a note-off releases it.
     if (mode_ == VoiceMode::Poly) {
-        return;  // POLY allocator is task 075 [§Out of scope].
+        switch (e.type) {
+            case NoteEvent::Type::NoteOn:
+                // Every poly note-on allocates its OWN voice group (idle -> re-strike ->
+                // deterministic steal); the allocator stamps the monotonic note-serial and
+                // fires a fresh GATE+TRIG trigger on the whole group [ADR-006 C12-C16].
+                polyAlloc_.allocatePoly(static_cast<int>(e.note));
+                break;
+            case NoteEvent::Type::NoteOff:
+                // Release EVERY group sounding this note (gate de-assert -> release tail in
+                // place); other held groups are untouched [ADR-006 C12/C15].
+                polyAlloc_.releasePoly(static_cast<int>(e.note));
+                break;
+            case NoteEvent::Type::AllNotesOff:
+                // Panic / all-notes-off: de-assert the gate on every sounding poly voice so
+                // each tail releases in place (the active list refreshes on the next tick/
+                // render). Bounded O(kMaxVoices), alloc-free (§8 RT3/RT6).
+                for (int i = 0; i < kMaxVoices; ++i) {
+                    Voice& v = pool_[static_cast<std::size_t>(i)];
+                    if (v.isActive()) {
+                        v.noteOff();
+                    }
+                }
+                break;
+        }
+        // Refresh the dense active list so a render that begins after these events (with no
+        // intervening control tick) walks current voice state.
+        rebuildActiveList();
+        return;
     }
 
     switch (e.type) {
@@ -238,6 +283,14 @@ void VoiceManager::applyPendingReconfig() noexcept {
 
     mode_   = newMode;
     unison_ = newUnison;
+
+    // The POLY allocator's group layout (floor(kMaxPoly/U) groups of U contiguous slots)
+    // depends on the unison count, so re-bind it whenever a reconfig lands while POLY is
+    // the active mode (or has just become it). This happens only at the boundary, never
+    // mid-block (§8 RT7; ADR-006 C16/C17). Integer-only, alloc-free.
+    if (mode_ == VoiceMode::Poly) {
+        configurePolyAllocator();
+    }
 
     pendingReconfig_ = false;
     pendingMode_     = mode_;

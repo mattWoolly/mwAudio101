@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 075b
 title: Wire PolyAllocator into the VoiceManager/Engine POLY path (POLY mode must sound)
-status: todo
+status: in-review
 depends-on: [075, 074, 118, 069]
 component: core
 estimated-size: S
