@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 076b
 title: CPU-budget regression golden ctest — measureWorstCaseBlockMicros HARD gate at max poly+unison @2x
-status: todo
+status: in-review
 depends-on: [118, 076, 046]
 component: qa
 estimated-size: M

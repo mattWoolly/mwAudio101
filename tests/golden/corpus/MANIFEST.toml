@@ -110,3 +110,22 @@ fpFlagProof = "-fno-fast-math -ffp-contract=off"
 arm64HostId = "ref-macos-arm64-01"
 renderVersion = 1
 honestyLabels = ["reverse-engineered"]
+
+# --- CPU-budget regression ceiling [docs/design/11 §13.5; ADR-013 C21; ADR-019 VT-05]
+# The committed wall-time ceiling for the worst-case patch (full poly + full unison +
+# 2x oversampling + Newton-iterated ladder). It is (PI) — a pragmatic, host-relative
+# invention, NOT a measured SH-101 fact — and is RE-DERIVED per reference host id, so
+# the CPU-budget gate (CpuBudgetTest) reads it FROM here rather than hard-coding it
+# [§13.5]. This is a dedicated [cpu_budget] table (NOT a [[golden]] array-of-tables
+# entry) so it does not perturb the golden-entry count the Manifest.h (046) parser sees.
+# Deriving the precise value is a tuning/MANIFEST authoring action (task 076b
+# Out-of-scope); this seed value is set generously so the gate is a true regression
+# tripwire (a fidelity change that blows the RT budget exceeds it), not a flaky
+# per-block jitter gate.
+[cpu_budget]
+ceilingMicrosPerBlock = 50000.0   # (PI) seed ceiling for the worst-case 512-frame block
+engine = "Huov"                    # Newton-iterated (Huovilainen) ladder — the worst case
+oversampleFactor = 2               # 2x oversampling — the worst case (ADR-003 §F-09)
+sampleRate = 96000.0               # top blessed rate (worst-case 2x internal == ceiling)
+blockSize = 512
+arm64HostId = "ref-macos-arm64-01" # the ceiling is host-relative, re-derived per host
