@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 133
 title: End-to-end audio smoke test (note-on to non-silent output)
-status: in-review
+status: done
 depends-on: [006, 118]
 component: qa
 estimated-size: S

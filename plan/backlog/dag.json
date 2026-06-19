@@ -6618,5 +6618,28 @@
     "scope": [],
     "outOfScope": [],
     "acceptance": []
+  },
+  {
+    "id": "134b",
+    "wave": 16,
+    "dependsOn": [
+      "118",
+      "118b",
+      "074",
+      "071"
+    ],
+    "title": "Complete Engine::reset() to a deterministic fixed point",
+    "component": "core",
+    "stream": "integration",
+    "size": "S",
+    "tag": "engine_reset",
+    "slug": "engine-reset-completeness",
+    "designRefs": [
+      "docs/design/00-architecture-overview.md \u00a75.5"
+    ],
+    "objective": "Engine::reset() resets consumed VoiceManager+ControlCore for a true fixed point.",
+    "scope": [],
+    "outOfScope": [],
+    "acceptance": []
   }
 ]

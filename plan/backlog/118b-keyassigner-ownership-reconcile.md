@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 118b
 title: Reconcile KeyAssigner ownership — single note-priority authority, GateTrigMode reachable through Engine
-status: in-review
+status: done
 depends-on: [118, 069, 071, 074]
 component: core
 estimated-size: S

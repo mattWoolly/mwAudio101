@@ -135,9 +135,9 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 11 | 153 | KeyAssigner golden-trace conformance (K17) test battery | qa | S | 001, 006, 077, 069, 152 | todo |
 | 12 | 076b | CPU-budget regression golden ctest — measureWorstCaseBlockMicros HARD gate at max poly+unison @2x | qa | M | 118, 076, 046 | todo |
 | 12 | 119 | PresetManager in-memory bank + per-slot INIT fallback (PresetManager.h/.cpp) | core | M | 001, 006, 021, 022, 024, 025, 118 | todo |
-| 12 | 132 | Engine no-alloc / no-lock / noexcept hot-path guard tests | qa | S | 006, 118 | todo |
-| 12 | 133 | End-to-end audio smoke test (note-on to non-silent output) | qa | S | 006, 118 | todo |
-| 12 | 134 | Lifecycle/fuzz test: prepare/process/reset over random valid blocks and params | qa | S | 006, 118 | todo |
+| 12 | 132 | Engine no-alloc / no-lock / noexcept hot-path guard tests | qa | S | 006, 118 | done |
+| 12 | 133 | End-to-end audio smoke test (note-on to non-silent output) | qa | S | 006, 118 | done |
+| 12 | 134 | Lifecycle/fuzz test: prepare/process/reset over random valid blocks and params | qa | S | 006, 118 | done |
 | 12 | 135 | End-to-end determinism test (same seed + same BlockContext sequence) | qa | S | 006, 118, 077 | todo |
 | 12 | 144 | INIT/baseline preset + authoring conventions for the ~64-preset bank | docs | S | 118, 025 | todo |
 | 13 | 025b | presets_roundtrip ctest — every preset round-trips schema + checksum | qa | S | 025, 119, 040, 144b | todo |
@@ -180,7 +180,9 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 17 | 154 | Adversarial multi-dimension QA audit report (docs/QA-REPORT.md) | qa | M | 118, 006, 077, 006, 139, 140, 141, 142, 143 | todo |
 | 18 | 155 | (PI) pragmatic-invention ledger sweep section in docs/QA-REPORT.md | qa | S | 118, 077, 006, 154 | todo |
 
-| 15 | 118b | Reconcile KeyAssigner ownership — GateTrigMode via Engine | core | S | 118, 069, 071, 074 | todo |
+| 15 | 118b | Reconcile KeyAssigner ownership — GateTrigMode via Engine | core | S | 118, 069, 071, 074 | done |
+
+| 16 | 134b | Complete Engine::reset() to a deterministic fixed point | core | S | 118, 118b, 074, 071 | todo |
 
 ## Notes (standing rationale ledger — why the DAG is shaped this way)
 
