@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 072
 title: DriftModel orchestration engine (Tier1/2/3 + smoothing + reroll)
-status: todo
+status: in-review
 depends-on: [001, 006, 007, 020, 063, 064, 065, 073]
 component: engine
 estimated-size: M
