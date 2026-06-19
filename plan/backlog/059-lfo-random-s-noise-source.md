@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 059
 title: Lfo Random S/H, Noise source, and cycleEdge flag
-status: todo
+status: in-review
 depends-on: [007, 006, 055]
 component: core
 estimated-size: M
