@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 048
 title: FILTER golden corpus (EARLY freeze gate) — bless + compare across blessed rates
-status: in-review
+status: done
 depends-on: [001, 006, 047, 043, 045]
 component: qa
 estimated-size: M

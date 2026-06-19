@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileCopyrightText: 2026 Matt Woolly
 #
-# Subsystem-tag snapshot (docs/design/11 §8.4; ADR-013 C3). Orchestrator regenerates per wave.
+# Subsystem-tag snapshot. Orchestrator regenerates per wave.
 [arp]
 [blockcontext]
 [cal]
@@ -16,6 +16,7 @@
 [env_header]
 [env_trig]
 [envlfovca_rtsafe]
+[filter-golden]
 [fracdelay]
 [fxchain]
 [fxchorus]
@@ -74,3 +75,4 @@
 [vintage_prng]
 [vintage_thermal]
 [voice]
+[voicemanager]

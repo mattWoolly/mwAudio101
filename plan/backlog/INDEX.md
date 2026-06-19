@@ -118,9 +118,9 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 8 | 073 | Voice.h/.cpp — circuit-accurate signal-path assembly + drift seed | core | M | 001, 006, 007, 067, 068, 032, 047, 062 | done |
 | 8 | 076 | RenderHarness — deterministic offline render | qa | M | 001, 006, 007, 042, 086 | todo |
 | 8 | 101 | HostEvent -> mw::core::MidiEvent translator (plugin/midi/EventTranslator.h/.cpp) | app | S | 001, 006, 007, 020, 099, 100 | todo |
-| 9 | 048 | FILTER golden corpus (EARLY freeze gate) — bless + compare across blessed rates | qa | M | 001, 006, 047, 043, 045 | todo |
+| 9 | 048 | FILTER golden corpus (EARLY freeze gate) — bless + compare across blessed rates | qa | M | 001, 006, 047, 043, 045 | done |
 | 9 | 072 | DriftModel orchestration engine (Tier1/2/3 + smoothing + reroll) | engine | M | 001, 006, 007, 020, 063, 064, 065, 073 | todo |
-| 9 | 074 | VoiceManager — pool, MONO/UNISON dispatch, control-tick propagation, fixed-order render | core | M | 001, 006, 007, 067, 069, 073 | todo |
+| 9 | 074 | VoiceManager — pool, MONO/UNISON dispatch, control-tick propagation, fixed-order render | core | M | 001, 006, 007, 067, 069, 073 | done |
 | 9 | 077 | GoldenStore — blob/sidecar keying, lookup and load | qa | M | 001, 006, 041, 076 | todo |
 | 9 | 078 | CLASS-EXACT comparer (SHA-256 hash compare) | qa | S | 001, 006, 040, 076 | todo |
 | 9 | 079 | Calibration-tool self-tests — planted-answer, disjoint cal/val, negative control | qa | M | 001, 006, 007, 076 | todo |
