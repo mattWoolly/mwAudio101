@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 135
 title: End-to-end determinism test (same seed + same BlockContext sequence)
-status: todo
+status: in-review
 depends-on: [006, 118, 077]
 component: qa
 estimated-size: S
