@@ -1,82 +1,42 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Matt Woolly
 //
-// plugin/PluginProcessor.cpp — MwAudioProcessor implementation (task 111, MINIMAL).
+// plugin/PluginProcessor.cpp — MwAudioProcessor implementation. The processor
+// convergence node (task 111).
 //
-// See PluginProcessor.h for the bootstrap scope and the deferred-leaf-task list.
-// This TU is the single place that touches BOTH juce::* and the core POD seam: it
-// marshals the host's JUCE MidiBuffer + playhead into a JUCE-free mw::BlockContext
-// (docs/design/09 §3.2/§3.3; docs/design/00 §5.2-§5.4) and drives the engine.
+// This TU is the single place that touches BOTH juce::* and the core POD seam. It wires
+// the already-built components (it reimplements none of them) into the three-call seam:
+//
+//   prepareToPlay  -> Engine::prepare(sr, maxBlock, maxVoices); size the lock-free
+//                     NormalizedEventBuffer + the core-event scratch + the ParamBridge
+//                     table; resolve the per-format capability rungs; declare the
+//                     CONSTANT PDC to the host via setLatencySamples ONCE [ADR-017 L10].
+//   processBlock   -> drain the JUCE MidiBuffer (+ resolved note-expr rung) into the
+//                     NormalizedEventBuffer (MidiFrontEnd), translate HostEvent ->
+//                     mw::MidiEvent into the pre-sized scratch (EventTranslator), snapshot
+//                     the APVTS atomics once (ParamBridge), recheck the transport rung
+//                     (CapabilityShim), assemble the BlockContext, and drive
+//                     Engine::process. Program Change is captured for message-thread
+//                     preset recall — the audio thread only ever writes a POD. ZERO heap
+//                     alloc, NO lock [docs/design/09 §3.2; ADR-011 C9; ADR-024 C7].
+//   releaseResources -> Engine::reset.
+//
+// There is ONE Engine and ONE DSP path for every wrapper format [ADR-001 C14;
+// ADR-011 Decision].
 
 #include "PluginProcessor.h"
 
 #include <juce_audio_utils/juce_audio_utils.h>   // GenericAudioProcessorEditor
 
-#include "params/ParamIDs.h"   // mwcore: the stable mw101.* string IDs
-#include "calibration/Calibration.h"   // mwcore: centralized (PI) event-buffer sizing
+#include "params/ParameterLayout.h"   // buildParameterLayout() — the full 91-param APVTS
+#include "midi/EventTranslator.h"     // HostEvent -> mw::MidiEvent (§3.3)
+#include "state/StateSerializer.h"    // canonical capture / write / read (task 023)
+#include "state/LoadFailure.h"        // recoverState graded recovery ladder (task 024)
+#include "state/Extras.h"             // mw::state::Extras (audio-thread POD payload)
+#include "state/StateTree.h"          // mw::state::kParamsId etc.
+#include "version/EngineVersion.h"    // schema / plugin / engine / render versions
 
 namespace mw::plugin {
-
-namespace {
-
-// Translate one JUCE MIDI message into the core POD mw::MidiEvent (docs/design/09
-// §3.3 field-for-field map). Returns false for messages the engine does not ingest
-// in the bootstrap (everything but note/bend/pressure/CC). Allocation-free.
-bool toMidiEvent(const juce::MidiMessage& m, int sampleOffset, mw::MidiEvent& out) noexcept
-{
-    out.channel      = static_cast<std::int8_t>(m.getChannel());  // 1..16; 0 if none
-    out.noteId       = -1;                                        // MIDI-derived
-    out.sampleOffset = sampleOffset;
-
-    if (m.isNoteOn())
-    {
-        out.type  = mw::NormalizedType::NoteOn;
-        out.data0 = static_cast<float>(m.getNoteNumber());
-        out.value = m.getFloatVelocity();
-        return true;
-    }
-    if (m.isNoteOff())
-    {
-        out.type  = mw::NormalizedType::NoteOff;
-        out.data0 = static_cast<float>(m.getNoteNumber());
-        out.value = m.getFloatVelocity();
-        return true;
-    }
-    if (m.isPitchWheel())
-    {
-        out.type  = mw::NormalizedType::PitchBend;
-        out.data0 = 0.0f;
-        // Center the 14-bit wheel to a signed [-1, 1] offset.
-        out.value = (static_cast<float>(m.getPitchWheelValue()) - 8192.0f) / 8192.0f;
-        return true;
-    }
-    if (m.isChannelPressure())
-    {
-        out.type  = mw::NormalizedType::ChannelPressure;
-        out.data0 = 0.0f;
-        out.value = static_cast<float>(m.getChannelPressureValue()) / 127.0f;
-        return true;
-    }
-    if (m.isAftertouch())
-    {
-        out.type  = mw::NormalizedType::PolyPressure;
-        out.data0 = static_cast<float>(m.getNoteNumber());
-        out.value = static_cast<float>(m.getAfterTouchValue()) / 127.0f;
-        return true;
-    }
-    if (m.isController())
-    {
-        // The full CC -> mw101.<id> learn map is task 104; the bootstrap forwards the
-        // raw CC number/value so the seam is exercised end to end.
-        out.type  = mw::NormalizedType::ControlChange;
-        out.data0 = static_cast<float>(m.getControllerNumber());
-        out.value = static_cast<float>(m.getControllerValue()) / 127.0f;
-        return true;
-    }
-    return false;
-}
-
-} // namespace
 
 // -----------------------------------------------------------------------------------
 
@@ -90,39 +50,84 @@ MwAudioProcessor::MwAudioProcessor()
 juce::AudioProcessorValueTreeState::ParameterLayout
 MwAudioProcessor::createParameterLayout()
 {
-    // MINIMAL layout: one master-gain param. The full 91-param §3.0 catalogue is
-    // task 020 — OUT OF SCOPE here. The ID is taken VERBATIM from core ParamIDs.h so
-    // the bootstrap does not hand-mint a string.
-    juce::AudioProcessorValueTreeState::ParameterLayout layout;
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ mw::params::ids::kVcaLevel, 1 },
-        "Master Gain",
-        juce::NormalisableRange<float>(0.0f, 1.0f),
-        1.0f));
-    return layout;
+    // The FULL §4 layout: one juce parameter per LIVE kParamDefs entry, built mechanically
+    // from the JUCE-free registry (task 020). Replaces the bootstrap single-gain stub.
+    return buildParameterLayout();
+}
+
+PluginFormat MwAudioProcessor::resolveFormat() const noexcept
+{
+    // Map JUCE's wrapper type to the §8.2 capability matrix format. AudioUnitv3 maps to
+    // AU; AAX is permanently excluded (it never reaches here). Undefined / Unity / the
+    // headless test host fall back to Standalone (the universal floor) [docs/design/09
+    // §8.1; ADR-024 C6].
+    switch (wrapperType)
+    {
+        case wrapperType_VST3:        return PluginFormat::VST3;
+        case wrapperType_AudioUnit:
+        case wrapperType_AudioUnitv3: return PluginFormat::AU;
+        case wrapperType_LV2:         return PluginFormat::LV2;
+        case wrapperType_Standalone:  return PluginFormat::Standalone;
+        case wrapperType_Undefined:
+        case wrapperType_VST:
+        case wrapperType_AAX:
+        case wrapperType_Unity:
+        default:                      return PluginFormat::Standalone;
+    }
+}
+
+void MwAudioProcessor::declareLatencyFromPrepare(double sampleRate)
+{
+    // The single CONSTANT worst-case PDC value, padded across ALL FX-on/off and Quality
+    // tiers, in base-rate samples. Computed + declared ONLY here (prepare), NEVER mutated
+    // from processBlock [ADR-017 L4/L10; docs/design/09 §8.3].
+    reportedLatencySamples_ = latencyReporter_.computeWorstCaseLatency(sampleRate);
+    setLatencySamples(reportedLatencySamples_);
+    ++latencySetCalls_;
 }
 
 // --- The three-call seam ------------------------------------------------------------
 
 void MwAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-    // Off-the-audio-thread setup. prepare() is the engine's ONLY allocation site
-    // (ADR-001 C2). The seam signature is prepare(double, int maxBlock, int maxVoices);
-    // the per-voice 2x-oversampled zone is selected/clamped inside the engine.
-    engine_.prepare(sampleRate, samplesPerBlock, kMaxVoices);
-    juce::ignoreUnused(kOversample); // documented seam intent; engine owns the factor
+    // == THE SOLE ALLOCATION / SIZING SITE ==  Everything below allocates/sizes here so
+    // processBlock stays allocation-free [docs/design/00 §5.5; ADR-001 C2; ADR-011 C9].
 
-    // Pre-size the MIDI translation scratch off the audio thread (stand-in for the
-    // §3.2 NormalizedEventBuffer; ADR-011 C9 — the lock-free buffer is task 104/111).
-    // Capacity from the centralized (PI) constants, not inlined [design 09 §3.2; AGENTS.md].
-    events_.reserve(static_cast<size_t>(samplesPerBlock)
-                        * static_cast<size_t>(mw::cal::host::kEventBufferBlockFactor)
-                    + static_cast<size_t>(mw::cal::host::kEventBufferSlack));
+    // 1. The DSP core: prepare(sr, maxBlock, maxVoices). The per-voice 2x-oversampled
+    //    zone is selected/clamped inside the engine [ADR-023].
+    engine_.prepare(sampleRate, samplesPerBlock, kMaxVoices);
+
+    // 2. The lock-free host-event surface: capacity = kEventBufferBlockFactor*maxBlock +
+    //    kEventBufferSlack (the (PI) factors centralized in Calibration.h) [§3.2].
+    hostEvents_.prepare(samplesPerBlock);
+
+    // 3. The pre-sized core-event scratch the EventTranslator writes into. Sized to the
+    //    same §3.2 capacity so a fully-translated buffer never overflows [ADR-011 C9].
+    events_.assign(static_cast<std::size_t>(eventBufferCapacityFor(samplesPerBlock)),
+                   mw::MidiEvent{});
+
+    // 4. The MIDI front-end de-zipper coefficients (sole sizing point) [docs/design/09 §1.3].
+    midiFrontEnd_.prepare(sampleRate, samplesPerBlock);
+
+    // 5. The full APVTS -> normalized-POD bridge table (string lookups happen here, off
+    //    the audio thread; snapshot() is pure arithmetic) [docs/design/00 §5.4].
+    paramBridge_.prepare(apvts_);
+
+    // 6. Resolve the per-format capability rungs ONCE from the §8.1 matrix + the current
+    //    host transport query; cache the note-expr rung for the block path [§7-§8].
+    resolvedCaps_ = capabilityShim_.resolve(resolveFormat(), /*mpeLite*/ false, getPlayHead());
+    capabilityShim_.publishToUi(resolvedCaps_);
+
+    // 7. Size the constant-PDC padding lines and declare the latency to the host ONCE.
+    latencyReporter_.preparePadding(latencyReporter_.computeWorstCaseLatency(sampleRate),
+                                    getTotalNumOutputChannels());
+    declareLatencyFromPrepare(sampleRate);
 }
 
 void MwAudioProcessor::releaseResources()
 {
     engine_.reset();
+    ++resetCalls_;
 }
 
 bool MwAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -142,85 +147,171 @@ void MwAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
     const int numFrames   = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
 
-    // Clear any output channels the engine will not write (the engine writes ch0 and,
-    // if present, ch1).
+    // Clear any output channels the engine will not write (it writes ch0 and, if present,
+    // ch1). No alloc.
     for (int ch = 2; ch < numChannels; ++ch)
         buffer.clear(ch, 0, numFrames);
 
-    // 1. Drain the JUCE MidiBuffer into the pre-sized mw::MidiEvent scratch, ordered
-    //    by sampleOffset (JUCE delivers it ordered). No allocation on the hot path:
-    //    clear() keeps capacity; push_back stays within the reserved head room.
-    events_.clear();
+    // 1. Per-block, branch-free transport recheck (falls to Free-run when the host stops
+    //    reporting a transport, re-locks when it reappears) — no alloc, no lock [§8.2].
+    const ResolvedCapabilities caps = capabilityShim_.recheckPerBlock(getPlayHead());
+
+    // 2. Drain the JUCE MidiBuffer (+ the resolved note-expression rung) into the
+    //    pre-sized, drop-never-grow lock-free NormalizedEventBuffer. The CcLearnMap is
+    //    read through its single atomic-pointer load. No alloc, no lock [§4/§6.3].
+    hostEvents_.clear();
+    midiFrontEnd_.processMidi(midi, ccLearnMap_, resolvedCaps_.noteExpr, hostEvents_);
+
+    // 3. Capture the LAST Program Change in this block for message-thread preset recall.
+    //    The front-end does NOT forward Program Change to the engine (consumed in plugin/).
+    //    The audio thread only ever writes a POD (an atomic int); it NEVER calls into the
+    //    PresetManager / APVTS [docs/design/09 §3.3; ADR-008 C19].
     for (const auto meta : midi)
     {
-        mw::MidiEvent e{};
-        if (toMidiEvent(meta.getMessage(), meta.samplePosition, e)
-            && events_.size() < events_.capacity())
+        const juce::MidiMessage& m = meta.getMessage();
+        if (m.isProgramChange())
         {
-            events_.push_back(e);
+            lastProgramChange_ = m.getProgramChangeNumber();
+            pendingProgramChange_.store(lastProgramChange_, std::memory_order_relaxed);
         }
     }
 
-    // 2. Decode the host transport into the POD TransportInfo (§5.3). Absent playhead
-    //    (e.g. Standalone) -> sane stopped defaults.
+    // 4. Translate the HostEvent surface -> the JUCE-free core mw::MidiEvent scratch,
+    //    field-for-field (§3.3). ProgramChange + unmapped CCs are skipped at the boundary.
+    //    Writes into the pre-sized scratch; surplus is dropped (drop-never-grow) [ADR-011 C9].
+    const int coreEventCount = translateBlock(hostEvents_.begin(), hostEvents_.end(),
+                                              ccLearnMap_,
+                                              events_.data(),
+                                              static_cast<int>(events_.size()));
+    lastCoreEventCount_ = coreEventCount;
+
+    // 5. Snapshot the APVTS automation atomics ONCE into the normalized POD the engine
+    //    reads (one atomic load per param; pure arithmetic) [docs/design/00 §5.4]. The
+    //    bridge emits the interim NormalizedParamSnapshot; copy it into the core-owned
+    //    mw::ParamSnapshot the BlockContext borrows (same registry-index shape).
+    const NormalizedParamSnapshot bridged = paramBridge_.snapshot();
+    paramSnapshot_.normalizedValues = bridged.normalizedValues;
+    paramSnapshot_.indexValues      = bridged.indexValues;
+
+    // 6. Decode the host transport into the POD TransportInfo (§5.3). Absent playhead
+    //    (e.g. Standalone) -> sane stopped defaults; the recheck above already classified
+    //    the transport rung. No alloc.
     mw::TransportInfo transport{};
-    transport.sampleRate = getSampleRate();
-    transport.bpm        = 120.0;
+    transport.sampleRate  = getSampleRate();
+    transport.bpm         = 120.0;
     transport.ppqPosition = 0.0;
-    transport.isPlaying  = false;
+    transport.isPlaying   = false;
     if (auto* ph = getPlayHead())
     {
         if (auto pos = ph->getPosition())
         {
-            if (auto bpm = pos->getBpm())               transport.bpm        = *bpm;
-            if (auto ppq = pos->getPpqPosition())        transport.ppqPosition = *ppq;
+            if (auto bpm = pos->getBpm())          transport.bpm         = *bpm;
+            if (auto ppq = pos->getPpqPosition())  transport.ppqPosition = *ppq;
             transport.isPlaying = pos->getIsPlaying();
         }
     }
+    juce::ignoreUnused(caps);
 
-    // 3. Build the borrowed AudioBlockView over the host's channel pointers (§5.3) and
-    //    assemble the BlockContext. params is null in the bootstrap — the full
-    //    ParamSnapshot bridge is task 020; the engine never dereferences it.
+    // 7. Build the borrowed AudioBlockView over the host channel pointers (§5.3) and
+    //    assemble the BlockContext. params points at the stable member snapshot.
     float* const* chans = buffer.getArrayOfWritePointers();
     mw::BlockContext ctx{};
-    ctx.audio       = mw::AudioBlockView{ chans, numChannels, numFrames };
-    ctx.params      = nullptr;
-    ctx.transport   = transport;
-    ctx.midi        = mw::MidiEventView{ events_.data(), static_cast<int>(events_.size()) };
+    ctx.audio     = mw::AudioBlockView{ chans, numChannels, numFrames };
+    ctx.params    = &paramSnapshot_;
+    ctx.transport = transport;
+    ctx.midi      = mw::MidiEventView{ events_.data(), coreEventCount };
 
-    // 4. Pure render through the seam. The engine writes its stereo output directly
-    //    into the borrowed host channels (ADR-001 C3).
+    // 8. Pure render through the seam (the engine writes its stereo output directly into
+    //    the borrowed host channels) [ADR-001 C3].
     engine_.process(ctx);
+    ++processCalls_;
+
+    // 9. Align the (constant) configuration up to the reported worst-case latency so the
+    //    PDC number declared in prepare is honored bit-for-bit. Uses the preallocated
+    //    padding lines (no alloc, no lock); latency is NEVER re-declared here [ADR-017 L10].
+    //    Pad amount is 0 in this build (the engine already runs the worst-case zone), but
+    //    the call is on the constant path so a future shorter config aligns without a
+    //    latency-mutation from process.
+    latencyReporter_.padBlock(chans, numChannels, /*padSamples*/ 0, numFrames);
 }
 
 // --- Editor -------------------------------------------------------------------------
 
 juce::AudioProcessorEditor* MwAudioProcessor::createEditor()
 {
-    // Trivial generic editor for the bootstrap; the real UI is the ui stream (108+).
+    // Trivial generic editor; the real UI is task 114. Keeps the Standalone building.
     return new juce::GenericAudioProcessorEditor(*this);
 }
 
-// --- State --------------------------------------------------------------------------
+// --- Programs (the factory preset bank surfaced as host programs) -------------------
+
+int MwAudioProcessor::getNumPrograms()
+{
+    // JUCE requires >= 1. The factory bank is empty at this stage (no embedded files yet,
+    // tasks 131/144-150) — surface a single default program so hosts are happy [§10.2].
+    return juce::jmax(1, presetManager_.getNumPresets());
+}
+
+void MwAudioProcessor::setCurrentProgram(int index)
+{
+    // Message-thread preset recall: apply the bank slot through the SAME migrate+recover
+    // chain as session state, into APVTS + <extras>. Out-of-range / empty bank is a safe
+    // no-op [docs/design/06 §10.1; ADR-021]. The audio thread is untouched here.
+    if (presetManager_.getNumPresets() <= 0)
+    {
+        currentProgram_ = 0;
+        return;
+    }
+    if (index < 0 || index >= presetManager_.getNumPresets())
+        return;
+
+    mw::state::Extras extras{};
+    mw::plugin::state::RecoveryReport report{};
+    presetManager_.loadPreset(index, apvts_, extras, report);
+    currentProgram_ = index;
+}
+
+const juce::String MwAudioProcessor::getProgramName(int index)
+{
+    if (presetManager_.getNumPresets() <= 0)
+        return "Default";
+    return presetManager_.getName(index);
+}
+
+// --- State (canonical serializer round-trip + graded recovery) ----------------------
 
 void MwAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
-    // APVTS round-trip only (the master-gain param). Full preset/state serialization
-    // is the state-presets stream.
-    if (auto state = apvts_.copyState(); state.isValid())
-    {
-        if (auto xml = state.createXml())
-            copyXmlToBinary(*xml, destData);
-    }
+    // Capture the canonical MW101_STATE tree (APVTS <PARAMS> + the <extras> POD) and
+    // serialize it to the host's opaque blob via the ONE canonical serializer (task 023).
+    // The <extras> SPSC audio-thread state is owned elsewhere; capture a default here.
+    const mw::state::Extras extras{};
+    const juce::ValueTree canonical = mw::plugin::state::captureState(
+        apvts_, extras,
+        mw101::version::kCurrentSchemaVersion,
+        juce::String(mw101::version::kPluginVersion),
+        juce::String(mw101::version::kEngineVersion),
+        mw101::version::kCurrentRenderVersion);
+    mw::plugin::state::writeToBlob(canonical, destData);
 }
 
 void MwAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
-    if (auto xml = getXmlFromBinary(data, sizeInBytes))
-    {
-        if (xml->hasTagName(apvts_.state.getType()))
-            apvts_.replaceState(juce::ValueTree::fromXml(*xml));
-    }
+    // Run the host blob through the NEVER-throwing graded recovery ladder (task 024):
+    // it migrates to CURRENT, defaults missing, clamps out-of-range, and ALWAYS returns a
+    // complete valid canonical tree. Then bind the recovered <PARAMS> into APVTS (the
+    // §5.3 message-thread path; same shape PresetManager uses) [ADR-021].
+    mw::plugin::state::RecoveryReport report{};
+    const juce::ValueTree recovered =
+        mw::plugin::state::recoverState(data, sizeInBytes, report);
+
+    const auto params = recovered.getChildWithName(juce::Identifier{ mw::state::kParamsId });
+    if (! params.isValid())
+        return;
+
+    juce::ValueTree apvtsState{ apvts_.state.getType() };
+    apvtsState.copyPropertiesAndChildrenFrom(params, nullptr);
+    apvts_.replaceState(apvtsState);
 }
 
 } // namespace mw::plugin
