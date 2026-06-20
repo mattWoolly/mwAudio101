@@ -143,7 +143,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 13 | 025b | presets_roundtrip ctest — every preset round-trips schema + checksum | qa | S | 025, 119, 040, 144b | todo |
 | 13 | 111 | MwAudioProcessor shell: prepare/process/reset + block-split + setLatencySamples (plugin/PluginProcessor.h/.cpp) | app | M | 001, 006, 007, 118, 020, 119, 099, 104, 101, 102, 112, 105 | todo |
 | 13 | 131 | Factory preset corpus + CI registry/mirror validator | core | M | 001, 006, 025, 119 | todo |
-| 13 | 143 | Legacy-render path + blessed sample-rate set integration test | qa | S | 006, 119, 036, 077, 118 | todo |
+| 13 | 143 | Legacy-render path + blessed sample-rate set integration test | qa | S | 006, 119, 036, 077, 118 | done |
 | 13 | 145 | AcidBassLead category presets (squelchy resonant acid bass/lead) | docs | M | 118, 025, 144 | todo |
 | 13 | 146 | SubBass category presets (independent sub-osc, 303-underpinning) | docs | M | 118, 025, 144 | todo |
 | 13 | 147 | Lead category presets (bright saw/square leads, vibrato) | docs | M | 118, 025, 144 | todo |

@@ -65,6 +65,7 @@
 [prng]
 [provenance]
 [renderver]
+[renderversion_e2e]
 [rt]
 [seqengine]
 [smooth]
