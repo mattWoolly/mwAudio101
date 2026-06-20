@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 116
 title: BackgroundLayer cached static chrome + patch lines + labels
-status: todo
+status: in-review
 depends-on: [006, 106, 114]
 component: ui
 estimated-size: M
