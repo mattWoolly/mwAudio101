@@ -26,6 +26,8 @@
 
 #include "PluginProcessor.h"
 
+#include <cmath>   // std::fabs (telemetry peak-level metering)
+
 #include <juce_audio_utils/juce_audio_utils.h>   // GenericAudioProcessorEditor
 
 #include "../ui/MwAudioEditor.h"      // mw::ui::MwAudioEditor — the editor root (task 114)
@@ -35,6 +37,7 @@
 #include "state/LoadFailure.h"        // recoverState graded recovery ladder (task 024)
 #include "state/Extras.h"             // mw::state::Extras (audio-thread POD payload)
 #include "state/StateTree.h"          // mw::state::kParamsId etc.
+#include "state/SeqPatternCodec.h"    // readSeqPattern: <extras><seq> tree -> Extras POD (111c)
 #include "version/EngineVersion.h"    // schema / plugin / engine / render versions
 
 namespace mw::plugin {
@@ -123,6 +126,12 @@ void MwAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     latencyReporter_.preparePadding(latencyReporter_.computeWorstCaseLatency(sampleRate),
                                     getTotalNumOutputChannels());
     declareLatencyFromPrepare(sampleRate);
+
+    // 8. Attach the audio->GUI telemetry Producer to the pre-allocated SPSC Buffer (the
+    //    Buffer storage is allocated by construction; prepare() just stores the pointer,
+    //    off the audio thread). processBlock is the SINGLE producer thereafter — it only
+    //    push()es a byte copy, never allocates [docs/design/10-ui.md §8.3; ADR-015 C5].
+    telemetryProducer_.prepare(telemetryBuffer_);
 }
 
 void MwAudioProcessor::releaseResources()
@@ -234,6 +243,39 @@ void MwAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
     engine_.process(ctx);
     ++processCalls_;
 
+    // 8b. ADOPT the latest message-thread-published seq pattern: ONE ACQUIRE atomic-
+    //     pointer load + a trivial POD copy. The audio thread NEVER parses a tree,
+    //     allocates, or locks — it only adopts a published POD [docs/design/10-ui.md §9.3;
+    //     docs/design/00 §5.4; ADR-008 C19]. (Held for the seq subsystem + test
+    //     introspection; the live playhead step authority is the control core.)
+    lastAdoptedSeq_ = seqPatternHandoff_.adopt();
+
+    // 8c. PUBLISH one audio->GUI telemetry frame for this block via the 107 SPSC Producer
+    //     — a seqlock byte copy: NO heap alloc, NO lock [docs/design/10-ui.md §8.3, §8.4;
+    //     docs/design/00 §5.4; ADR-015 C5; ADR-001 C3/C4]. snapshot() math is pure
+    //     arithmetic over the just-rendered output (post-VCA peak level per channel) plus
+    //     the monotonic display step. The Snapshot POD is filled on the stack (no alloc)
+    //     and pushed by value.
+    mw::ui::Telemetry::Snapshot frame{};
+    float peakL = 0.0f;
+    float peakR = 0.0f;
+    if (numChannels > 0 && numFrames > 0)
+    {
+        const float* l = buffer.getReadPointer(0);
+        const float* r = buffer.getReadPointer(numChannels > 1 ? 1 : 0);
+        for (int n = 0; n < numFrames; ++n)
+        {
+            const float al = std::fabs(l[n]);
+            const float ar = std::fabs(r[n]);
+            if (al > peakL) peakL = al;
+            if (ar > peakR) peakR = ar;
+        }
+    }
+    frame.vcaLevelL = peakL;
+    frame.vcaLevelR = peakR;
+    frame.seqStep   = ++telemetrySeqStep_;   // monotonic display step (§8.4 indicator)
+    telemetryProducer_.push(frame);           // RT-safe: seqlock byte copy, no alloc/lock.
+
     // 9. Align the (constant) configuration up to the reported worst-case latency so the
     //    PDC number declared in prepare is honored bit-for-bit. Uses the preallocated
     //    padding lines (no alloc, no lock); latency is NEVER re-declared here [ADR-017 L10].
@@ -320,12 +362,14 @@ void MwAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     // Capture the canonical MW101_STATE tree (APVTS <PARAMS> + the <extras> POD) and
     // serialize it to the host's opaque blob via the ONE canonical serializer (task 023).
-    // The <extras> SPSC audio-thread state is owned elsewhere; capture a default here.
+    // The <extras> seq pattern is now OWNED here (task 111c): the message-thread canonical
+    // copy of the edited 100-step pattern persists so the saved session restores the user's
+    // sequence, not an empty default [docs/design/10-ui.md §9.3; docs/design/06 §5.4].
     // The advisory editor size (a message-thread <extras> UI preference, NOT a host
     // parameter) is threaded through so it PERSISTS in the canonical state and round-trips
     // on reload [docs/design/10-ui.md §4.4; ADR-015 C2; ADR-008 §4/§5 C8]. A {0,0} stored
     // size (no editor opened yet) is omitted by captureState.
-    const mw::state::Extras extras{};
+    const mw::state::Extras extras = seqPattern_;
     const juce::Point<int> uiSize = storedEditorSize_;
     const juce::ValueTree canonical = mw::plugin::state::captureState(
         apvts_, extras,
@@ -354,6 +398,15 @@ void MwAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     const mw::plugin::state::UiEditorSize uiSize =
         mw::plugin::state::readUiEditorSize(recovered);
     storedEditorSize_ = { uiSize.width, uiSize.height };
+
+    // Restore the EDITED <extras><seq> 100-step pattern from the recovered tree into the
+    // message-thread canonical copy, and republish it to the audio thread via the RT-safe
+    // handoff so the restored session's audio path adopts the user's sequence (the inverse
+    // of captureState's <seq> write) [docs/design/10-ui.md §9.3; docs/design/06 §5.4;
+    // ADR-008 C19]. recoverState always returns a valid tree, so this never throws; a
+    // missing/garbage <seq> decodes to an empty default pattern [ADR-021 fallback].
+    seqPattern_ = mw::plugin::state::readSeqPattern(recovered);
+    seqPatternHandoff_.publish(seqPattern_);
 
     const auto params = recovered.getChildWithName(juce::Identifier{ mw::state::kParamsId });
     if (! params.isValid())
