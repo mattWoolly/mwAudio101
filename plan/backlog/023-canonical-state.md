@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 023
 title: Canonical state (de)serializer (StateSerializer.h/.cpp)
-status: in-review
+status: done
 depends-on: [016, 017, 007]
 component: core
 estimated-size: M
