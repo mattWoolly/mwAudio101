@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 124
 title: ControllerStrip (glide, bend, mod-wheel routing, transpose)
-status: in-review
+status: done
 depends-on: [020, 111, 006, 109, 117]
 component: ui
 estimated-size: S

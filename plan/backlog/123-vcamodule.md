@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 123
 title: VcaModule (env/gate select, level, env A/D/S/R)
-status: in-review
+status: done
 depends-on: [020, 111, 006, 109, 117]
 component: ui
 estimated-size: S

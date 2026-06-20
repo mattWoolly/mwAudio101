@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 125
 title: TransportModeBar (arp/seq mode, tempo-sync, run/hold, scale + reduce-motion toggles)
-status: in-review
+status: done
 depends-on: [020, 111, 087, 006, 109, 117]
 component: ui
 estimated-size: M

@@ -159,9 +159,9 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 15 | 120 | VcoModule (range, waveform mix, PWM, pitch, sub, noise) | ui | M | 020, 111, 006, 109, 117 | done |
 | 15 | 121 | SourceMixerModule (saw/pulse/sub/noise levels) | ui | S | 020, 111, 006, 109, 117 | done |
 | 15 | 122 | VcfModule (cutoff, resonance, env amount, kbd track, mod) | ui | S | 020, 111, 006, 109, 117 | done |
-| 15 | 123 | VcaModule (env/gate select, level, env A/D/S/R) | ui | S | 020, 111, 006, 109, 117 | todo |
-| 15 | 124 | ControllerStrip (glide, bend, mod-wheel routing, transpose) | ui | S | 020, 111, 006, 109, 117 | todo |
-| 15 | 125 | TransportModeBar (arp/seq mode, tempo-sync, run/hold, scale + reduce-motion toggles) | ui | M | 020, 111, 087, 006, 109, 117 | todo |
+| 15 | 123 | VcaModule (env/gate select, level, env A/D/S/R) | ui | S | 020, 111, 006, 109, 117 | done |
+| 15 | 124 | ControllerStrip (glide, bend, mod-wheel routing, transpose) | ui | S | 020, 111, 006, 109, 117 | done |
+| 15 | 125 | TransportModeBar (arp/seq mode, tempo-sync, run/hold, scale + reduce-motion toggles) | ui | M | 020, 111, 087, 006, 109, 117 | done |
 | 15 | 128 | PresetBrowser thin view over processor PresetManager | ui | M | 119, 020, 111, 006, 106, 109, 114 | todo |
 | 15 | 129 | StatusBanner (non-modal load-failure + disclaimer surface) | ui | S | 111, 119, 006, 106, 114 | todo |
 | 15 | 130 | OpenGL opt-in escape hatch (OFF by default) | ui | S | 020, 006, 114 | todo |
