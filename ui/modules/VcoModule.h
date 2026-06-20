@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Matt Woolly
 //
-// ui/modules/VcoModule.h — the VCO panel module (VCO + sub + noise source)
+// ui/modules/VcoModule.h — the VCO panel module (VCO + sub oscillator)
 // [docs/design/10-ui.md §5.3 table row "VcoModule"].
 //
 // Owns and binds the oscillator-section controls, in design order:
@@ -17,10 +17,12 @@
 //   • PWM Depth — a RotarySlider bound to ids::kVcoPwmDepth.
 //   • Sub Mode  — a ChoiceSelector bound via APVTS ComboBoxAttachment to ids::kSubMode
 //                 (all three entries are hardware-canonical — no extension fence).
-//   • Noise     — a RotarySlider bound to ids::kNoiseLevel.
 //
-// Source-mixer LEVELS (saw/pulse/sub) are SourceMixerModule's responsibility and are
-// OUT OF SCOPE here [120 Out-of-scope; §5.3].
+// Source-mixer LEVELS (saw/pulse/sub) AND the NOISE LEVEL are SourceMixerModule's
+// responsibility and are OUT OF SCOPE here. On the SH-101 noise is a MIXER source level
+// (alongside saw/pulse/sub), so SourceMixerModule (121) is the SOLE binder of
+// ids::kNoiseLevel; VcoModule must not bind it a second time [120b Objective/Scope;
+// docs/design/10-ui.md §5.3; 120 Out-of-scope].
 //
 // Every control binds through a JUCE APVTS attachment using a schema-owned ParamId
 // constant from core/params/ParamIDs.h — the module NEVER hard-codes a raw "mw101.*"
@@ -62,7 +64,7 @@ public:
     // [§6.1; ADR-015 C10].
     void setTokens(const DesignTokens& tokens);
 
-    // Lay out the seven controls in a single design-unit row beneath the title strip.
+    // Lay out the six controls in a single design-unit row beneath the title strip.
     void layoutDesignUnits(juce::Rectangle<float> designBounds) override;
 
     // juce::Component override: forward the integer bounds into the design-unit layout.
@@ -75,7 +77,6 @@ public:
     RotarySlider&   pulseWidthSlider() noexcept { return pw_; }
     RotarySlider&   pwmDepthSlider()   noexcept { return pwmDepth_; }
     ChoiceSelector& subModeSelector()  noexcept { return subMode_; }
-    RotarySlider&   noiseSlider()      noexcept { return noise_; }
 
 private:
     // The controls (owned, in design order).
@@ -85,7 +86,6 @@ private:
     RotarySlider   pw_;
     RotarySlider   pwmDepth_;
     ChoiceSelector subMode_;
-    RotarySlider   noise_;
 
     // Caption labels (one per control); positioned in the bottom of each cell.
     juce::Label    rangeLabel_;
@@ -94,7 +94,6 @@ private:
     juce::Label    pwLabel_;
     juce::Label    pwmDepthLabel_;
     juce::Label    subModeLabel_;
-    juce::Label    noiseLabel_;
 
     // The APVTS attachments — the SOLE write path for every control [§8.1; ADR-015 C3].
     using SliderAttachment   = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -106,7 +105,6 @@ private:
     std::unique_ptr<SliderAttachment>   pwAttach_;
     std::unique_ptr<SliderAttachment>   pwmDepthAttach_;
     std::unique_ptr<ComboBoxAttachment> subModeAttach_;
-    std::unique_ptr<SliderAttachment>   noiseAttach_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VcoModule)
 };

@@ -155,7 +155,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 14 | 117 | ModuleBase + ModulatorModule (LFO/S&H + mod depth) with APVTS attachments | ui | M | 020, 111, 006, 106, 108, 109 | done |
 | 14 | 151 | Bank coverage manifest + full-bank CI validation (~64 presets) | qa | S | 118, 025, 145, 146, 147, 148, 149, 150 | todo |
 | 15 | 115 | Coalescing telemetry Timer + reduce-motion toggle in editor | ui | S | 020, 006, 107, 114 | todo |
-| 15 | 116 | BackgroundLayer cached static chrome + patch lines + labels | ui | M | 006, 106, 114 | todo |
+| 15 | 116 | BackgroundLayer cached static chrome + patch lines + labels | ui | M | 006, 106, 114 | done |
 | 15 | 120 | VcoModule (range, waveform mix, PWM, pitch, sub, noise) | ui | M | 020, 111, 006, 109, 117 | done |
 | 15 | 121 | SourceMixerModule (saw/pulse/sub/noise levels) | ui | S | 020, 111, 006, 109, 117 | done |
 | 15 | 122 | VcfModule (cutoff, resonance, env amount, kbd track, mod) | ui | S | 020, 111, 006, 109, 117 | done |
@@ -163,7 +163,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 15 | 124 | ControllerStrip (glide, bend, mod-wheel routing, transpose) | ui | S | 020, 111, 006, 109, 117 | done |
 | 15 | 125 | TransportModeBar (arp/seq mode, tempo-sync, run/hold, scale + reduce-motion toggles) | ui | M | 020, 111, 087, 006, 109, 117 | done |
 | 15 | 128 | PresetBrowser thin view over processor PresetManager | ui | M | 119, 020, 111, 006, 106, 109, 114 | done |
-| 15 | 129 | StatusBanner (non-modal load-failure + disclaimer surface) | ui | S | 111, 119, 006, 106, 114 | todo |
+| 15 | 129 | StatusBanner (non-modal load-failure + disclaimer surface) | ui | S | 111, 119, 006, 106, 114 | done |
 | 15 | 130 | OpenGL opt-in escape hatch (OFF by default) | ui | S | 020, 006, 114 | todo |
 | 15 | 136 | Wire MwAudioProcessor: engine + frontend + capability shim + latency reporter | app | M | 111, 104, 113, 020, 118 | done |
 | 15 | 137 | Per-platform format resolution + configure-time validator gate (Formats.cmake) | infra | M | 001, 113 | todo |

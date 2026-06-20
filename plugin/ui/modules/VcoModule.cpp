@@ -40,7 +40,7 @@ const mw::params::ParamDef* findDef(const char* id) noexcept
     return nullptr;
 }
 
-// Configure a tune/PW/depth/noise rotary as a thin numeric control bound for display;
+// Configure a tune/PW/depth rotary as a thin numeric control bound for display;
 // the caption is owned by the module's Label (set in the ctor).
 void initRotary(RotarySlider& s)
 {
@@ -83,7 +83,6 @@ VcoModule::VcoModule(juce::AudioProcessorValueTreeState& state)
     initRotary(fine_);
     initRotary(pw_);
     initRotary(pwmDepth_);
-    initRotary(noise_);
 
     addAndMakeVisible(range_);
     addAndMakeVisible(tune_);
@@ -91,7 +90,6 @@ VcoModule::VcoModule(juce::AudioProcessorValueTreeState& state)
     addAndMakeVisible(pw_);
     addAndMakeVisible(pwmDepth_);
     addAndMakeVisible(subMode_);
-    addAndMakeVisible(noise_);
 
     initCaption(rangeLabel_,    "Range", *this);
     initCaption(tuneLabel_,     "Tune",  *this);
@@ -99,7 +97,6 @@ VcoModule::VcoModule(juce::AudioProcessorValueTreeState& state)
     initCaption(pwLabel_,       "PW",    *this);
     initCaption(pwmDepthLabel_, "PWM",   *this);
     initCaption(subModeLabel_,  "Sub",   *this);
-    initCaption(noiseLabel_,    "Noise", *this);
 
     // --- the choice lists + software-extension fence (schema-driven) --------------
     // The VCO range list's trailing 32' / 64' registers are fenced as sound_ext via the
@@ -117,7 +114,6 @@ VcoModule::VcoModule(juce::AudioProcessorValueTreeState& state)
     pwAttach_       = std::make_unique<SliderAttachment>(apvts, ids::kVcoPw,         pw_);
     pwmDepthAttach_ = std::make_unique<SliderAttachment>(apvts, ids::kVcoPwmDepth,   pwmDepth_);
     subModeAttach_  = std::make_unique<ComboBoxAttachment>(apvts, ids::kSubMode,     subMode_);
-    noiseAttach_    = std::make_unique<SliderAttachment>(apvts, ids::kNoiseLevel,    noise_);
 
     // Wire each rotary's value read-out to its bound parameter's display string so the
     // text is parameter-derived, never hard-coded [§6.3; ADR-008 C4].
@@ -125,7 +121,6 @@ VcoModule::VcoModule(juce::AudioProcessorValueTreeState& state)
     if (auto* p = apvts.getParameter(ids::kVcoFine))     fine_.attachParameterForDisplay(*p);
     if (auto* p = apvts.getParameter(ids::kVcoPw))       pw_.attachParameterForDisplay(*p);
     if (auto* p = apvts.getParameter(ids::kVcoPwmDepth)) pwmDepth_.attachParameterForDisplay(*p);
-    if (auto* p = apvts.getParameter(ids::kNoiseLevel))  noise_.attachParameterForDisplay(*p);
 }
 
 // Out-of-line dtor: the unique_ptr<…Attachment> members are complete here, and the
@@ -176,7 +171,6 @@ void VcoModule::layoutDesignUnits(juce::Rectangle<float> designBounds)
     placeCell(3, pw_,       pwLabel_);
     placeCell(4, pwmDepth_, pwmDepthLabel_);
     placeCell(5, subMode_,  subModeLabel_);
-    placeCell(6, noise_,    noiseLabel_);
 }
 
 void VcoModule::resized()

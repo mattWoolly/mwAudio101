@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 129
 title: StatusBanner (non-modal load-failure + disclaimer surface)
-status: in-review
+status: done
 depends-on: [111, 119, 006, 106, 114]
 component: ui
 estimated-size: S

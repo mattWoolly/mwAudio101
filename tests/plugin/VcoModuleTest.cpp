@@ -125,9 +125,10 @@ TEST_CASE("ui_vco every control binds to a live schema parameter id", "[ui_vco]"
     HostProcessor host;
     VcoModule vco(host.apvts);
 
-    // The full §5.3 VCO row: range, tune, fine, PW, PWM depth, sub mode, noise.
+    // The §5.3 VCO row: range, tune, fine, PW, PWM depth, sub mode. Noise is a MIXER
+    // source level owned by SourceMixerModule (121), so VcoModule does NOT bind it [120b].
     for (const char* id : { ids::kVcoRange, ids::kVcoTune, ids::kVcoFine, ids::kVcoPw,
-                            ids::kVcoPwmDepth, ids::kSubMode, ids::kNoiseLevel })
+                            ids::kVcoPwmDepth, ids::kSubMode })
         REQUIRE(host.apvts.getParameter(id) != nullptr);
 }
 
@@ -147,14 +148,12 @@ TEST_CASE("ui_vco each control writes its bound APVTS parameter on a user move",
     auto* pw       = host.apvts.getParameter(ids::kVcoPw);
     auto* pwmDepth = host.apvts.getParameter(ids::kVcoPwmDepth);
     auto* subMode  = host.apvts.getParameter(ids::kSubMode);
-    auto* noise    = host.apvts.getParameter(ids::kNoiseLevel);
     REQUIRE(range    != nullptr);
     REQUIRE(tune     != nullptr);
     REQUIRE(fine     != nullptr);
     REQUIRE(pw       != nullptr);
     REQUIRE(pwmDepth != nullptr);
     REQUIRE(subMode  != nullptr);
-    REQUIRE(noise    != nullptr);
 
     // Continuous controls: drive each slider to its range maximum and assert the bound
     // parameter reads (normalized) 1.0. The slider's value is in modeled units; the
@@ -175,9 +174,6 @@ TEST_CASE("ui_vco each control writes its bound APVTS parameter on a user move",
     vco.pwmDepthSlider().setValue(1.0, juce::sendNotificationSync);
     REQUIRE(pwmDepth->getValue() == Catch::Approx(1.0f).margin(1.0e-4));
 
-    vco.noiseSlider().setValue(1.0, juce::sendNotificationSync);
-    REQUIRE(noise->getValue() == Catch::Approx(1.0f).margin(1.0e-4));
-
     // Choice control (range): selecting item id N (1-based) selects choice index N-1;
     // assert the bound choice parameter lands on that index. Pick index 2 ("4'").
     vco.rangeSelector().setSelectedId(3, juce::sendNotificationSync);   // id 3 == index 2
@@ -190,6 +186,47 @@ TEST_CASE("ui_vco each control writes its bound APVTS parameter on a user move",
     auto* subChoice = dynamic_cast<juce::AudioParameterChoice*>(subMode);
     REQUIRE(subChoice != nullptr);
     REQUIRE(subChoice->getIndex() == 1);
+}
+
+// ---------------------------------------------------------------------------
+// [A] VcoModule does NOT bind mw101.noise.level. On the SH-101 noise is a MIXER source
+// level owned solely by SourceMixerModule (121); binding it here too would show two
+// redundant noise sliders in the assembled UI (the 120 QA MEDIUM). VcoModule exposes no
+// noise control, and driving the noise parameter from the host moves NONE of VcoModule's
+// six controls — proving no SliderAttachment to kNoiseLevel is registered [120b].
+// ---------------------------------------------------------------------------
+TEST_CASE("ui_vco does not bind the noise level (SourceMixer is the sole binder)", "[ui_vco]")
+{
+    const juce::ScopedJuceInitialiser_GUI juceInit;
+
+    HostProcessor host;
+    VcoModule vco(host.apvts);
+
+    auto* noise = host.apvts.getParameter(ids::kNoiseLevel);
+    REQUIRE(noise != nullptr);   // the schema parameter exists (SourceMixer owns it)
+
+    // Snapshot the six VCO controls' values, then drive the noise parameter across its
+    // full range from the host and flush. If VcoModule had a SliderAttachment to
+    // kNoiseLevel its control would follow; with no such binding, every VCO control is
+    // unchanged.
+    const double range0    = vco.rangeSelector().getSelectedId();
+    const double tune0     = vco.tuneSlider().getValue();
+    const double fine0     = vco.fineSlider().getValue();
+    const double pw0       = vco.pulseWidthSlider().getValue();
+    const double pwmDepth0 = vco.pwmDepthSlider().getValue();
+    const double subMode0  = vco.subModeSelector().getSelectedId();
+
+    noise->setValueNotifyingHost(1.0f);
+    flushMessageQueue();
+    noise->setValueNotifyingHost(0.0f);
+    flushMessageQueue();
+
+    REQUIRE(vco.rangeSelector().getSelectedId() == range0);
+    REQUIRE(vco.tuneSlider().getValue()         == Catch::Approx(tune0));
+    REQUIRE(vco.fineSlider().getValue()         == Catch::Approx(fine0));
+    REQUIRE(vco.pulseWidthSlider().getValue()   == Catch::Approx(pw0));
+    REQUIRE(vco.pwmDepthSlider().getValue()     == Catch::Approx(pwmDepth0));
+    REQUIRE(vco.subModeSelector().getSelectedId() == subMode0);
 }
 
 // ---------------------------------------------------------------------------
@@ -322,7 +359,6 @@ TEST_CASE("ui_vco layoutDesignUnits keeps children inside the design rectangle a
     auto& pw       = vco.pulseWidthSlider();
     auto& pwmDepth = vco.pwmDepthSlider();
     auto& subMode  = vco.subModeSelector();
-    auto& noise    = vco.noiseSlider();
 
     // Lay out into a design rectangle. Children must each receive non-empty bounds that
     // sit WITHIN that rectangle (no escape, no pixel literals leaking out).
@@ -334,21 +370,20 @@ TEST_CASE("ui_vco layoutDesignUnits keeps children inside the design rectangle a
                      static_cast<juce::Component*>(&fine),
                      static_cast<juce::Component*>(&pw),
                      static_cast<juce::Component*>(&pwmDepth),
-                     static_cast<juce::Component*>(&subMode),
-                     static_cast<juce::Component*>(&noise) })
+                     static_cast<juce::Component*>(&subMode) })
     {
         REQUIRE_FALSE(c->getBounds().isEmpty());
         REQUIRE(design.contains(c->getBounds()));
     }
 
     // Controls are laid left-to-right in design order: range, tune, fine, pw, pwmDepth,
-    // subMode, noise. Their x-origins are strictly increasing (a single proportional row).
+    // subMode. Their x-origins are strictly increasing (a single proportional row, with
+    // the freed Noise slot reclaimed so there is NO orphan gap) [120b].
     REQUIRE(range.getX()    < tune.getX());
     REQUIRE(tune.getX()     < fine.getX());
     REQUIRE(fine.getX()     < pw.getX());
     REQUIRE(pw.getX()       < pwmDepth.getX());
     REQUIRE(pwmDepth.getX() < subMode.getX());
-    REQUIRE(subMode.getX()  < noise.getX());
 
     // Design-unit proportionality: doubling the design rectangle doubles a control's
     // width (within rounding). This proves the layout is fractions of the supplied
