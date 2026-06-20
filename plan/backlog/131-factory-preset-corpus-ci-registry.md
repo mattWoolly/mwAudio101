@@ -16,7 +16,18 @@ tag: factorypresets
 
 ## Objective
 
-Author the ~64 factory .mw101preset files organized by §6.5 category and the CI validator that asserts every preset passes registry/category/sound_ext/no-accent/attribution validation and that presets/ mirrors 1:1 into BinaryData.
+> **RE-SCOPED (2026-06-19).** The ~64 factory presets are already AUTHORED by the per-category
+> tasks (144 INIT + 145 AcidBassLead + 146 SubBass + 147 Lead + 148 PWMStrings + 149 BlipsFX +
+> 150 SeqArpRiff = 64 files, all merged + QA'd). Do NOT re-author them. The full-bank validation
+> (every preset validates clean across all categories) is owned by task 151 (bank coverage
+> manifest). This task is therefore re-scoped to the RESIDUAL: the **presets/ ↔ BinaryData 1:1
+> mirror + CI registry** — the build-time embedding of presets/ into JUCE BinaryData and the
+> guard that fails when a preset file is added/removed without a matching BinaryData entry (so
+> the shipped bank can never silently diverge from presets/). Coordinate with 113's juce_add_plugin
+> (the BinaryData target) and 144b (the flat-POD bake), avoiding a second source of truth.
+
+Originally: author the ~64 presets + the CI validator. Authoring is DONE (144-150); validation is
+151. Keep only the 1:1 presets/↔BinaryData mirror/registry here.
 
 ## Context
 
@@ -29,24 +40,27 @@ Author the ~64 factory .mw101preset files organized by §6.5 category and the CI
 
 ## Scope
 
-- presets/<Category>/*.mw101preset across the six §6.5 categories (~64 total), each declaring one category and a complete params block (§6.5; §10.3)
-- SeqArpRiff presets capture a stored <seq> note/rest/tie/gate pattern (no accent); FX engaged only where research prescribes (PWMStrings); a 'hardware-accurate' preset sets tune.a4=442 (§10.3)
-- CI validator (tools/ or test) running loadPresetJson validation over every file (params-11) and asserting presets/ is mirrored 1:1 into the BinaryData manifest (§6.4; §10.2)
-- Validator greps for forbidden 'TB-303 filter' descriptor / 'as used on track X' attribution and rejects any per-step accent (§6.4)
-- Tests: every shipped preset validates clean; the mirror check fails when a file is added without a BinaryData entry
+- presets/ ↔ BinaryData 1:1 mirror: ensure the build embeds every presets/<Category>/*.mw101preset
+  into the JUCE BinaryData target (the one consumed by 113's juce_add_plugin / the 144b bake), and
+  add a registry/manifest the build/test can diff against.
+- A `factorypresets`-tagged check that the embedded BinaryData set EXACTLY matches the on-disk
+  presets/ tree (every file ↔ a BinaryData entry, no orphans either way), failing loudly when a
+  preset is added/removed without updating the embedding.
+- A `hardware-accurate` preset that sets tune.a4=442 exists somewhere in the bank (verify it is
+  present; author it as part of an existing category if missing) (§10.3).
 
 ## Out of scope
 
-- the loader/validator implementation itself (params-11)
-- the bank runtime (params-13)
-- DSP voicing accuracy of the patches (subsystem docs)
+- Re-authoring the 64 category presets (144-150, DONE) and the full per-file content validation
+  (151 owns the full-bank manifest + per-category non-vacuity).
+- The loader/validator implementation (025); the flat-POD bake mechanism itself (144b); the bank
+  runtime semantics (119).
 
 ## Acceptance criteria
 
-- [ ] Every .mw101preset validates against the registry (all IDs present + in range, valid choice index), declares one §6.5 category, sets sound_ext iff a software-only feature is used, carries no accent, contains no 'TB-303 filter' / 'as used on track X' text [§6.4; §6.5]
-- [ ] SeqArpRiff presets carry a stored <seq> note/rest/tie/gate pattern; the hardware-accurate preset uses tune.a4=442 [§10.3]
-- [ ] CI mirrors presets/ 1:1 into BinaryData and fails on a missing mirror entry [§6.4; §10.2]
-- [ ] Test names begin with factorypresets and assert per-file validation + the 1:1 mirror [§6.4]
+- [ ] The build embeds presets/ into BinaryData and a `factorypresets` check asserts the embedded set ↔ on-disk presets/ is EXACTLY 1:1 (no missing/orphan entry), failing on a divergence [§6.4; §10.2]
+- [ ] A bank preset uses tune.a4=442 ('hardware-accurate' 442Hz reference) per §10.3 [§10.3]
+- [ ] Test names begin with factorypresets and assert the 1:1 mirror [§6.4]
 
 ## Verification commands
 
