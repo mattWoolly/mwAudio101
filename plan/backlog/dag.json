@@ -6712,5 +6712,28 @@
     "scope": [],
     "outOfScope": [],
     "acceptance": []
+  },
+  {
+    "id": "023b",
+    "wave": 13,
+    "dependsOn": [
+      "023",
+      "100",
+      "017"
+    ],
+    "title": "Persist CC-learn bindings in plugin state",
+    "component": "app",
+    "stream": "plugin",
+    "size": "S",
+    "tag": "serializer",
+    "slug": "cclearn-state-persistence",
+    "designRefs": [
+      "docs/design/06-parameters-state-presets.md \u00a75.4",
+      "plan/decisions/012-midi-mpe-tuning-map.md C16"
+    ],
+    "objective": "CC-learn bindings survive save/reload via StateSerializer extras round-trip.",
+    "scope": [],
+    "outOfScope": [],
+    "acceptance": []
   }
 ]

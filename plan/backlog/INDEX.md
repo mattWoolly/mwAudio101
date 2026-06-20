@@ -190,6 +190,8 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 
 | 13 | 075b | Wire PolyAllocator into VoiceManager/Engine POLY path | core | S | 075, 074, 118, 069 | done |
 
+| 13 | 023b | Persist CC-learn bindings in plugin state | app | S | 023, 100, 017 | todo |
+
 ## Notes (standing rationale ledger — why the DAG is shaped this way)
 
 - **Waves 0–3 = infra bootstrap.** `001` (top-level CMake) is the universal root; presets/CPM/
