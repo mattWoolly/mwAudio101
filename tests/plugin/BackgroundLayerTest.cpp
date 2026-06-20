@@ -3,8 +3,8 @@
 //
 // tests/plugin/BackgroundLayerTest.cpp — JUCE-linked acceptance tests for the cached
 // static-chrome layer ui/BackgroundLayer (task 116). Test-case display names begin
-// with the task tag `ui_bg` so `ctest -R ui_bg` selects exactly these cases
-// (silent-pass rule).
+// with the task tag `ui_background` so `ctest -R ui_background` selects exactly these
+// cases (silent-pass rule).
 //
 // The GUI is NOT pixel-identical across platforms, so these tests assert BEHAVIOUR
 // (cache lifecycle, regenerate-only-on-resize) and RENDERED-COLOUR PRESENCE/CHANGE
@@ -85,7 +85,7 @@ constexpr int kH = 320;  // design width -> a 0.5 scale transform)
 
 } // namespace
 
-TEST_CASE("ui_bg regenerate caches a non-empty image with ink at a known size", "[ui_bg]")
+TEST_CASE("ui_background regenerate caches a non-empty image with ink at a known size", "[ui_background]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -102,7 +102,7 @@ TEST_CASE("ui_bg regenerate caches a non-empty image with ink at a known size", 
     REQUIRE(imageHasInk(layer.cachedImage()));      // chrome actually drawn
 }
 
-TEST_CASE("ui_bg paint blits the cache without re-rasterizing (no per-frame path work)", "[ui_bg]")
+TEST_CASE("ui_background paint blits the cache without re-rasterizing (no per-frame path work)", "[ui_background]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -135,7 +135,7 @@ TEST_CASE("ui_bg paint blits the cache without re-rasterizing (no per-frame path
     REQUIRE(imageHasInk(target));
 }
 
-TEST_CASE("ui_bg regeneration is gated on resize, only regenerate bumps the cache", "[ui_bg]")
+TEST_CASE("ui_background regeneration is gated on resize, only regenerate bumps the cache", "[ui_background]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -161,7 +161,7 @@ TEST_CASE("ui_bg regeneration is gated on resize, only regenerate bumps the cach
     REQUIRE(layer.cachedImage().getHeight() == kH * 2);
 }
 
-TEST_CASE("ui_bg chrome colours are read from the DesignTokens table", "[ui_bg]")
+TEST_CASE("ui_background chrome colours are read from the DesignTokens table", "[ui_background]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
@@ -185,7 +185,7 @@ TEST_CASE("ui_bg chrome colours are read from the DesignTokens table", "[ui_bg]"
     REQUIRE(imageHash(layer.cachedImage()) != defHash);
 }
 
-TEST_CASE("ui_bg empty pixel bounds clears the cache and paint is a safe no-op", "[ui_bg]")
+TEST_CASE("ui_background empty pixel bounds clears the cache and paint is a safe no-op", "[ui_background]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
