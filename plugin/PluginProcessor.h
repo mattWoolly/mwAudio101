@@ -71,6 +71,10 @@
 #include "latency/LatencyReporter.h" // constant PDC reporter (105; ADR-017 L10)
 #include "preset/PresetManager.h"    // factory preset bank + ProgramChange recall (119)
 
+#include "ui/Telemetry.h"            // mwcore (JUCE-free): audio->GUI SPSC telemetry (107)
+#include "state/Extras.h"            // mwcore (JUCE-free): <extras> SeqStep[100] pattern POD (017)
+#include "state/SeqPatternHandoff.h" // message->audio RT-safe seq-pattern double-buffer (111c)
+
 namespace mw::plugin {
 
 // Inherits juce::AsyncUpdater so a MIDI Program Change captured on the AUDIO thread
@@ -139,6 +143,36 @@ public:
     [[nodiscard]] juce::Point<int> getStoredEditorSize() const noexcept { return storedEditorSize_; }
     void setStoredEditorSize(juce::Point<int> sizePx) noexcept { storedEditorSize_ = sizePx; }
 
+    // --- Audio -> GUI telemetry (the §8.3/§8.4 one-directional RT-safe read path) ---
+    // processBlock PUBLISHES one Telemetry::Snapshot per block via the 107 SPSC Producer
+    // (RT-safe: a seqlock byte copy, no heap alloc, no lock); the editor's Timer DRAINS
+    // it through a Consumer view. This accessor hands the editor a freshly-prepared
+    // Consumer attached to the processor-owned Buffer; the editor calls pull() on its
+    // Timer to coalesce to the most-recent frame [docs/design/10-ui.md §8.3/§8.4; ADR-015
+    // C5; docs/design/00 §5.4]. Message-thread only (constructs/prepares a Consumer);
+    // the audio thread is the SINGLE producer and never touches this accessor.
+    [[nodiscard]] mw::ui::Telemetry::Consumer telemetryConsumer() noexcept
+    {
+        mw::ui::Telemetry::Consumer c{};
+        c.prepare(telemetryBuffer_);
+        return c;
+    }
+
+    // --- <extras> seq-pattern editing (message thread) -> audio-thread handoff ------
+    // The editor reads the current 100-step pattern via seqPattern(), edits it, and
+    // writes it back via setSeqPattern(). setSeqPattern publishes the edited POD to the
+    // audio thread through an RT-safe SPSC double-buffer swap: the audio thread only
+    // ADOPTS the published POD each block (one ACQUIRE pointer load + a byte copy) — it
+    // never parses a tree, allocates, or locks [docs/design/10-ui.md §9.3; docs/design/00
+    // §5.4; ADR-008 C19; ADR-021 L7]. The same pattern persists through capture/
+    // recoverState's <extras><seq> round-trip. Message-thread only.
+    [[nodiscard]] mw::state::Extras seqPattern() const noexcept { return seqPattern_; }
+    void setSeqPattern(const mw::state::Extras& pattern) noexcept
+    {
+        seqPattern_ = pattern;                 // message-thread canonical copy (for read + persist)
+        seqPatternHandoff_.publish(pattern);   // RT-safe publish to the audio thread
+    }
+
     // --- Test introspection (NO audio-thread mutation; for tests/plugin only) -----
     [[nodiscard]] const mw::Engine& engineForTest() const noexcept { return engine_; }
     [[nodiscard]] int  processCallCountForTest() const noexcept { return processCalls_; }
@@ -159,6 +193,11 @@ public:
     // consumer (-1 if none yet). Distinct from lastProgramChangeForTest(), which records
     // the raw audio-thread capture (including out-of-range values that the consumer drops).
     [[nodiscard]] int  lastRecalledProgramForTest() const noexcept { return lastRecalledProgram_; }
+    // The seq-pattern POD the audio thread most recently ADOPTED in processBlock (a copy
+    // of what adopt() returned). Lets a test prove the message-thread edit crossed the
+    // RT-safe handoff and was observed on the audio thread. Plain member; written on the
+    // audio thread, read off-thread in tests (no audio-thread mutation from the read).
+    [[nodiscard]] mw::state::Extras adoptedSeqPatternForTest() const noexcept { return lastAdoptedSeq_; }
     // Install a non-empty preset bank for the full-assembly recall test (message thread
     // only; no audio-thread effect). The default-constructed bank is empty (no embedded
     // BinaryData yet, tasks 131/144-150), so this is the test seam that lets a ProgramChange
@@ -228,6 +267,28 @@ private:
     // Default {0,0} means "none stored yet" -> the editor falls back to its default
     // scale [docs/design/10-ui.md §4.4; ADR-015 C2].
     juce::Point<int> storedEditorSize_{ 0, 0 };
+
+    // --- Audio -> GUI telemetry (107) ----------------------------------------------
+    // The pre-allocated, fixed-capacity, lock-free SPSC ring (the shared state) — owned
+    // here, constructed off the audio thread. processBlock is the SINGLE producer; the
+    // editor's Timer receives a Consumer view via telemetryConsumer(). The Producer is
+    // attached to the Buffer in prepareToPlay (off the audio thread) [§8.3; ADR-015 C5].
+    mw::ui::Telemetry::Buffer   telemetryBuffer_{};
+    mw::ui::Telemetry::Producer telemetryProducer_{};
+    // Monotonic display step the producer carries in Snapshot.seqStep. Advanced once per
+    // published block on the audio thread (a plain counter; display-only — the canonical
+    // step authority is the control core, surfaced here for the §8.4 indicator) [§8.4].
+    std::uint64_t telemetrySeqStep_ = 0;
+
+    // --- <extras> seq-pattern handoff (111c) ---------------------------------------
+    // The message-thread canonical copy of the editable 100-step pattern (read by the
+    // editor, written into the canonical <extras><seq> by getStateInformation). The
+    // RT-safe SPSC double-buffer hands an edited pattern to the audio thread, which only
+    // ADOPTS the published POD each block [docs/design/10-ui.md §9.3; ADR-008 C19/C20].
+    mw::state::Extras                       seqPattern_{};
+    mw::plugin::state::SeqPatternHandoff    seqPatternHandoff_{};
+    // The POD the audio thread last adopted (written on the audio thread; test-only read).
+    mw::state::Extras                       lastAdoptedSeq_{};
 
     // --- Test counters (audio-thread writes are plain; read off-thread in tests) ---
     int processCalls_       = 0;
