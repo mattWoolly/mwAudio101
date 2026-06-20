@@ -288,13 +288,19 @@ void MwAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     // Capture the canonical MW101_STATE tree (APVTS <PARAMS> + the <extras> POD) and
     // serialize it to the host's opaque blob via the ONE canonical serializer (task 023).
     // The <extras> SPSC audio-thread state is owned elsewhere; capture a default here.
+    // The advisory editor size (a message-thread <extras> UI preference, NOT a host
+    // parameter) is threaded through so it PERSISTS in the canonical state and round-trips
+    // on reload [docs/design/10-ui.md §4.4; ADR-015 C2; ADR-008 §4/§5 C8]. A {0,0} stored
+    // size (no editor opened yet) is omitted by captureState.
     const mw::state::Extras extras{};
+    const juce::Point<int> uiSize = storedEditorSize_;
     const juce::ValueTree canonical = mw::plugin::state::captureState(
         apvts_, extras,
         mw101::version::kCurrentSchemaVersion,
         juce::String(mw101::version::kPluginVersion),
         juce::String(mw101::version::kEngineVersion),
-        mw101::version::kCurrentRenderVersion);
+        mw101::version::kCurrentRenderVersion,
+        mw::plugin::state::UiEditorSize{ uiSize.x, uiSize.y });
     mw::plugin::state::writeToBlob(canonical, destData);
 }
 
@@ -307,6 +313,14 @@ void MwAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     mw::plugin::state::RecoveryReport report{};
     const juce::ValueTree recovered =
         mw::plugin::state::recoverState(data, sizeInBytes, report);
+
+    // Restore the advisory editor size from the recovered <extras> UI node so a freshly
+    // created editor opens at the persisted size; absent/zero/garbage -> {0,0}, which the
+    // editor reads as "no stored size" and falls back to the default design scale
+    // [docs/design/10-ui.md §4.4; ADR-015 C2; ADR-021 fallback]. Message-thread only.
+    const mw::plugin::state::UiEditorSize uiSize =
+        mw::plugin::state::readUiEditorSize(recovered);
+    storedEditorSize_ = { uiSize.width, uiSize.height };
 
     const auto params = recovered.getChildWithName(juce::Identifier{ mw::state::kParamsId });
     if (! params.isValid())

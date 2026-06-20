@@ -43,16 +43,32 @@ inline constexpr const char* kSeqStepAttrGate  = "gate";       // bool
 inline constexpr const char* kSeqStepAttrTie   = "tie";        // bool
 inline constexpr const char* kSeqStepAttrRest  = "rest";       // bool
 
+// The advisory UI editor size (pixels) persisted in the <extras> node (kExtrasUiWidth /
+// kExtrasUiHeight). The UI size is a message-thread <extras> PREFERENCE, NOT an
+// audio-thread POD field — so it is threaded into captureState as a plain parameter
+// rather than carried on the trivially-copyable mw::state::Extras SPSC payload
+// [docs/design/06 §5.4, §706; docs/design/10-ui.md §4.4; ADR-008 §4/§5 C8; ADR-015 C2].
+// A zero/non-positive dimension means "no size to persist" -> the key is omitted, and a
+// freshly-created editor falls back to the default design scale [ADR-021 fallback].
+struct UiEditorSize {
+    int width  = 0;   // pixels; <= 0 means "none stored" (key omitted)
+    int height = 0;   // pixels; <= 0 means "none stored" (key omitted)
+};
+
 // Build the canonical MW101_STATE tree from the live APVTS + <extras> (message thread).
 // Root carries schemaVersion/pluginVersion/engineVersion/renderVersion; <PARAMS> is the
 // APVTS state subtree; <extras> carries <seq> (stepCount + one <step> per active step,
-// note/gate/tie/rest), arpLatch, driftSeed, seedLocked [docs/design/06 §5.1, §5.4, §5.5].
+// note/gate/tie/rest), arpLatch, driftSeed, seedLocked, and — when uiSize is valid (both
+// dimensions > 0) — the advisory uiWidth/uiHeight UI-size keys [docs/design/06 §5.1,
+// §5.4, §5.5; docs/design/10-ui.md §4.4; ADR-015 C2]. uiSize defaults to {0,0} (omit) so
+// pre-existing call sites that do not persist a UI size keep their exact behaviour.
 juce::ValueTree captureState(const juce::AudioProcessorValueTreeState& apvts,
                              const mw::state::Extras& extras,
                              int schemaVersion,
                              juce::String pluginVersion,
                              juce::String engineVersion,
-                             int renderVersion);
+                             int renderVersion,
+                             UiEditorSize uiSize = {});
 
 // Serialize the canonical tree -> host opaque blob (JUCE binary) [ADR-008 C9].
 void writeToBlob(const juce::ValueTree& canonical, juce::MemoryBlock& dest);
@@ -61,5 +77,12 @@ void writeToBlob(const juce::ValueTree& canonical, juce::MemoryBlock& dest);
 // (unreadable bytes, or a tree whose root is not MW101_STATE) [docs/design/06 §5.2;
 // ADR-021 L1].
 std::optional<juce::ValueTree> readFromBlob(const void* data, int sizeBytes);
+
+// Read the advisory UI editor size back out of a canonical MW101_STATE tree's <extras>
+// node (the inverse of captureState's uiSize write) [docs/design/06 §706;
+// docs/design/10-ui.md §4.4; ADR-015 C2]. Returns {0,0} when the keys are absent or any
+// dimension is non-positive (garbage / never-persisted) so the caller falls back to the
+// default design scale [ADR-021 fallback discipline]. Message-thread only.
+UiEditorSize readUiEditorSize(const juce::ValueTree& canonical);
 
 } // namespace mw::plugin::state

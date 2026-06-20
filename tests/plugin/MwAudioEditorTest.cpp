@@ -189,6 +189,62 @@ TEST_CASE("ui_editor scale-preset size round-trips via the processor stored-size
     }
 }
 
+TEST_CASE("ui_editor stored editor size persists through getState/setState across instances",
+          "[ui_editor]")
+{
+    const juce::ScopedJuceInitialiser_GUI juceInit;
+
+    // A non-default size, stored on a SOURCE processor, then serialized to an opaque host
+    // blob via getStateInformation — the real persistence path (§4.4; ADR-015 C2). Use a
+    // size the editor would never default to, so a pass cannot come from the default.
+    constexpr int kPersistW = 1500;
+    constexpr int kPersistH = 960;
+
+    juce::MemoryBlock blob;
+    {
+        MwAudioProcessor source;
+        source.setStoredEditorSize({ kPersistW, kPersistH });
+        source.getStateInformation(blob);
+        REQUIRE(blob.getSize() > 0);
+    }
+
+    // A FRESH processor (as if the session reopened) starts with no stored size, then
+    // adopts the persisted size after setStateInformation reads it back out of <extras>.
+    MwAudioProcessor reopened;
+    REQUIRE(reopened.getStoredEditorSize() == juce::Point<int>(0, 0));
+
+    reopened.setStateInformation(blob.getData(), static_cast<int>(blob.getSize()));
+    REQUIRE(reopened.getStoredEditorSize() == juce::Point<int>(kPersistW, kPersistH));
+
+    // And a freshly-created editor on the reopened processor opens at the persisted size,
+    // not the default scale — the end-to-end §4.4 reload contract.
+    auto editor = std::make_unique<MwAudioEditor>(reopened);
+    REQUIRE(editor->getWidth()  == kPersistW);
+    REQUIRE(editor->getHeight() == kPersistH);
+}
+
+TEST_CASE("ui_editor a state blob without a stored UI size loads and leaves the default",
+          "[ui_editor]")
+{
+    const juce::ScopedJuceInitialiser_GUI juceInit;
+
+    // A processor that NEVER set an editor size writes a blob with NO uiWidth/uiHeight
+    // (the keys are omitted for a {0,0} size). It must still load cleanly, and the
+    // reopened processor must keep "no stored size" so the editor uses the default scale
+    // — backward compatibility with pre-persistence blobs (ADR-021 fallback).
+    juce::MemoryBlock blob;
+    {
+        MwAudioProcessor source;   // no setStoredEditorSize call
+        source.getStateInformation(blob);
+        REQUIRE(blob.getSize() > 0);
+    }
+
+    MwAudioProcessor reopened;
+    reopened.setStoredEditorSize({ 1234, 789 });  // a stale value that must be cleared
+    reopened.setStateInformation(blob.getData(), static_cast<int>(blob.getSize()));
+    REQUIRE(reopened.getStoredEditorSize() == juce::Point<int>(0, 0));
+}
+
 TEST_CASE("ui_editor out-of-range scale presets are a safe no-op", "[ui_editor]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;

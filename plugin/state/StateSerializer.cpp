@@ -19,7 +19,8 @@ juce::ValueTree captureState(const juce::AudioProcessorValueTreeState& apvts,
                              int schemaVersion,
                              juce::String pluginVersion,
                              juce::String engineVersion,
-                             int renderVersion)
+                             int renderVersion,
+                             UiEditorSize uiSize)
 {
     // --- Root with the four versioning attributes [docs/design/06 §5.1] -----------
     juce::ValueTree root{ juce::Identifier{ mw::state::kRootId } };
@@ -46,6 +47,16 @@ juce::ValueTree captureState(const juce::AudioProcessorValueTreeState& apvts,
     // int64 carried as a juce::var int64 so the full seed survives [docs/design/06 §5.4].
     extrasNode.setProperty(mw::state::kExtrasDriftSeed,
                            juce::var{ static_cast<juce::int64>(extras.driftSeed) }, nullptr);
+
+    // Advisory UI editor size [docs/design/06 §706; docs/design/10-ui.md §4.4; ADR-015 C2].
+    // Only written when BOTH dimensions are positive; a zero/non-positive size means
+    // "none stored" so the editor falls back to the default scale on reload [ADR-021].
+    // This is a message-thread UI preference, kept off the audio-thread Extras POD.
+    if (uiSize.width > 0 && uiSize.height > 0)
+    {
+        extrasNode.setProperty(mw::state::kExtrasUiWidth,  uiSize.width,  nullptr);
+        extrasNode.setProperty(mw::state::kExtrasUiHeight, uiSize.height, nullptr);
+    }
 
     // --- <seq>: stepCount + one <step> per ACTIVE step (note/gate/tie/rest; NO
     //     accent) [docs/design/06 §5.5; ADR-025] ---------------------------------
@@ -97,6 +108,25 @@ std::optional<juce::ValueTree> readFromBlob(const void* data, int sizeBytes)
         return std::nullopt;
 
     return tree;
+}
+
+UiEditorSize readUiEditorSize(const juce::ValueTree& canonical)
+{
+    // Locate <extras>; missing -> "none stored". A robust read: any non-positive or
+    // missing dimension yields {0,0} so the editor uses its default scale [ADR-021].
+    const auto extrasNode =
+        canonical.getChildWithName(juce::Identifier{ mw::state::kExtrasId });
+    if (! extrasNode.isValid())
+        return {};
+
+    const int w = static_cast<int>(extrasNode.getProperty(
+        juce::Identifier{ mw::state::kExtrasUiWidth }, 0));
+    const int h = static_cast<int>(extrasNode.getProperty(
+        juce::Identifier{ mw::state::kExtrasUiHeight }, 0));
+
+    if (w <= 0 || h <= 0)
+        return {};
+    return { w, h };
 }
 
 } // namespace mw::plugin::state
