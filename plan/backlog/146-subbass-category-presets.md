@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 146
 title: SubBass category presets (independent sub-osc, 303-underpinning)
-status: todo
+status: in-review
 depends-on: [118, 025, 144]
 component: docs
 estimated-size: M
