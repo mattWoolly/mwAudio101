@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 114
 title: MwAudioEditor root: AffineTransform scaling, constrainer, resize/DPI
-status: in-review
+status: done
 depends-on: [111, 020, 006, 106, 108]
 component: ui
 estimated-size: M
