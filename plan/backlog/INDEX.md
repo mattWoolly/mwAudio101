@@ -150,7 +150,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 13 | 148 | PWMStrings category presets (mono PWM stylization + chorus) | docs | M | 118, 025, 144 | done |
 | 13 | 149 | BlipsFX category presets (percussive blips, noise FX) | docs | M | 118, 025, 144 | done |
 | 13 | 150 | SeqArpRiff category presets (stored 100-step patterns + arp settings) | docs | M | 118, 025, 144 | done |
-| 14 | 113 | Single juce_add_plugin target over the shared processor (plugin/CMakeLists.txt) | infra | S | 001, 096, 111 | todo |
+| 14 | 113 | Single juce_add_plugin target over the shared processor (plugin/CMakeLists.txt) | infra | S | 001, 096, 111 | done |
 | 14 | 114 | MwAudioEditor root: AffineTransform scaling, constrainer, resize/DPI | ui | M | 111, 020, 006, 106, 108 | todo |
 | 14 | 117 | ModuleBase + ModulatorModule (LFO/S&H + mod depth) with APVTS attachments | ui | M | 020, 111, 006, 106, 108, 109 | done |
 | 14 | 151 | Bank coverage manifest + full-bank CI validation (~64 presets) | qa | S | 118, 025, 145, 146, 147, 148, 149, 150 | todo |

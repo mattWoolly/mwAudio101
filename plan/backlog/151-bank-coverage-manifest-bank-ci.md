@@ -18,6 +18,8 @@ tag: presets_bank
 
 Add a bank-level coverage test that asserts the whole factory bank (~64 presets across all 6 categories) is complete, traceable, honesty-compliant, and survives the migration chain.
 
+> **Follow-up folded in (2026-06-19):** PresetSeqArpRiffTest (task 150) ships WITHOUT a permanent in-suite negative control (the dev agent proved non-vacuity by manual on-disk corruption, not a committed TEST_CASE), unlike the sibling category tests. As part of the full-bank validation, ensure every category test (incl. SeqArpRiff) has a committed negative-control case (inject accent / out-of-range / sound_ext-mismatch -> assert reject). Loader rejection itself is already proven in PresetFormatTest (025).
+
 ## Context
 
 - `plan/decisions/008-parameter-state-preset-schema.md C13,C14,C16,C17,C18` — read first

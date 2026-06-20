@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 113
 title: Single juce_add_plugin target over the shared processor (plugin/CMakeLists.txt)
-status: in-review
+status: done
 depends-on: [001, 096, 111]
 component: infra
 estimated-size: S
