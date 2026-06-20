@@ -6735,5 +6735,23 @@
     "scope": [],
     "outOfScope": [],
     "acceptance": []
+  },
+  {
+    "id": "069b",
+    "wave": 4,
+    "dependsOn": [
+      "069"
+    ],
+    "title": "Fix KeyAssigner GateTrig last-note fallback",
+    "component": "core",
+    "stream": "voice-control",
+    "size": "S",
+    "tag": "keyassignerfix",
+    "slug": "keyassigner-gatetrig-lastnote-fallback-fix",
+    "designRefs": [
+      "docs/design/04-voice-and-control.md \u00a75.3",
+      "plan/decisions/006-note-priority-retrigger.md C3"
+    ],
+    "objective": "GateTrig no-new-down fallback selects most-recently-pressed still-held key per \u00a75.3."
   }
 ]
