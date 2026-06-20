@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 150
 title: SeqArpRiff category presets (stored 100-step patterns + arp settings)
-status: todo
+status: in-review
 depends-on: [118, 025, 144]
 component: docs
 estimated-size: M
