@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 153
 title: KeyAssigner golden-trace conformance (K17) test battery
-status: in-review
+status: done
 depends-on: [001, 006, 077, 069, 152]
 component: qa
 estimated-size: S

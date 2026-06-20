@@ -132,14 +132,14 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 10 | 112 | CapabilityShim resolve + per-block recheck + UI publish (plugin/host/CapabilityShim.h/.cpp) | app | M | 001, 006, 098, 103, 087 | done |
 | 10 | 152 | KeyAssignerReference.{h,cpp} — disassembly-semantics golden reference | qa | M | 001, 006, 007, 067, 077 | done |
 | 11 | 118 | Wire all engine modules into Engine::prepare/process/reset assembly | engine | M | 006, 073, 075, 071, 091, 092, 093, 006 | done |
-| 11 | 153 | KeyAssigner golden-trace conformance (K17) test battery | qa | S | 001, 006, 077, 069, 152 | todo |
+| 11 | 153 | KeyAssigner golden-trace conformance (K17) test battery | qa | S | 001, 006, 077, 069, 152 | done |
 | 12 | 076b | CPU-budget regression golden ctest — measureWorstCaseBlockMicros HARD gate at max poly+unison @2x | qa | M | 118, 076, 046 | done |
-| 12 | 119 | PresetManager in-memory bank + per-slot INIT fallback (PresetManager.h/.cpp) | core | M | 001, 006, 021, 022, 024, 025, 118 | todo |
+| 12 | 119 | PresetManager in-memory bank + per-slot INIT fallback (PresetManager.h/.cpp) | core | M | 001, 006, 021, 022, 024, 025, 118 | done |
 | 12 | 132 | Engine no-alloc / no-lock / noexcept hot-path guard tests | qa | S | 006, 118 | done |
 | 12 | 133 | End-to-end audio smoke test (note-on to non-silent output) | qa | S | 006, 118 | done |
 | 12 | 134 | Lifecycle/fuzz test: prepare/process/reset over random valid blocks and params | qa | S | 006, 118 | done |
 | 12 | 135 | End-to-end determinism test (same seed + same BlockContext sequence) | qa | S | 006, 118, 077 | done |
-| 12 | 144 | INIT/baseline preset + authoring conventions for the ~64-preset bank | docs | S | 118, 025 | todo |
+| 12 | 144 | INIT/baseline preset + authoring conventions for the ~64-preset bank | docs | S | 118, 025 | done |
 | 13 | 025b | presets_roundtrip ctest — every preset round-trips schema + checksum | qa | S | 025, 119, 040, 144b | todo |
 | 13 | 111 | MwAudioProcessor shell: prepare/process/reset + block-split + setLatencySamples (plugin/PluginProcessor.h/.cpp) | app | M | 001, 006, 007, 118, 020, 119, 099, 104, 101, 102, 112, 105 | todo |
 | 13 | 131 | Factory preset corpus + CI registry/mirror validator | core | M | 001, 006, 025, 119 | todo |

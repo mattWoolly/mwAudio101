@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 144
 title: INIT/baseline preset + authoring conventions for the ~64-preset bank
-status: in-review
+status: done
 depends-on: [118, 025]
 component: docs
 estimated-size: S
