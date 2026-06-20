@@ -46,8 +46,11 @@ inline constexpr const char* kEnvSustain   = "mw101.env.sustain";
 inline constexpr const char* kEnvRelease   = "mw101.env.release";
 
 // --- LFO ----------------------------------------------------------------------
-inline constexpr const char* kLfoRate      = "mw101.lfo.rate";
-inline constexpr const char* kLfoShape     = "mw101.lfo.shape";
+inline constexpr const char* kLfoRate         = "mw101.lfo.rate";
+inline constexpr const char* kLfoShape        = "mw101.lfo.shape";
+inline constexpr const char* kLfoDepthPitch   = "mw101.lfo.depth_pitch";
+inline constexpr const char* kLfoDepthPwm     = "mw101.lfo.depth_pwm";
+inline constexpr const char* kLfoDepthCutoff  = "mw101.lfo.depth_cutoff";
 
 // --- VCA ----------------------------------------------------------------------
 inline constexpr const char* kVcaLevel     = "mw101.vca.level";
