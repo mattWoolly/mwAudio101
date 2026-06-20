@@ -41,8 +41,9 @@ inline constexpr float kCaptionHeightFraction = 0.22f;
 
 // The number of control cells the module lays out in its single row, in design order:
 // VCO Range (choice), Tune (rotary), Fine (rotary), Pulse Width (rotary),
-// PWM Depth (rotary), Sub Mode (choice), Noise Level (rotary) — the §5.3 VCO row
-// (source levels are SourceMixerModule, out of scope here).
-inline constexpr int kControlCellCount = 7;
+// PWM Depth (rotary), Sub Mode (choice) — the §5.3 VCO row. The freed Noise Level slot
+// is reclaimed here (cell count 6, not 7) so the row has NO orphan gap: noise is a
+// MIXER source level owned solely by SourceMixerModule (121), not the VCO [120b].
+inline constexpr int kControlCellCount = 6;
 
 } // namespace mw::cal::ui::vco
