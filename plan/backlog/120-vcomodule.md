@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 120
 title: VcoModule (range, waveform mix, PWM, pitch, sub, noise)
-status: todo
+status: in-review
 depends-on: [020, 111, 006, 109, 117]
 component: ui
 estimated-size: M
