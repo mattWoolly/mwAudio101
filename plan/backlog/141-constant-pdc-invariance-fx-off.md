@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 141
 title: Constant-PDC invariance + FX-off bit-exact integration test
-status: todo
+status: in-review
 depends-on: [113, 036, 091, 077, 136]
 component: qa
 estimated-size: S
