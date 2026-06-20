@@ -52,6 +52,17 @@
 #include "dsp/fx/FxChain.h"                          // reports FX latency; FX-off dry-pad alignment
 #include "dsp/fx/FxParams.h"
 
+// The REAL plugin LatencyReporter, compiled DIRECTLY into this JUCE-free test TU so the
+// case below asserts its ACTUAL computeWorstCaseLatency() output (not a replica). The
+// reporter is fully JUCE-free (it includes only the two core calibration constants + the
+// JUCE-free FractionalDelayLine), so it links cleanly into mwcore-only mw101_tests — the
+// same pattern sibling PRs use to drive a plugin .cpp from the headless suite. The
+// mw101_tests target exposes plugin/ as an include root (tests/CMakeLists.txt), so the
+// header's `#include "latency/LatencyReporter.h"` resolves; mwcore globs core/**/*.cpp
+// ONLY, so this .cpp is NOT double-compiled, and this is the ONLY test TU that includes
+// it — no duplicate-symbol / ODR risk. [ADR-001; ADR-017 L4; docs/design/09 §8.3]
+#include "../../plugin/latency/LatencyReporter.cpp"  // the REAL reporter under test
+
 #include "../invariants/AudioThreadGuard.h"
 
 using mw::test::AudioThreadGuard;
@@ -190,6 +201,44 @@ TEST_CASE("pdc_invariant: reported latency equals the worst-case total group del
     REQUIRE(fx.getLatencySamples() == latBefore);     // reset did not mutate it
     fx.process(mono.data(), out, kMaxBlock);
     REQUIRE(fx.getLatencySamples() == latBefore);
+}
+
+// ===========================================================================
+// AC2 §7.1 / L4 / L7 / L11 — the REAL reporter's ACTUAL output. The case above proves
+// the contract against the contributors and a test-local L1+L2 replica; THIS case drives
+// the genuine plugin object: it constructs mw::plugin::LatencyReporter and asserts its
+// computeWorstCaseLatency(sampleRate) RETURN VALUE equals L1 + L2 directly — so a drift
+// in the reporter's own arithmetic (a different sum, sample-rate scaling, padding folded
+// into the reported value, an off-by-one) is caught, not just a drift in the constants it
+// sums. The reporter is the real production code (#include'd above), so this is its
+// genuine output, not a replica. It is asserted INVARIANT across the blessed host
+// sample-rate set {44100, 48000, 88200, 96000}: the constant-PDC contract requires the
+// same fixed integer at every rate [ADR-017 L4/L7/L11; docs/design/09 §8.3; §7.1].
+// ===========================================================================
+TEST_CASE("pdc_invariant: the real LatencyReporter computes the worst-case sum and is rate-invariant",
+          "[pdc_invariant]") {
+    // The genuine production reporter (not the replica): its accessor returns exactly the
+    // documented worst-case total, L1 + L2, in base-rate samples [ADR-017 L4; §8.3].
+    const mw::plugin::LatencyReporter reporter;
+
+    constexpr int kExpected =
+        mw::cal::latency::kVoiceZoneGroupDelaySamples   // L1 per-voice IIR zone
+      + mw::cal::fxos::kReportedLatencySamples;          // L2 FX Drive 2x OS
+    // Sanity: the value-under-test is identical to the contract sum the rest of the suite
+    // asserts, so this case and the replica-based cases cannot silently diverge.
+    STATIC_REQUIRE(kExpected == kReportedWorstCasePdc);
+
+    // ACTUAL reporter output == the worst-case sum, and INVARIANT across every blessed
+    // host sample rate (no rate scaling, no padding folded in) [ADR-017 L4/L7/L11].
+    int seen = -1;
+    for (const double sr : {44100.0, 48000.0, 88200.0, 96000.0}) {
+        INFO("sample rate = " << sr);
+        const int worst = reporter.computeWorstCaseLatency(sr);
+        REQUIRE(worst == kExpected);              // real output == L1 + L2 (no replica)
+        REQUIRE(worst > 0);                       // both contributors counted, nonzero
+        if (seen < 0) seen = worst;
+        REQUIRE(worst == seen);                   // sample-rate-INVARIANT (constant PDC)
+    }
 }
 
 // ===========================================================================
