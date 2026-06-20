@@ -3,7 +3,7 @@
 //
 // tests/plugin/StatusBannerTest.cpp — JUCE-linked acceptance tests for the non-modal
 // StatusBanner (task 129) [docs/design/10-ui.md §9.4; ADR-021 L12, L13]. Test-case
-// display names begin with the task tag `ui_status` so `ctest -R ui_status` selects
+// display names begin with the task tag `ui_banner` so `ctest -R ui_banner` selects
 // exactly these cases (silent-pass rule). No '[' appears in the display-name TEXT.
 //
 // The GUI is NOT pixel-identical across platforms, so these tests assert BEHAVIOUR
@@ -89,7 +89,7 @@ juce::Image renderBanner(StatusBanner& banner, int w, int h)
 
 } // namespace
 
-TEST_CASE("ui_status banner starts hidden and shows on a synchronous setMessage", "[ui_status]")
+TEST_CASE("ui_banner banner starts hidden and shows on a synchronous setMessage", "[ui_banner]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
     const auto tokens = DesignTokens::defaultTheme();
@@ -106,7 +106,7 @@ TEST_CASE("ui_status banner starts hidden and shows on a synchronous setMessage"
     REQUIRE(banner.activeMessage() == juce::String("Recovered to INIT"));
 }
 
-TEST_CASE("ui_status banner shows at each severity info warn error", "[ui_status]")
+TEST_CASE("ui_banner banner shows at each severity info warn error", "[ui_banner]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
     const auto tokens = DesignTokens::defaultTheme();
@@ -126,7 +126,7 @@ TEST_CASE("ui_status banner shows at each severity info warn error", "[ui_status
     }
 }
 
-TEST_CASE("ui_status dismiss hides the banner and clears the message but keeps the disclaimer", "[ui_status]")
+TEST_CASE("ui_banner dismiss hides the banner and clears the message but keeps the disclaimer", "[ui_banner]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
     const auto tokens = DesignTokens::defaultTheme();
@@ -147,7 +147,7 @@ TEST_CASE("ui_status dismiss hides the banner and clears the message but keeps t
     REQUIRE(banner.disclaimer() == disclaimerText);
 }
 
-TEST_CASE("ui_status injected disclaimer string round-trips verbatim", "[ui_status]")
+TEST_CASE("ui_banner injected disclaimer string round-trips verbatim", "[ui_banner]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
     const auto tokens = DesignTokens::defaultTheme();
@@ -163,7 +163,7 @@ TEST_CASE("ui_status injected disclaimer string round-trips verbatim", "[ui_stat
     REQUIRE(banner.getState().disclaimer == injected);
 }
 
-TEST_CASE("ui_status thread-safe post applies on the message thread via AsyncUpdater", "[ui_status]")
+TEST_CASE("ui_banner thread-safe post applies on the message thread via AsyncUpdater", "[ui_banner]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
     const auto tokens = DesignTokens::defaultTheme();
@@ -202,7 +202,7 @@ TEST_CASE("ui_status thread-safe post applies on the message thread via AsyncUpd
     banner.removeChangeListener(&listener);
 }
 
-TEST_CASE("ui_status posted disclaimer also applies asynchronously on the message thread", "[ui_status]")
+TEST_CASE("ui_banner posted disclaimer also applies asynchronously on the message thread", "[ui_banner]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
     const auto tokens = DesignTokens::defaultTheme();
@@ -216,7 +216,7 @@ TEST_CASE("ui_status posted disclaimer also applies asynchronously on the messag
     REQUIRE(banner.disclaimer() == injected);
 }
 
-TEST_CASE("ui_status a posted message supersedes a queued dismiss and the latest wins", "[ui_status]")
+TEST_CASE("ui_banner a posted message supersedes a queued dismiss and the latest wins", "[ui_banner]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
     const auto tokens = DesignTokens::defaultTheme();
@@ -238,7 +238,7 @@ TEST_CASE("ui_status a posted message supersedes a queued dismiss and the latest
     REQUIRE(banner.isShowingMessage());
 }
 
-TEST_CASE("ui_status banner is a non-modal component and never enters a modal loop", "[ui_status]")
+TEST_CASE("ui_banner banner is a non-modal component and never enters a modal loop", "[ui_banner]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
     const auto tokens = DesignTokens::defaultTheme();
@@ -257,7 +257,7 @@ TEST_CASE("ui_status banner is a non-modal component and never enters a modal lo
     REQUIRE(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
 }
 
-TEST_CASE("ui_status hidden banner paints nothing", "[ui_status]")
+TEST_CASE("ui_banner hidden banner paints nothing", "[ui_banner]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
     const auto tokens = DesignTokens::defaultTheme();
