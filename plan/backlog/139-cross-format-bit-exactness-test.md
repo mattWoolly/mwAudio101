@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 139
 title: Cross-format bit-exactness test (VST3/AU/CLAP/Standalone identical DSP output)
-status: todo
+status: in-review
 depends-on: [113, 104, 119, 077, 136]
 component: qa
 estimated-size: M
