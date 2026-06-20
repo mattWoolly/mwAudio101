@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 069b
 title: Fix KeyAssigner GateTrig last-note fallback (most-recent-held, not lowest-held)
-status: todo
+status: in-review
 depends-on: [069]
 component: core
 estimated-size: S

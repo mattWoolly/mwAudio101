@@ -19,7 +19,9 @@
 
 #pragma once
 
+#include <array>
 #include <bitset>
+#include <cstdint>
 
 #include "VoiceTypes.h"
 
@@ -53,8 +55,21 @@ public:
     bool anyHeld() const noexcept;
 
 private:
+    // The still-held key with the largest press serial — the most-recently-pressed
+    // still-held key. This is the GATE+TRIG last-note fallback when the active key
+    // is released with no new key down this tick (§5.3; §5.4 K3). The std::bitset
+    // carries no arrival order, so recency is tracked separately in pressSerial_.
+    // Bounded O(128), noexcept, allocation-free. -1 if nothing held. Mirrors the
+    // task-152 oracle KeyAssignerReference::mostRecentHeld() by construction.
+    int mostRecentHeld() const noexcept;
+
     std::bitset<128> held_;        // currently-held keys
     std::bitset<128> prevScan_;    // prior-tick snapshot for last-note XOR
+    // Press-order ledger: stamped with an increasing serial on each FRESH press
+    // (re-press of an already-held key does NOT re-stamp), so the most-recently
+    // pressed still-held key is well-defined independent of bitset order (§5.3).
+    std::array<std::uint32_t, 128> pressSerial_{};
+    std::uint32_t    nextSerial_ = 1;  // 0 reserved for "never pressed"
     GateTrigMode     mode_   = GateTrigMode::GateTrig;  // default per voice doc; param owned by doc 06
     int  lastActive_       = -1;   // active note emitted last tick
     bool gateWasAsserted_  = false;
