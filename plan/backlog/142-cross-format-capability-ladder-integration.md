@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 142
 title: Cross-format capability ladder integration test (note-expression + transport rungs)
-status: in-review
+status: done
 depends-on: [113, 104, 087, 114, 136]
 component: qa
 estimated-size: M
