@@ -89,7 +89,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 5 | 108 | MwAudioLookAndFeel vector drawing parameterized by DesignTokens | ui | M | 006, 106 | done |
 | 6 | 020 | APVTS ParameterLayout generator (ParameterLayout.cpp) | core | S | 019, 007 | done |
 | 6 | 021 | INIT patch builder (out-of-box defaults, ADR-016) | core | S | 019, 017, 007 | done |
-| 6 | 025 | .mw101preset JSON projection + validator (PresetFormat.h/.cpp) | core | M | 019, 023, 022, 007 | todo |
+| 6 | 025 | .mw101preset JSON projection + validator (PresetFormat.h/.cpp) | core | M | 019, 023, 022, 007 | done |
 | 6 | 030 | VCO band-limited saw + variable PWM pulse | core | M | 001, 006, 007, 026, 027, 029 | done |
 | 6 | 039 | LadderFilter resonance: inverting feedback + phase comp + diode clamp + self-osc + make-up Q | core | M | 001, 006, 007, 033, 034, 035, 038 | done |
 | 6 | 043 | CLASS-FP two-stage comparer (scalar fingerprint + FFT/NMSE + alias floor) | qa | M | 001, 006, 007, 041 | done |
@@ -101,7 +101,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 6 | 087 | SequencerEngine: fixed-order tick + RT-safe snapshot swap | core | M | 001, 006, 007, 081, 082, 083, 084, 085, 086 | done |
 | 6 | 091 | Drive stage: oversampled asymmetric waveshaper + tilt + DC block | core | M | 001, 006, 007, 088, 090 | done |
 | 6 | 109 | Custom control subclasses (Rotary/Linear sliders, ToggleSwitch, ChoiceSelector) | ui | M | 006, 106, 108 | done |
-| 7 | 024 | Load-failure recovery ladder (LoadFailure.h/.cpp) | core | M | 019, 023, 021, 022, 007 | todo |
+| 7 | 024 | Load-failure recovery ladder (LoadFailure.h/.cpp) | core | M | 019, 023, 021, 022, 007 | done |
 | 7 | 032 | OscillatorSection owner + per-voice HQ escalation | core | M | 001, 006, 007, 026, 027, 029, 030, 031, 028 | done |
 | 7 | 042 | Stimulus and PatchSnapshot render-input types | qa | S | 001, 006, 007, 041, 020 | done |
 | 7 | 044 | Provenance — honesty-label vocabulary and renderVersion governor | qa | S | 001, 006, 043 | done |

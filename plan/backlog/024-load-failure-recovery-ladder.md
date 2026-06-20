@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 024
 title: Load-failure recovery ladder (LoadFailure.h/.cpp)
-status: in-review
+status: done
 depends-on: [019, 023, 021, 022, 007]
 component: core
 estimated-size: M
