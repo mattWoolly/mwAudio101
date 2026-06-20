@@ -146,9 +146,9 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 13 | 143 | Legacy-render path + blessed sample-rate set integration test | qa | S | 006, 119, 036, 077, 118 | done |
 | 13 | 145 | AcidBassLead category presets (squelchy resonant acid bass/lead) | docs | M | 118, 025, 144 | done |
 | 13 | 146 | SubBass category presets (independent sub-osc, 303-underpinning) | docs | M | 118, 025, 144 | done |
-| 13 | 147 | Lead category presets (bright saw/square leads, vibrato) | docs | M | 118, 025, 144 | todo |
-| 13 | 148 | PWMStrings category presets (mono PWM stylization + chorus) | docs | M | 118, 025, 144 | todo |
-| 13 | 149 | BlipsFX category presets (percussive blips, noise FX) | docs | M | 118, 025, 144 | todo |
+| 13 | 147 | Lead category presets (bright saw/square leads, vibrato) | docs | M | 118, 025, 144 | done |
+| 13 | 148 | PWMStrings category presets (mono PWM stylization + chorus) | docs | M | 118, 025, 144 | done |
+| 13 | 149 | BlipsFX category presets (percussive blips, noise FX) | docs | M | 118, 025, 144 | done |
 | 13 | 150 | SeqArpRiff category presets (stored 100-step patterns + arp settings) | docs | M | 118, 025, 144 | todo |
 | 14 | 113 | Single juce_add_plugin target over the shared processor (plugin/CMakeLists.txt) | infra | S | 001, 096, 111 | todo |
 | 14 | 114 | MwAudioEditor root: AffineTransform scaling, constrainer, resize/DPI | ui | M | 111, 020, 006, 106, 108 | todo |
