@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 025
 title: .mw101preset JSON projection + validator (PresetFormat.h/.cpp)
-status: todo
+status: in-review
 depends-on: [019, 023, 022, 007]
 component: core
 estimated-size: M
