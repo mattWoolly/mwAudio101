@@ -1,0 +1,312 @@
+{
+  "schemaVersion": 1,
+  "meta": {
+    "name": "Long Hypnotic Run",
+    "author": "Matt Woolly",
+    "category": "SeqArpRiff",
+    "description": "A 32-step hypnotic running sequence \u2014 well within the fixed 100-step capacity (ADR-008 C8/C20) \u2014 that slowly varies its top note over two 16-step halves. A deep, repetitive mono line built for trance-inducing repetition (research/11 section 7.1, item 6).",
+    "tags": [
+      "sequence",
+      "hypnotic",
+      "long",
+      "trance",
+      "repetition",
+      "mono"
+    ],
+    "inspired_by": null,
+    "sound_ext": false
+  },
+  "params": {
+    "mw101.vco.tune": 0.0,
+    "mw101.vco.fine": 0.0,
+    "mw101.vco.pw": 0.5,
+    "mw101.vco.pwm_depth": 0.0,
+    "mw101.vco.range": 1,
+    "mw101.saw.level": 0.6,
+    "mw101.pulse.level": 0.0,
+    "mw101.sub.level": 0.6,
+    "mw101.sub.mode": 0,
+    "mw101.noise.level": 0.0,
+    "mw101.vcf.cutoff": 0.35,
+    "mw101.vcf.resonance": 0.45,
+    "mw101.vcf.env_mod": 0.4,
+    "mw101.vcf.lfo_mod": 0.0,
+    "mw101.vcf.kbd_track": 0.0,
+    "mw101.env.attack": 0.0,
+    "mw101.env.decay": 0.2,
+    "mw101.env.sustain": 0.0,
+    "mw101.env.release": 0.06,
+    "mw101.lfo.rate": 5.0,
+    "mw101.lfo.shape": 0,
+    "mw101.lfo.dest": 0,
+    "mw101.lfo.delay": 0.0,
+    "mw101.lfo.depth_pitch": 0.0,
+    "mw101.lfo.depth_pwm": 0.0,
+    "mw101.lfo.depth_cutoff": 0.0,
+    "mw101.lfo.tempo_sync": 0,
+    "mw101.lfo.sync_div": 1,
+    "mw101.vca.level": 0.8,
+    "mw101.vca.mode": 0,
+    "mw101.glide.time": 0.03,
+    "mw101.glide.mode": 1,
+    "mw101.mod.bend_range_vco": 200.0,
+    "mw101.mod.bend_range_vcf": 0.0,
+    "mw101.mod.bend_dest": 0,
+    "mw101.mod.lfo_mod_wheel": 0.0,
+    "mw101.arp.mode": 0,
+    "mw101.arp.range": 0,
+    "mw101.arp.tempo_sync": 1,
+    "mw101.arp.sync_div": 1,
+    "mw101.arp.latch": 0,
+    "mw101.seq.mode": 1,
+    "mw101.seq.tempo_sync": 1,
+    "mw101.seq.sync_div": 3,
+    "mw101.key.trigger_priority": 0,
+    "mw101.tune.a4": 440.0,
+    "mw101.tune.slop": 2.5,
+    "mw101.pitch.modern_unquantized": 0,
+    "mw101.vel.enable": 1,
+    "mw101.vel.depth": 0.5,
+    "mw101.amp.expression": 1.0,
+    "mw101.mpe.enable": 0,
+    "mw101.mpe.bend_range": 48.0,
+    "mw101.mpe.pressure_dest": 0,
+    "mw101.vintage.age": 0.15,
+    "mw101.vintage.enable": 1,
+    "mw101.vintage.cal_spread": 0.25,
+    "mw101.vintage.detune_amt": 0.0,
+    "mw101.drift.depth": 4.0,
+    "mw101.drift.rate": 0.1,
+    "mw101.warmup.time": 0.0,
+    "mw101.var.cutoff": 0.0,
+    "mw101.var.env_time": 0.0,
+    "mw101.var.pw": 0.0,
+    "mw101.var.glide": 0.0,
+    "mw101.fx.bypass": 1,
+    "mw101.fx.drive_enable": 0,
+    "mw101.fx.drive_amount": 0.0,
+    "mw101.fx.drive_tone": 0.5,
+    "mw101.fx.drive_output": 0.5,
+    "mw101.fx.chorus_enable": 0,
+    "mw101.fx.chorus_mode": 0,
+    "mw101.fx.chorus_rate": 0.3,
+    "mw101.fx.chorus_depth": 0.5,
+    "mw101.fx.chorus_width": 1.0,
+    "mw101.fx.chorus_mix": 0.0,
+    "mw101.fx.delay_enable": 0,
+    "mw101.fx.delay_sync": 0,
+    "mw101.fx.delay_division": 1,
+    "mw101.fx.delay_time": 0.3,
+    "mw101.fx.delay_feedback": 0.3,
+    "mw101.fx.delay_damp": 0.5,
+    "mw101.fx.delay_width": 1.0,
+    "mw101.fx.delay_mix": 0.0,
+    "mw101.fx.delay_pingpong": 0,
+    "mw101.out.mono": 0,
+    "mw101.quality": 1,
+    "mw101.voice.mode": 0,
+    "mw101.voice.count": 1,
+    "mw101.unison.count": 0,
+    "mw101.control.vintage": 0
+  },
+  "seq": {
+    "stepCount": 32,
+    "steps": [
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 40,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 36,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 40,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 31,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 40,
+        "gate": true,
+        "tie": true,
+        "rest": false
+      },
+      {
+        "note": 0,
+        "gate": false,
+        "tie": false,
+        "rest": true
+      },
+      {
+        "note": 38,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 40,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 40,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 41,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 40,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 31,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 31,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 40,
+        "gate": true,
+        "tie": true,
+        "rest": false
+      },
+      {
+        "note": 0,
+        "gate": false,
+        "tie": false,
+        "rest": true
+      },
+      {
+        "note": 36,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 40,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      },
+      {
+        "note": 33,
+        "gate": true,
+        "tie": false,
+        "rest": false
+      }
+    ]
+  },
+  "arp": {
+    "latch": false
+  }
+}
