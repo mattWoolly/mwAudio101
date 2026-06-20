@@ -111,6 +111,17 @@ public:
 
     juce::AudioProcessorValueTreeState& apvts() noexcept { return apvts_; }
 
+    // --- Editor size persistence (the narrow <extras>-UI seam, task 114) ----------
+    // The editor root (MwAudioEditor) reads the stored size on construction and writes
+    // the new size back on resize. The size genuinely PERSISTS: getStateInformation
+    // writes it into the canonical <extras> uiWidth/uiHeight keys and setStateInformation
+    // reads it back, so the last window size round-trips on session reload
+    // [docs/design/10-ui.md §4.4; ADR-015 C2; ADR-008 §4/§5 — UI size is a <extras> UI
+    // preference, NOT a host parameter]. Message-thread only; the audio thread never
+    // touches this. A zero/default Point means "no stored size yet" -> default scale.
+    [[nodiscard]] juce::Point<int> getStoredEditorSize() const noexcept { return storedEditorSize_; }
+    void setStoredEditorSize(juce::Point<int> sizePx) noexcept { storedEditorSize_ = sizePx; }
+
     // --- Test introspection (NO audio-thread mutation; for tests/plugin only) -----
     [[nodiscard]] const mw::Engine& engineForTest() const noexcept { return engine_; }
     [[nodiscard]] int  processCallCountForTest() const noexcept { return processCalls_; }
@@ -175,6 +186,14 @@ private:
     // thread NEVER calls into PresetManager / APVTS replaceState.
     std::atomic<int> pendingProgramChange_{ -1 };
     int currentProgram_ = 0;
+
+    // --- Editor size persistence (message thread only; task 114) ------------------
+    // The last editor window size in PIXELS, read by MwAudioEditor on construction and
+    // written back on resize. Serialized into / restored from the canonical <extras>
+    // uiWidth/uiHeight keys by get/setStateInformation so it survives a session reload.
+    // Default {0,0} means "none stored yet" -> the editor falls back to its default
+    // scale [docs/design/10-ui.md §4.4; ADR-015 C2].
+    juce::Point<int> storedEditorSize_{ 0, 0 };
 
     // --- Test counters (audio-thread writes are plain; read off-thread in tests) ---
     int processCalls_       = 0;
