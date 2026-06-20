@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 014b
 title: Complete the ParamIDs.h §3.0 catalogue (all 92 ids + exact-count static_assert)
-status: todo
+status: in-review
 depends-on: [014, 019]
 component: core
 estimated-size: S
