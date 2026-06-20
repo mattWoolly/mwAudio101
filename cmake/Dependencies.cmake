@@ -69,6 +69,11 @@ set(MW_JUCE_GIT_TAG "51d11a2be6d5c97ccf12b4e5e827006e19f0555a")  # JUCE 8.0.4
 # why: wraps the shared JUCE AudioProcessor as a CLAP plugin (no semver releases
 #      exist, so a SHA pin is mandatory) [ADR-014 C2]. Gated behind MW_BUILD_CLAP.
 # SPDX: MIT (clap-juce-extensions); CLAP itself transitively SHA-pinned, MIT.
+# NB: the CLAP SDK + clap-helpers ride in as git submodules (clap-libs/clap,
+#     clap-libs/clap-helpers), so the fetch MUST recurse submodules or the
+#     add_subdirectory(clap-libs/clap) in its CMakeLists fails to configure
+#     [free-audio/clap-juce-extensions .gitmodules @ this SHA; ADR-024 C2 — CLAP
+#     transitively SHA-pinned, no fourth top-level manifest entry].
 set(MW_CLAP_JUCE_EXT_GIT_TAG "51a9359315298de632cf44e9d7524940868441e6")
 
 if(MW_BUILD_PLUGIN)
@@ -80,11 +85,14 @@ if(MW_BUILD_PLUGIN)
     VERSION 8.0.4
   )
   if(MW_BUILD_CLAP)
-    message(STATUS "mwAudio101: MW_BUILD_CLAP=ON — fetching clap-juce-extensions")
+    message(STATUS "mwAudio101: MW_BUILD_CLAP=ON — fetching clap-juce-extensions (recursing CLAP submodules)")
     CPMAddPackage(
       NAME clap-juce-extensions
       GITHUB_REPOSITORY free-audio/clap-juce-extensions
       GIT_TAG ${MW_CLAP_JUCE_EXT_GIT_TAG}
+      GIT_SUBMODULES_RECURSE TRUE   # pulls clap-libs/clap + clap-libs/clap-helpers
+      # Do NOT build the bundled example plugins (they CPM a second JUCE copy).
+      OPTIONS "CLAP_JUCE_EXTENSIONS_BUILD_EXAMPLES OFF"
     )
   endif()
 else()
