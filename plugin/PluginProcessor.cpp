@@ -28,6 +28,7 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>   // GenericAudioProcessorEditor
 
+#include "../ui/MwAudioEditor.h"      // mw::ui::MwAudioEditor — the editor root (task 114)
 #include "params/ParameterLayout.h"   // buildParameterLayout() — the full 91-param APVTS
 #include "midi/EventTranslator.h"     // HostEvent -> mw::MidiEvent (§3.3)
 #include "state/StateSerializer.h"    // canonical capture / write / read (task 023)
@@ -239,8 +240,10 @@ void MwAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
 
 juce::AudioProcessorEditor* MwAudioProcessor::createEditor()
 {
-    // Trivial generic editor; the real UI is task 114. Keeps the Standalone building.
-    return new juce::GenericAudioProcessorEditor(*this);
+    // The real editor root: the format-agnostic, aspect-locked, AffineTransform-scaled
+    // MwAudioEditor shared by every wrapper (task 114) [docs/design/10-ui.md §4, §5.2;
+    // ADR-015 Decision; ADR-011].
+    return new mw::ui::MwAudioEditor(*this);
 }
 
 // --- Programs (the factory preset bank surfaced as host programs) -------------------
