@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 136
 title: Finalize MwAudioProcessor — MIDI ProgramChange→preset recall handoff + full-assembly integration test
-status: todo
+status: in-review
 depends-on: [111, 104, 113, 020, 118, 119]
 component: app
 estimated-size: S
