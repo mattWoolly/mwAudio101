@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 119
 title: PresetManager in-memory bank + per-slot INIT fallback (PresetManager.h/.cpp)
-status: todo
+status: in-review
 depends-on: [001, 006, 021, 022, 024, 025, 118]
 component: core
 estimated-size: M
