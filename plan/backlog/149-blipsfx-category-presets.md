@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 149
 title: BlipsFX category presets (percussive blips, noise FX)
-status: todo
+status: in-review
 depends-on: [118, 025, 144]
 component: docs
 estimated-size: M
