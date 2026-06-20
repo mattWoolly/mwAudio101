@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 120b
 title: Remove the noise-level control from VcoModule (SourceMixer owns mw101.noise.level)
-status: in-review
+status: done
 depends-on: [120, 121]
 component: ui
 estimated-size: S

@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 111c
 title: Processor GUI data-paths — publish telemetry from processBlock + expose Consumer + <extras> seq-pattern handoff accessor
-status: in-review
+status: done
 depends-on: [111, 107, 087, 017]
 component: app
 estimated-size: M
