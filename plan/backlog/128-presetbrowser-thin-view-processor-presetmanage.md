@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 128
 title: PresetBrowser thin view over processor PresetManager
-status: in-review
+status: done
 depends-on: [119, 020, 111, 006, 106, 109, 114]
 component: ui
 estimated-size: M
