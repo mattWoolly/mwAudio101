@@ -50,6 +50,8 @@ void KeyAssigner::prepare() noexcept {
 void KeyAssigner::reset() noexcept {
     held_.reset();
     prevScan_.reset();
+    pressSerial_.fill(0u);   // 0 == "never pressed"
+    nextSerial_      = 1u;
     lastActive_      = -1;
     gateWasAsserted_ = false;
     newKeyThisTick_  = false;
@@ -59,7 +61,14 @@ void KeyAssigner::noteOn(int midiNote) noexcept {
     if (!inRange(midiNote)) {
         return;
     }
-    held_.set(static_cast<std::size_t>(midiNote));
+    const auto i = static_cast<std::size_t>(midiNote);
+    // Stamp a FRESH press with an increasing serial so "most-recently-pressed
+    // still-held" is well-defined; a re-press of an already-held key does NOT
+    // re-stamp (mirrors the task-152 oracle) (§5.3). Stamp BEFORE setting the bit.
+    if (!held_.test(i)) {
+        pressSerial_[i] = nextSerial_++;
+    }
+    held_.set(i);
     // A keypress this tick re-phases the clock when in Lfo/Arp (§5.4 K6). Flagged
     // here so a multi-down tick still asserts CLOCK RESET exactly once.
     newKeyThisTick_ = true;
@@ -97,13 +106,16 @@ NoteDecision KeyAssigner::resolve() noexcept {
             //  - if any new key(s) went down this tick, pick the LOWEST of the
             //    just-pressed (XOR changed-down vs prior scan);
             //  - otherwise keep the most-recent still-held key; if it was released,
-            //    fall back deterministically to the lowest still-held key.
+            //    fall back to the most-recently-pressed still-held key (§5.3).
             if (hasNewDown) {
                 active = lowestOf(changedDown);
             } else if (lastActive_ >= 0 && held_.test(static_cast<std::size_t>(lastActive_))) {
                 active = lastActive_;
             } else {
-                active = lowestHeld(held_);
+                // Active key released with no new down: fall back to the
+                // most-recently-pressed still-held key, NOT the lowest-held — the
+                // NORMATIVE §5.3 / §5.4 K3 last-note rule (mirrors the oracle).
+                active = mostRecentHeld();
             }
             break;
     }
@@ -146,6 +158,19 @@ NoteDecision KeyAssigner::resolve() noexcept {
 
 bool KeyAssigner::anyHeld() const noexcept {
     return held_.any();
+}
+
+int KeyAssigner::mostRecentHeld() const noexcept {
+    int best = -1;
+    std::uint32_t bestSerial = 0u;
+    for (int n = 0; n < 128; ++n) {
+        const auto i = static_cast<std::size_t>(n);
+        if (held_.test(i) && pressSerial_[i] >= bestSerial) {
+            bestSerial = pressSerial_[i];
+            best       = n;
+        }
+    }
+    return best;
 }
 
 } // namespace mw
