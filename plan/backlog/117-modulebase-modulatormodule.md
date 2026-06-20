@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 117
 title: ModuleBase + ModulatorModule (LFO/S&H + mod depth) with APVTS attachments
-status: in-review
+status: done
 depends-on: [020, 111, 006, 106, 108, 109]
 component: ui
 estimated-size: M
