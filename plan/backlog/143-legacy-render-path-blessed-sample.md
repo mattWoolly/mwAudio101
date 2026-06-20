@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 143
 title: Legacy-render path + blessed sample-rate set integration test
-status: todo
+status: in-review
 depends-on: [006, 119, 036, 077, 118]
 component: qa
 estimated-size: S
