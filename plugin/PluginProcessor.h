@@ -73,7 +73,15 @@
 
 namespace mw::plugin {
 
-class MwAudioProcessor final : public juce::AudioProcessor {
+// Inherits juce::AsyncUpdater so a MIDI Program Change captured on the AUDIO thread
+// (a lock-free POD store into pendingProgramChange_) is handed off to the MESSAGE
+// thread for the actual preset recall: processBlock fires triggerAsyncUpdate() (a
+// lock-free flag — no alloc/lock), and handleAsyncUpdate() reads+clears the atomic and
+// applies the recall via setCurrentProgram -> PresetManager. The audio thread NEVER
+// parses a preset or touches APVTS/PresetManager [docs/design/09 §3.2/§3.3; docs/design/
+// 06 §10; ADR-001 C3/C4; ADR-008 C19].
+class MwAudioProcessor final : public juce::AudioProcessor,
+                               public juce::AsyncUpdater {
 public:
     MwAudioProcessor();
     ~MwAudioProcessor() override = default;
@@ -105,6 +113,15 @@ public:
     const juce::String getProgramName(int index) override;
     void changeProgramName(int, const juce::String&) override {}
 
+    // --- MIDI Program Change -> preset recall (audio -> message thread handoff) ----
+    // Called on the MESSAGE thread by JUCE when processBlock fired triggerAsyncUpdate()
+    // after seeing a Program Change. Reads + clears the audio-thread atomic, clamps the
+    // index to [0, getNumPrograms()) and applies the recall via setCurrentProgram (which
+    // routes to PresetManager::loadPreset). An out-of-range / stale index is ignored.
+    // This is the SOLE consumer of pendingProgramChange_; the audio thread only ever
+    // writes the POD [docs/design/09 §3.3; docs/design/06 §10; ADR-008 C19].
+    void handleAsyncUpdate() override;
+
     // --- State (APVTS round-trip via the canonical serializer) --------------------
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
@@ -134,6 +151,23 @@ public:
     [[nodiscard]] int  lastCoreEventCountForTest() const noexcept { return lastCoreEventCount_; }
     [[nodiscard]] int  lastProgramChangeForTest() const noexcept { return lastProgramChange_; }
     [[nodiscard]] int  latencySetCountForTest() const noexcept { return latencySetCalls_; }
+    // The number of times the message-thread handoff (handleAsyncUpdate) applied a
+    // preset recall. Lets a test prove a Program Change in the MIDI stream actually
+    // reached setCurrentProgram via the AsyncUpdater (NOT just a host setCurrentProgram).
+    [[nodiscard]] int  programRecallCountForTest() const noexcept { return programRecalls_; }
+    // The last Program Change index handed off to setCurrentProgram by the message-thread
+    // consumer (-1 if none yet). Distinct from lastProgramChangeForTest(), which records
+    // the raw audio-thread capture (including out-of-range values that the consumer drops).
+    [[nodiscard]] int  lastRecalledProgramForTest() const noexcept { return lastRecalledProgram_; }
+    // Install a non-empty preset bank for the full-assembly recall test (message thread
+    // only; no audio-thread effect). The default-constructed bank is empty (no embedded
+    // BinaryData yet, tasks 131/144-150), so this is the test seam that lets a ProgramChange
+    // recall an actual slot. Mirrors PresetManager's injection constructor.
+    void installPresetBankForTest(std::vector<preset::PresetManager::SlotSource> sources)
+    {
+        presetManager_ = preset::PresetManager{ sources };
+        currentProgram_ = 0;
+    }
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
@@ -201,6 +235,8 @@ private:
     int latencySetCalls_    = 0;
     int lastCoreEventCount_ = 0;
     int lastProgramChange_  = -1;
+    int programRecalls_     = 0;   // message-thread handoff recall count (handleAsyncUpdate)
+    int lastRecalledProgram_ = -1; // last index the consumer applied via setCurrentProgram
 
     // The voice cap the engine is prepared with (bootstrap value; the real cap is a
     // param in the voice stream).

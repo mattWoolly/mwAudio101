@@ -166,7 +166,11 @@ void MwAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
     // 3. Capture the LAST Program Change in this block for message-thread preset recall.
     //    The front-end does NOT forward Program Change to the engine (consumed in plugin/).
     //    The audio thread only ever writes a POD (an atomic int); it NEVER calls into the
-    //    PresetManager / APVTS [docs/design/09 §3.3; ADR-008 C19].
+    //    PresetManager / APVTS [docs/design/09 §3.3; ADR-008 C19]. When a Program Change is
+    //    seen, hand it off to the message thread via triggerAsyncUpdate() — a lock-free flag
+    //    set (no heap alloc, no lock): handleAsyncUpdate() reads+clears the atomic and does
+    //    the actual recall off the audio thread [ADR-001 C3/C4].
+    bool sawProgramChange = false;
     for (const auto meta : midi)
     {
         const juce::MidiMessage& m = meta.getMessage();
@@ -174,8 +178,11 @@ void MwAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
         {
             lastProgramChange_ = m.getProgramChangeNumber();
             pendingProgramChange_.store(lastProgramChange_, std::memory_order_relaxed);
+            sawProgramChange = true;
         }
     }
+    if (sawProgramChange)
+        triggerAsyncUpdate();   // RT-safe: sets a lock-free flag; no alloc, no lock.
 
     // 4. Translate the HostEvent surface -> the JUCE-free core mw::MidiEvent scratch,
     //    field-for-field (§3.3). ProgramChange + unmapped CCs are skipped at the boundary.
@@ -279,6 +286,32 @@ const juce::String MwAudioProcessor::getProgramName(int index)
     if (presetManager_.getNumPresets() <= 0)
         return "Default";
     return presetManager_.getName(index);
+}
+
+// --- MIDI Program Change -> preset recall (message-thread consumer) -----------------
+
+void MwAudioProcessor::handleAsyncUpdate()
+{
+    // MESSAGE THREAD. processBlock captured a Program Change into pendingProgramChange_
+    // (a lock-free POD store) and fired triggerAsyncUpdate(); read + clear the atomic
+    // here and apply the recall off the audio thread. exchange(-1) atomically consumes
+    // the pending value so a re-fire that races the clear is not lost (it re-stores a
+    // fresh value and re-triggers) and a spurious wake with no pending PC is a no-op
+    // [docs/design/09 §3.3; docs/design/06 §10; ADR-008 C19].
+    const int index = pendingProgramChange_.exchange(-1, std::memory_order_relaxed);
+    if (index < 0)
+        return;   // no pending Program Change (already consumed / spurious wake).
+
+    // Clamp to the surfaced program range; an out-of-range Program Change is IGNORED
+    // (no recall, APVTS untouched) [docs/design/06 §10.1]. getNumPrograms() is the
+    // surfaced bank size (>= 1) — a PC of 0 over the empty default bank is a safe no-op
+    // inside setCurrentProgram itself.
+    if (index >= getNumPrograms())
+        return;
+
+    setCurrentProgram(index);   // routes to PresetManager::loadPreset (message thread).
+    lastRecalledProgram_ = index;
+    ++programRecalls_;
 }
 
 // --- State (canonical serializer round-trip + graded recovery) ----------------------
