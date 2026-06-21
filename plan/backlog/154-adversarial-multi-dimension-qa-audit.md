@@ -7,7 +7,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 id: 154
 title: Adversarial multi-dimension QA audit report (docs/QA-REPORT.md)
 status: todo
-depends-on: [118, 006, 077, 006, 139, 140, 141, 142, 143]
+depends-on: [118, 006, 077, 006, 139, 140, 141, 142, 143, 162d]
 component: qa
 estimated-size: M
 stream: qa
