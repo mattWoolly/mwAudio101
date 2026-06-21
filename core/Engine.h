@@ -237,6 +237,21 @@ private:
         int envRelease   = -1;   // 0..1 -> seconds (skew kEnvTime)
         int vcaLevel     = -1;   // 0..1 -> output level (linear)
         int vcaMode      = -1;   // choice 0..1 -> VcaMode {Env,Gate}
+
+        // --- LFO + modulation routing (task 162) ---
+        int lfoRate        = -1;   // 0.1..30 Hz (skew kLfoRate)
+        int lfoShape       = -1;   // choice 0..4 -> LfoShape (Sine -> SmoothTri)
+        int lfoDest        = -1;   // choice 0..2 -> {Pitch,Filter,PWM}
+        int lfoDelay       = -1;   // 0..1 -> fade-in seconds (skew kLfoDelay)
+        int lfoDepthPitch  = -1;   // 0..1 -> vibrato depth
+        int lfoDepthPwm    = -1;   // 0..1 -> PWM-sweep depth
+        int lfoDepthCutoff = -1;   // 0..1 -> filter-wobble depth
+        int modLfoModWheel = -1;   // 0..1 -> mod-wheel->LFO depth routing (no live wheel)
+        int modBendDest    = -1;   // choice 0..2 -> {VCO,VCF,Both}
+        int modBendRangeVco = -1;  // 0..1200 cents
+        int modBendRangeVcf = -1;  // 0..1200 cents
+        int velEnable      = -1;   // bool -> velocity sensing on/off
+        int velDepth       = -1;   // 0..1 -> velocity depth
     } slots_{};
 
     double sampleRate_      = 0.0;

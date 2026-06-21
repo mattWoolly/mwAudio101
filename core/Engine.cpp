@@ -22,6 +22,7 @@
 #include "calibration/SequencerRoutingConstants.h"
 #include "calibration/ControlDispatchConstants.h"   // pitch-CV anchor + vco.range mapping (ADR-028)
 #include "calibration/ControlDispatchVcfConstants.h" // cutoff-CV / env-mod / kbd-track law (task 161)
+#include "calibration/ControlDispatchLfoConstants.h" // LFO/vel/bend routing depths (task 162)
 #include "calibration/PitchAssemblyConstants.h"      // kVoltsPerCount (count->volt anchor)
 
 #include "params/ParamDefs.h"   // kParamDefs registry order (slot lookup, off-thread only)
@@ -583,6 +584,21 @@ namespace {
     return idx == 1 ? mw101::dsp::VcaMode::Gate : mw101::dsp::VcaMode::Env;
 }
 
+// mw101.lfo.shape choice {Tri=0, Sq=1, Random=2, Noise=3, Sine=4} -> dsp::LfoShape (task
+// 162). The DSP LfoShape has only the FOUR hardware positions; the 5th "Sine" choice (a
+// software-reissue artifact) maps to SmoothTri (the rounded-toward-sine triangle is the
+// closest hardware-true smooth shape — there is no separate sine core, docs/design/03 §3.2/
+// §3.3). Defensive default SmoothTri [ControlDispatchLfoConstants.h shape-map note].
+[[nodiscard]] mw101::dsp::LfoShape lfoShapeFor(int idx) noexcept {
+    switch (idx) {
+        case 1:  return mw101::dsp::LfoShape::Square;
+        case 2:  return mw101::dsp::LfoShape::Random;
+        case 3:  return mw101::dsp::LfoShape::Noise;
+        case 4:  return mw101::dsp::LfoShape::SmoothTri;   // "Sine" -> rounded-tri (no sine core)
+        default: return mw101::dsp::LfoShape::SmoothTri;   // Tri
+    }
+}
+
 } // namespace
 
 void Engine::cacheParamSlots() noexcept {
@@ -623,6 +639,21 @@ void Engine::cacheParamSlots() noexcept {
     slots_.envRelease   = find(kEnvRelease);
     slots_.vcaLevel     = find(kVcaLevel);
     slots_.vcaMode      = find(kVcaMode);
+
+    // --- LFO + modulation routing (task 162) ---
+    slots_.lfoRate        = find(kLfoRate);
+    slots_.lfoShape       = find(kLfoShape);
+    slots_.lfoDest        = find(kLfoDest);
+    slots_.lfoDelay       = find(kLfoDelay);
+    slots_.lfoDepthPitch  = find(kLfoDepthPitch);
+    slots_.lfoDepthPwm    = find(kLfoDepthPwm);
+    slots_.lfoDepthCutoff = find(kLfoDepthCutoff);
+    slots_.modLfoModWheel = find(kModLfoModWheel);
+    slots_.modBendDest    = find(kModBendDest);
+    slots_.modBendRangeVco = find(kModBendRangeVco);
+    slots_.modBendRangeVcf = find(kModBendRangeVcf);
+    slots_.velEnable      = find(kVelEnable);
+    slots_.velDepth       = find(kVelDepth);
 }
 
 VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
@@ -671,6 +702,27 @@ VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
     vc.vcaLevel = contValue(snap, slots_.vcaLevel);
     vc.vcaMode  = vcaModeFor(choiceIndex(snap, slots_.vcaMode));
 
+    // --- LFO (task 162): rate (skewed Hz), shape, dest, delay (skewed seconds), and the
+    // per-dest depths (linear 0..1) scaled to their CV units. The mod-wheel->LFO routing param
+    // (mod.lfo_mod_wheel) BOOSTS the LFO depths: with no live wheel POSITION in the core seam
+    // (BlockContext carries no continuous-controller state — see below), we treat the routing
+    // param as an additive depth offset so a patch that routes the wheel still gets a deeper
+    // LFO. The depth multiplier is (1 + modWheelRouting), clamped, applied to all three depths
+    // — the routing is in place; the live wheel sweep awaits the controller seam. ---
+    vc.lfoRateHz  = contValueSkewed(snap, slots_.lfoRate);
+    vc.lfoShape   = lfoShapeFor(choiceIndex(snap, slots_.lfoShape));
+    vc.lfoDest    = static_cast<int>(cal::dispatch::lfoDestFor(choiceIndex(snap, slots_.lfoDest)));
+    vc.lfoDelaySec = contValueSkewed(snap, slots_.lfoDelay) * cal::dispatch::kLfoDelayMaxSec;
+
+    const float modWheelRouting = contValue(snap, slots_.modLfoModWheel);   // 0..1 routing depth
+    const float depthBoost = 1.0f + modWheelRouting;                        // (PI) additive boost
+    vc.lfoPitchDepthVolts = contValue(snap, slots_.lfoDepthPitch) * depthBoost
+                          * cal::dispatch::kLfoPitchDepthVolts;
+    vc.lfoCutoffDepthOct  = contValue(snap, slots_.lfoDepthCutoff) * depthBoost
+                          * cal::dispatch::kLfoCutoffDepthOctaves;
+    vc.lfoPwmDepthNorm    = contValue(snap, slots_.lfoDepthPwm) * depthBoost
+                          * cal::dispatch::kLfoPwmDepthNorm;
+
     return vc;
 }
 
@@ -716,6 +768,34 @@ void Engine::applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noe
     // note below the reference lowers the cutoff and above it raises it (§1.2 keyboard track).
     const float kbdTrackDepth = contValue(snap, slots_.vcfKbdTrack);
 
+    // --- velocity routing (task 162): mw101.vel.{enable,depth}. When sensing is ON the
+    // per-note velocity scales the VCA (velVcaDepth folds it into a post-VCA gain) and opens
+    // the filter (velCutoffVolts = depth x velocity x kVelCutoffOctaves volts). Both ZERO when
+    // vel.enable is off so velocity has no effect with sensing disabled. The velocity itself is
+    // per-voice (recorded at noteOn), so velCutoffVolts is finished in the per-voice loop.
+    const bool  velOn    = choiceIndex(snap, slots_.velEnable) != 0;   // bool index 0/1
+    const float velDepth = velOn ? contValue(snap, slots_.velDepth) : 0.0f;
+
+    // --- pitch-bend routing (task 162): mw101.mod.{bend_dest,bend_range_*}. The bend RANGE
+    // (cents) per destination is decoded here; the live bend WHEEL value is NOT plumbed into
+    // the core seam (BlockContext has no continuous-controller state — PitchBend MidiEvents are
+    // dropped by toNoteEvent, and the MPE/MidiFrontEnd bend decode is plugin-side, a different
+    // task). With no live wheel the resolved bend offset (wheel x range) is ZERO, so bend
+    // produces no audible shift today; the dest/range decode + the routing arithmetic are in
+    // place so a future controller-seam task only supplies the live wheel value. -------------
+    const int   bendDest      = choiceIndex(snap, slots_.modBendDest);   // 0 VCO / 1 VCF / 2 Both
+    const float bendRangeVcoCents = contValue(snap, slots_.modBendRangeVco);
+    const float bendRangeVcfCents = contValue(snap, slots_.modBendRangeVcf);
+    constexpr float kBendWheel = 0.0f;   // no live wheel in the core seam (see above)
+    const float bendVcoVolts = (bendDest == 0 || bendDest == 2)
+        ? kBendWheel * (bendRangeVcoCents / 100.0f)
+          * static_cast<float>(cal::pitch::kVoltsPerCount)
+        : 0.0f;
+    const float bendVcfVolts = (bendDest == 1 || bendDest == 2)
+        ? kBendWheel * (bendRangeVcfCents / 100.0f)
+          * static_cast<float>(cal::pitch::kVoltsPerCount)
+        : 0.0f;
+
     // Apply to every ACTIVE voice (MONO drives exactly one; UNISON/POLY share the same VCO/
     // VCF/Env/VCA controls + a per-voice pitch and keyboard-track CV). The non-const voice is
     // taken through VoiceManager::voiceMutable (task 161 cleanup of the 160 const_cast smell);
@@ -748,6 +828,19 @@ void Engine::applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noe
             vc.kbdTrackCvVolts = kbdTrackDepth * noteDeltaCounts
                                * static_cast<float>(cal::pitch::kVoltsPerCount);
         }
+
+        // --- velocity (task 162): the per-voice velocity term. velVcaDepth folds velocity
+        // into a post-VCA gain inside the voice; velCutoffVolts opens the filter for a hard
+        // key (depth x velocity x kVelCutoffOctaves volts). Both are ZERO with sensing off
+        // (velDepth==0). Read THIS voice's recorded velocity. ---
+        const float vel = v.currentVelocity();
+        vc.velVcaDepth    = velDepth * cal::dispatch::kVelVcaDepthMax;
+        vc.velCutoffVolts = velDepth * vel * cal::dispatch::kVelCutoffOctaves;
+
+        // --- pitch-bend (task 162): the resolved per-dest bend CV (zero with no live wheel). ---
+        vc.bendVcoVolts = bendVcoVolts;
+        vc.bendVcfVolts = bendVcfVolts;
+
         v.applyControls(vc, chunkSamples);
     }
 }
