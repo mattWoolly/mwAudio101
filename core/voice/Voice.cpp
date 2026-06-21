@@ -104,6 +104,7 @@ void Voice::prepare(double sampleRate, int oversampleFactor,
     noiseLevel_ = 0.0f;
     vcaLevel_   = 0.8f;        // VCA output level back to the registry default (task 161)
     vcaVelScale_ = 1.0f;       // velocity->VCA scale back to neutral (task 162)
+    vcaExprScale_ = 1.0f;      // amp.expression scale back to unity (task 164)
     pendingNoteOnLegato_ = false;
     freshNoteOn_         = false;
     velocity_                = 1.0f;   // velocity routing back to neutral (task 162)
@@ -185,7 +186,9 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
     // oscillator. The Glide coefficient is a PER-SAMPLE one-pole, so it must be stepped once
     // per elapsed sample (not once per chunk) to reach the target in the configured TIME.
     glide_.setMode(c.glideMode);
-    glide_.setTimeSeconds(c.glideSeconds);
+    // var.glide variance (task 164) multiplies the glide time constant per-voice (identity
+    // 1.0 when vintage is off), so stacked/retriggered notes slew at subtly different rates.
+    glide_.setTimeSeconds(c.glideSeconds * c.glideTimeScale);
 
     // A note pressed from SILENCE (the voice was Idle at keypress, !pendingNoteOnLegato_)
     // has no prior pitch to glide FROM, so it SNAPS to its target regardless of glide mode
@@ -254,13 +257,18 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
 
     // --- assemble the oscillator-section control block (§7.2) ---------------------------
     // The pitch CV summed into the oscillator is the glided base note CV + the LFO vibrato
-    // term + the resolved pitch-bend term (bendVcoVolts; zero with no live wheel). Vibrato is
-    // NOT glided (fast modulation rides on top of the slewed base pitch). The PWM CV is the
-    // base width + the LFO PWM-sweep term, clamped to the valid [0,1] duty range.
+    // term + the resolved pitch-bend term (bendVcoVolts; zero with no live wheel) + the
+    // analog-character terms (task 164): the tune.a4 reference offset (pitchRefVolts, a global
+    // bias), the drift/cal/slop perturbation (pitchDriftVolts, cents->volts from the DriftModel),
+    // and the resolved MPE per-note bend (mpeBendVolts; zero with no live position ingress).
+    // All character terms are ZERO when vintage is off, so the default pitch is unchanged.
+    // Vibrato + drift ride on TOP of the slewed base pitch (not glided). The PWM CV is the base
+    // width + the LFO PWM-sweep term + the var.pw drift (pwDriftNorm), clamped to [0,1] duty.
     mw101::dsp::OscillatorSection::Controls oc{};
-    oc.vco.pitchCvVolts = pitchCv + lfoPitchVolts + c.bendVcoVolts;
+    oc.vco.pitchCvVolts = pitchCv + lfoPitchVolts + c.bendVcoVolts
+                        + c.pitchRefVolts + c.pitchDriftVolts + c.mpeBendVolts;
     oc.vco.footage      = c.footage;
-    oc.vco.pwmCvNorm    = std::clamp(c.pwmCvNorm + lfoPwmNorm, 0.0f, 1.0f);
+    oc.vco.pwmCvNorm    = std::clamp(c.pwmCvNorm + lfoPwmNorm + c.pwDriftNorm, 0.0f, 1.0f);
     oc.vco.aaMode       = qualityAaMode_;     // tier; section forces it onto all sources
     oc.subShape         = c.subShape;
     oc.aaMode           = qualityAaMode_;
@@ -292,7 +300,8 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
                          + c.kbdTrackCvVolts
                          + lfoCutoffOct
                          + c.velCutoffVolts
-                         + c.bendVcfVolts;
+                         + c.bendVcfVolts
+                         + c.cutoffDriftVolts;   // analog character (task 164): cal+drift+var.cutoff
     vcf_.setCutoffCv(cutoffCv);
     vcf_.setResonance(c.resonance01);
 
@@ -305,11 +314,13 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
     // aCoeff_ into the live coeff_), so a note that triggers before its A/D/S/R are pushed
     // would run the Attack at the stale prepared default — caching + applying in noteOn
     // fixes the attack-time-has-no-effect ordering without re-architecting the env.
+    // var.env_time variance (task 164) multiplies the A/D/R time constants per-voice (identity
+    // 1.0 when vintage is off); sustain is a level, NOT a time, so it is not scaled.
     mw101::dsp::EnvParams ep{};
-    ep.attackSec  = c.envAttackSec;
-    ep.decaySec   = c.envDecaySec;
+    ep.attackSec  = c.envAttackSec  * c.envTimeScale;
+    ep.decaySec   = c.envDecaySec   * c.envTimeScale;
     ep.sustain    = c.envSustain;
-    ep.releaseSec = c.envReleaseSec;
+    ep.releaseSec = c.envReleaseSec * c.envTimeScale;
     env_.setParams(ep);
     pendingEnv_    = ep;
     hasPendingEnv_ = true;
@@ -330,6 +341,11 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
     // into the amplitude" routing) — NOT into the OTA control taper, so the gate contour stays
     // intact. velocity_ was recorded at noteOn (task 162).
     vcaVelScale_ = (1.0f - c.velVcaDepth) + c.velVcaDepth * velocity_;
+
+    // --- amp.expression (task 164): cache the CC11 output scaler render() applies as a clean
+    // linear post-VCA amplitude scale (beside vcaLevel_ + vcaVelScale_). The param reaches the
+    // seam (schema default 1.0 == unity), so this is directly audible. ---
+    vcaExprScale_ = c.ampExpression;
 }
 
 void Voice::stageEnvParams(const mw101::dsp::EnvParams& ep) noexcept {
@@ -401,8 +417,9 @@ void Voice::render(float* outL, float* outR, int numSamples) noexcept {
         // reshape the OTA contour.
         const float ctrl = vcaGate_.tickControl(envLevel);
         // vcaLevel_ is the channel fader (mw101.vca.level); vcaVelScale_ folds in this voice's
-        // velocity (task 162) — both clean linear amplitude scales after the OTA taper.
-        s = vca_.process(s, ctrl) * vcaLevel_ * vcaVelScale_;
+        // velocity (task 162); vcaExprScale_ folds in the amp.expression CC11 scaler (task 164)
+        // — all clean linear amplitude scales after the OTA taper, so none reshapes the contour.
+        s = vca_.process(s, ctrl) * vcaLevel_ * vcaVelScale_ * vcaExprScale_;
 
         // --- steal fade (§6.4): ramp stealGain_ 1 -> 0, then self-transition Idle ---
         if (state_ == VoiceState::Stealing) {
