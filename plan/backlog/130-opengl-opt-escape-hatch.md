@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 130
 title: OpenGL opt-in escape hatch (OFF by default)
-status: in-review
+status: done
 depends-on: [020, 006, 114]
 component: ui
 estimated-size: S

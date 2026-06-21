@@ -164,7 +164,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 15 | 125 | TransportModeBar (arp/seq mode, tempo-sync, run/hold, scale + reduce-motion toggles) | ui | M | 020, 111, 087, 006, 109, 117 | done |
 | 15 | 128 | PresetBrowser thin view over processor PresetManager | ui | M | 119, 020, 111, 006, 106, 109, 114 | done |
 | 15 | 129 | StatusBanner (non-modal load-failure + disclaimer surface) | ui | S | 111, 119, 006, 106, 114 | done |
-| 15 | 130 | OpenGL opt-in escape hatch (OFF by default) | ui | S | 020, 006, 114 | todo |
+| 15 | 130 | OpenGL opt-in escape hatch (OFF by default) | ui | S | 020, 006, 114 | done |
 | 15 | 136 | Wire MwAudioProcessor: engine + frontend + capability shim + latency reporter | app | M | 111, 104, 113, 020, 118 | done |
 | 15 | 137 | Per-platform format resolution + configure-time validator gate (Formats.cmake) | infra | M | 001, 113 | todo |
 | 15 | 138 | Locate/declare validator targets (Validators.cmake) | infra | M | 001, 113 | todo |
