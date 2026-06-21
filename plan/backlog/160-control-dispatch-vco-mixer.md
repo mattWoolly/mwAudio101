@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 160
 title: Control-dispatch seam + VCO/source-mixer — Engine reads ctx.params and the oscillator+mixer respond (KEYSTONE)
-status: in-review
+status: done
 depends-on: [118, 118c, 070, 071, 073, 102b]
 component: core
 estimated-size: L

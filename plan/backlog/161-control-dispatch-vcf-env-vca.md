@@ -44,3 +44,7 @@ frozen at INIT defaults, and the VCA ignores level + the env/gate select.
 cmake --preset default && cmake --build --preset default
 ctest --preset default -R dispatch_vcf --no-tests=error --output-on-failure
 ```
+
+## Note (from 160 QA LOW)
+
+160 reached the voice via `const_cast<Voice&>(voices_.voice(vi))` (legal — Voice is non-const — but a smell). While you are in this dispatch path, add a non-const `VoiceManager::voiceMutable(int)` accessor (a one-line VoiceManager.h add) and replace 160's const_cast at the call site with it. This is a small allowed cleanup within the dispatch work.
