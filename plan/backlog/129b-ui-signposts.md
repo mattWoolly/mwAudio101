@@ -11,7 +11,7 @@ depends-on: [129, 112, 115]
 component: ui
 estimated-size: S
 stream: ui
-tag: ui
+tag: ui_signpost
 ---
 
 ## Objective
