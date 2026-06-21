@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 162
 title: Control-dispatch — LFO (rate/shape/dest/depths) + full modulation routing (vel/bend/mod-wheel/glide-mode)
-status: in-review
+status: done
 depends-on: [160, 161]
 component: core
 estimated-size: M
