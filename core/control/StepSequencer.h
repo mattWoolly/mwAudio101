@@ -77,6 +77,21 @@ public:
     int count() const noexcept { return count_; }          // filled slots (<= 100)
     const SeqBuffer& buffer() const noexcept { return steps_; }
 
+    // The RAW play cursor: the slot `advanceOnEdge()` will play on the NEXT clock edge
+    // (0..count_-1, or 0 when empty). This is the StepSequencer's own deterministic
+    // (playPos+1)%count state — exposed so the engine/telemetry need not reconstruct it
+    // [docs/design/05 §6.3/§6.5; task 118d].
+    [[nodiscard]] int playPos() const noexcept { return playPos_; }
+
+    // The REAL current sequencer step: the slot the MOST-RECENT clock edge actually
+    // played (== the SeqPlayResult.slotIndex of the last advanceOnEdge), or -1 if no
+    // edge has played since the last prepare()/clear()/loadBuffer()/resetToStart(). This
+    // is the authoritative live playhead the UI seq-grid highlights — it is read straight
+    // from the StepSequencer, so it can NEVER diverge from the real playhead when a
+    // clock-reset-on-keypress rewinds playback (the 118c reconstructed-mirror divergence
+    // this closes) [docs/design/05 §6.3; task 118d closes the 111c/118c QA MEDIUM].
+    [[nodiscard]] int currentSlot() const noexcept { return lastPlayedSlot_; }
+
     // Preset restore: copy a full buffer + filled count (clamped to kMaxSteps),
     // and re-phase playback to the start [§6.5].
     void loadBuffer(const SeqBuffer& b, int count) noexcept;
@@ -89,6 +104,11 @@ private:
     SeqBuffer steps_{};
     int count_ = 0;
     int playPos_ = 0;
+    // The slot the most-recent advanceOnEdge() played (the REAL live playhead the UI
+    // highlights), -1 == none played since the last reset/clear/load/resetToStart. The
+    // engine/telemetry read THIS rather than reconstruct it, so it tracks the playhead
+    // exactly across a clock-reset-on-keypress rewind (task 118d) [docs/design/05 §6.3].
+    int lastPlayedSlot_ = -1;
     bool recording_ = false;
     bool playing_ = false;
 };

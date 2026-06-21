@@ -272,10 +272,26 @@ void MwAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
 
     // 8c. PUBLISH one audio->GUI telemetry frame for this block via the 107 SPSC Producer
     //     — a seqlock byte copy: NO heap alloc, NO lock [docs/design/10-ui.md §8.3, §8.4;
-    //     docs/design/00 §5.4; ADR-015 C5; ADR-001 C3/C4]. snapshot() math is pure
-    //     arithmetic over the just-rendered output (post-VCA peak level per channel) plus
-    //     the monotonic display step. The Snapshot POD is filled on the stack (no alloc)
-    //     and pushed by value.
+    //     docs/design/00 §5.4; ADR-015 C5; ADR-001 C3/C4]. The Snapshot POD is filled on the
+    //     stack (no alloc) and pushed by value. snapshot() math is pure arithmetic over the
+    //     just-rendered output + a handful of engine getters.
+    //
+    //     Task 118d COMPLETES this publish (it previously filled ONLY vcaLevelL/R + a
+    //     MONOTONIC display step, leaving scope[256], vcfCutoffDisplay, lfoPhase at ZERO so
+    //     127's ScopeMeterOverlay rendered a FLAT scope + empty cutoff indicator). Now it fills:
+    //       - vcaLevelL/R       : the post-VCA peak level per channel (as before);
+    //       - scope[kScopePoints]: a DECIMATED tap of the post-VCA rendered wave for this block
+    //                              (every kScopeDecimation-th sample of mono (L+R)/2), so the
+    //                              UI scope shows the live waveform instead of a flat line;
+    //       - vcfCutoffDisplay  : the dispatched/modulated cutoff (engine_.currentCutoffDisplay,
+    //                              0..1) so the cutoff indicator tracks the filter;
+    //       - lfoPhase          : the engine LFO display phase (engine_.currentLfoPhase), which
+    //                              advances while the LFO runs — the §8.4 mod-source indicator;
+    //       - seqStep           : the REAL live sequencer slot (engine_.currentSeqStep), the
+    //                              actual playhead the SequencerGrid (126) highlights — replacing
+    //                              the 111c monotonic counter (closes the 111c/118c QA MEDIUM).
+    //     RT-safe: getters are plain reads, the scope decimation is arithmetic over the output
+    //     buffer; NO heap alloc, NO lock added (the publish is already on the audio thread).
     mw::ui::Telemetry::Snapshot frame{};
     float peakL = 0.0f;
     float peakR = 0.0f;
@@ -290,10 +306,24 @@ void MwAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
             if (al > peakL) peakL = al;
             if (ar > peakR) peakR = ar;
         }
+
+        // Decimated scope tap: walk the block in kScopeDecimation strides, writing the mono
+        // (L+R)/2 sample at each stride into the next scope point until the block is consumed
+        // or the fixed kScopePoints array fills. A short block simply fills fewer points (the
+        // remainder stays at the zero-initialized default); a long block is decimated to fit.
+        constexpr int kPoints = mw::cal::telemetry::kScopePoints;
+        constexpr int kStride = mw::cal::telemetry::kScopeDecimation > 0
+                                    ? mw::cal::telemetry::kScopeDecimation : 1;
+        int p = 0;
+        for (int n = 0; n < numFrames && p < kPoints; n += kStride, ++p)
+            frame.scope[static_cast<std::size_t>(p)] = 0.5f * (l[n] + r[n]);
     }
-    frame.vcaLevelL = peakL;
-    frame.vcaLevelR = peakR;
-    frame.seqStep   = ++telemetrySeqStep_;   // monotonic display step (§8.4 indicator)
+    frame.vcaLevelL        = peakL;
+    frame.vcaLevelR        = peakR;
+    frame.vcfCutoffDisplay = engine_.currentCutoffDisplay();   // dispatched/modulated cutoff, 0..1
+    frame.lfoPhase         = engine_.currentLfoPhase();        // advancing LFO display phase (§8.4)
+    frame.seqStep          = static_cast<std::uint64_t>(       // REAL live playhead slot (118d);
+        static_cast<std::int64_t>(engine_.currentSeqStep()));  // -1 (no step) widens to all-ones
     telemetryProducer_.push(frame);           // RT-safe: seqlock byte copy, no alloc/lock.
 
     // 9. Align the (constant) configuration up to the reported worst-case latency so the

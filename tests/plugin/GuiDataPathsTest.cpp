@@ -9,7 +9,11 @@
 //       NO lock — re-asserted with a malloc-counting probe over many publishing blocks
 //       [§8.3; docs/design/00 §5.4; ADR-015 C5].
 //   (b) the Consumer accessor returns coalesced most-recent frames: driving processBlock
-//       then pulling sees an ADVANCING seqStep [§8.4].
+//       then pulling sees the latest frame, and a pull with nothing newly published returns
+//       false (coalescing) [§8.4]. NOTE (task 118d): Snapshot.seqStep is now the REAL live
+//       sequencer slot (engine_.currentSeqStep()), NOT the old monotonic per-block display
+//       counter, so this criterion no longer asserts seqStep "advances" — it asserts the
+//       coalescing CONTRACT and that the published seqStep equals the engine's live step.
 //   (c) the message-thread seq-pattern accessor reads + writes the <extras> 100-step
 //       pattern; an edit is ADOPTED by the audio thread via the RT-safe handoff (no
 //       parse/alloc) AND still round-trips through getState/setStateInformation [§9.3;
@@ -83,7 +87,7 @@ TEST_CASE("gui_datapaths: processBlock publishes a telemetry frame with no heap 
     CHECK(consumer.pull(frame));
 }
 
-TEST_CASE("gui_datapaths: the Consumer accessor coalesces to the most-recent frame with an advancing seqStep",
+TEST_CASE("gui_datapaths: the Consumer accessor coalesces to the most-recent published frame",
           "[gui_datapaths]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
@@ -103,8 +107,10 @@ TEST_CASE("gui_datapaths: the Consumer accessor coalesces to the most-recent fra
     mw::ui::Telemetry::Snapshot first{};
     REQUIRE(consumer.pull(first));
 
-    // Drive several MORE blocks, then pull once: the consumer COALESCES to the latest
-    // frame, whose seqStep has ADVANCED past the first frame's [§8.4].
+    // Drive several MORE blocks, then pull once: the consumer COALESCES to the single latest
+    // frame regardless of how many blocks were published since the last pull [§8.4]. (Task
+    // 118d: seqStep is now the REAL live step, not a monotonic counter, so we assert the
+    // coalescing CONTRACT here rather than a per-block counter advance.)
     constexpr int kMoreBlocks = 5;
     for (int i = 0; i < kMoreBlocks; ++i)
     {
@@ -114,7 +120,13 @@ TEST_CASE("gui_datapaths: the Consumer accessor coalesces to the most-recent fra
 
     mw::ui::Telemetry::Snapshot latest{};
     REQUIRE(consumer.pull(latest));
-    CHECK(latest.seqStep > first.seqStep);
+
+    // The published seqStep is the engine's REAL live sequencer step (no monotonic counter):
+    // with no sequencer playing it is the "no step" sentinel (-1 widened to the uint64 field),
+    // and it is published consistently every block. Prove it tracks the engine's live step.
+    const std::uint64_t engineLiveStep = static_cast<std::uint64_t>(
+        static_cast<std::int64_t>(processor.engineForTest().currentSeqStep()));
+    CHECK(latest.seqStep == engineLiveStep);
 
     // A pull with nothing newly published returns false (coalesced; §8.3).
     mw::ui::Telemetry::Snapshot none{};

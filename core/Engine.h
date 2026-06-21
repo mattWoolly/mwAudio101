@@ -110,12 +110,29 @@ public:
 
     // The LIVE current sequencer step the playhead last advanced to (the slot the most
     // recent clock H->L edge played), for telemetry. -1 == no step has played since
-    // prepare()/reset() or the sequencer is not playing. This is the REAL playhead slot,
-    // NOT a monotonic display counter — it closes the 111c QA MEDIUM where the published
-    // Snapshot.seqStep was a display counter rather than the live step (the processor's
-    // 1-line publish update to read this is the out-of-scope follow-up 118d). A plain
-    // read of a member written only on the single-threaded audio path; safe for tests.
+    // prepare()/reset() or the sequencer is not playing. This is the REAL playhead slot
+    // read STRAIGHT from the StepSequencer (StepSequencer::currentSlot()), NOT a monotonic
+    // display counter and NOT a reconstructed mirror — so it tracks the playhead exactly
+    // even when a clock-reset-on-keypress rewinds the sequencer to slot 0 (the 118c
+    // reconstructed-mirror divergence this closes). Closes the 111c/118c QA MEDIUM where
+    // the published Snapshot.seqStep was a display counter rather than the live step; the
+    // processor publishes THIS into Snapshot.seqStep (task 118d). A plain read of a member
+    // written only on the single-threaded audio path; safe for tests.
     [[nodiscard]] int currentSeqStep() const noexcept { return currentSeqStep_; }
+
+    // The dispatched/modulated VCF cutoff as a 0..1 display value (the mw101.vcf.cutoff pot
+    // position the §1.2 filter tracks), for the §8.4 telemetry scope cutoff indicator. 0 until
+    // the first param dispatch / after reset(). A plain read of a member written only on the
+    // single-threaded audio path (task 118d); safe for tests [docs/design/10-ui.md §8.4].
+    [[nodiscard]] float currentCutoffDisplay() const noexcept { return cutoffDisplay_; }
+
+    // The LFO display phase: a deterministic fixed-point [0,2^32) accumulator advanced once
+    // per control tick by the dispatched LFO rate, for the §8.4 telemetry mod-source
+    // indicator. It ADVANCES whenever the LFO rate is non-zero (wrapping on uint32 overflow)
+    // and is display-only — the per-voice audio LFOs own their own phase and are unchanged.
+    // 0 until the first param dispatch / after reset(). A plain read of a member written only
+    // on the single-threaded audio path (task 118d) [docs/design/10-ui.md §8.4].
+    [[nodiscard]] std::uint32_t currentLfoPhase() const noexcept { return lfoPhase_; }
 
     // Expose the FX latency the FX chain reports (the constant FX group delay). The
     // plugin sums this with the per-voice zone delay for setLatencySamples (out of
@@ -235,14 +252,19 @@ private:
     // (-1 == none), so a step transition issues the right NoteOff(prev)/NoteOn(new). Set
     // on the single-threaded audio path only.
     int seqHeldNote_   = -1;
-    // The live current sequencer step (the slot the last edge played), -1 if none.
+    // The live current sequencer step (the slot the last edge played), -1 if none. Latched
+    // from the StepSequencer's OWN currentSlot() (the real playhead) each seq edge, NOT a
+    // reconstructed mirror — so it tracks a clock-reset-on-keypress rewind exactly (task 118d
+    // closes the 111c/118c QA MEDIUM) [docs/design/05 §6.3].
     int currentSeqStep_ = -1;
-    // The next slot the StepSequencer will play, mirrored from its deterministic
-    // (playPos+1)%count advance so currentSeqStep_ is the REAL playhead slot, not a free
-    // display counter (closes 111c). Re-synced to 0 on prepare/reset and on a
-    // not-playing -> playing transition (the StepSequencer rewinds playPos to 0 there).
-    int seqPlayMirror_ = 0;
-    bool seqWasPlaying_ = false;
+    // --- audio->GUI telemetry display latches (task 118d) ---------------------------------
+    // The dispatched/modulated cutoff as a 0..1 display value + a deterministic fixed-point
+    // LFO display phase, latched once per control tick in applyParamSnapshot from the SAME
+    // decoded values the per-voice dispatch uses, surfaced to the processor for the §8.4
+    // telemetry publish. Display-only; the audio path is unchanged. Plain members written
+    // only on the single-threaded audio path; no alloc, no lock [docs/design/10-ui.md §8.4].
+    float         cutoffDisplay_ = 0.0f;
+    std::uint32_t lfoPhase_      = 0;
 
     // Per-voice note-serial shadow for the analog-character note-on draw (task 164). The
     // VoiceManager stamps a fresh monotonic noteSerial on every allocation; when a voice's

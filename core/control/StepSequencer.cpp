@@ -19,6 +19,7 @@ void StepSequencer::prepare() noexcept {
     steps_ = SeqBuffer{};   // zero all 100 slots (trivially-copyable; no alloc)
     count_ = 0;
     playPos_ = 0;
+    lastPlayedSlot_ = -1;   // no step has played yet (task 118d live-playhead authority)
     recording_ = false;
     playing_ = false;
 }
@@ -64,6 +65,7 @@ void StepSequencer::recordTie(int pitch6) noexcept {
 void StepSequencer::clear() noexcept {
     count_ = 0;
     playPos_ = 0;
+    lastPlayedSlot_ = -1;   // nothing left to have played (task 118d)
 }
 
 void StepSequencer::setPlay(bool on) noexcept {
@@ -71,7 +73,12 @@ void StepSequencer::setPlay(bool on) noexcept {
 }
 
 void StepSequencer::resetToStart() noexcept {
+    // Clock-reset re-phase (Clock §7.5): rewind playback to slot 0 AND clear the
+    // last-played slot so the live playhead reads "no step played" until the next edge
+    // plays slot 0. This is exactly the rewind path the 118c reconstructed mirror could
+    // not observe; reading lastPlayedSlot_ here makes currentSlot() track it (task 118d).
     playPos_ = 0;
+    lastPlayedSlot_ = -1;
 }
 
 SeqPlayResult StepSequencer::advanceOnEdge() noexcept {
@@ -84,6 +91,10 @@ SeqPlayResult StepSequencer::advanceOnEdge() noexcept {
     const SeqStep step = steps_[static_cast<std::size_t>(playPos_)];
     r.slotIndex = playPos_;
     r.pitch6 = step.pitch();
+    // Latch the slot this edge plays as the REAL live playhead (task 118d). The engine/
+    // telemetry read currentSlot() instead of reconstructing the playhead, so it stays
+    // exact across a resetToStart() rewind.
+    lastPlayedSlot_ = playPos_;
 
     if (step.isRest()) {
         // REST drops the gate (§6.4 C16). No tie, no retrigger of a sounding note.
@@ -117,6 +128,7 @@ void StepSequencer::loadBuffer(const SeqBuffer& b, int count) noexcept {
         count = kMaxSteps;
     count_ = count;
     playPos_ = 0;
+    lastPlayedSlot_ = -1;   // a freshly-loaded pattern has played no step yet (task 118d)
 }
 
 } // namespace mw::control
