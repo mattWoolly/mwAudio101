@@ -63,3 +63,7 @@ cmake --preset default
 cmake --build --preset default
 ctest --preset default -R qa --no-tests=error
 ```
+
+## Audit item (from 162e QA, 2026-06-21) — LFO routing fidelity
+
+The as-built 162 dispatch GATES lfo.depth_{pitch,pwm,cutoff} behind a single lfo.dest switch (Voice.cpp ~252-256: only the selected destination gets the LFO), but docs/design/05 §3.1/§3.3's routing table marks the per-destination LFO depths as 'always' active (the SH-101 LFO can modulate VCO pitch AND PWM AND VCF cutoff simultaneously, each by its own depth knob; lfo.dest may be only an emphasis selector per doc 06 line 381, NOT a single-destination mux). The audit must determine whether single-dest gating is a fidelity REGRESSION vs the design's simultaneous multi-destination routing, and if so file a fix. (162e's vcf.lfo_mod is correctly always-on; the question is the three lfo.depth_* legs.)

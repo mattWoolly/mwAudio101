@@ -19,6 +19,7 @@
 [dispatch_character]
 [dispatch_complete]
 [dispatch_fx]
+[dispatch_gap]
 [dispatch_lfo]
 [dispatch_vcf]
 [dispatch_vco]
