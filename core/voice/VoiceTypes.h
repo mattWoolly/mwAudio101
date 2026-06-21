@@ -84,6 +84,12 @@ struct NoteDecision {
     bool gate       = false; // gate asserted?
     bool retrigger  = false; // fire ADSR from trigger state this tick?
     bool clockReset = false; // assert CLOCK RESET (LFO/ARP re-phase) [research/07 §5.2]
+    // The velocity [0,1] of the WINNING (active) note (task 162b velocity-ingress). Carried
+    // from the held-key record through resolve() so the VoiceManager hands the REAL per-note
+    // velocity to Voice::noteOn instead of the hardcoded 1.0; the 162 dispatch routes it to
+    // VCA/VCF when mw101.vel.enable is on [ADR-016 R-2]. Neutral 1.0 when no note is held
+    // (gate off) so a gate-off tick never disturbs the recorded velocity.
+    float velocity  = 1.0f;
 };
 
 } // namespace mw
