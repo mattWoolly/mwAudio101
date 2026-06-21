@@ -62,6 +62,7 @@
 [modseqtypes]
 [module-class-exact]
 [noise]
+[note_ingress]
 [os-fir]
 [os-iir]
 [os-zone]
