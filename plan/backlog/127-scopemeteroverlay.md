@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 127
 title: ScopeMeterOverlay (telemetry-driven, reduce-motion gated)
-status: todo
+status: in-review
 depends-on: [006, 106, 107, 115, 111c]
 component: ui
 estimated-size: S
