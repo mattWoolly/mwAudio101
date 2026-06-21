@@ -21,6 +21,7 @@
 
 #include "calibration/EnvLfoVcaConstants.h"
 #include "calibration/VoiceDriftConstants.h"
+#include "calibration/ControlDispatchLfoConstants.h"   // LFO depth-fade-in cap (task 162)
 
 namespace mw {
 
@@ -102,8 +103,11 @@ void Voice::prepare(double sampleRate, int oversampleFactor,
     subLevel_   = 0.0f;
     noiseLevel_ = 0.0f;
     vcaLevel_   = 0.8f;        // VCA output level back to the registry default (task 161)
+    vcaVelScale_ = 1.0f;       // velocity->VCA scale back to neutral (task 162)
     pendingNoteOnLegato_ = false;
     freshNoteOn_         = false;
+    velocity_                = 1.0f;   // velocity routing back to neutral (task 162)
+    lfoDelayElapsedSamples_  = 0;      // LFO depth fade-in counter cleared (task 162)
     pendingEnv_    = mw101::dsp::EnvParams{};   // INIT ADSR until the seam dispatches (task 161)
     hasPendingEnv_ = false;
     setStereoPan(0.0f);
@@ -116,8 +120,18 @@ void Voice::prepare(double sampleRate, int oversampleFactor,
 }
 
 void Voice::noteOn(int midiNote, float velocity, bool retrigger) noexcept {
-    (void) velocity;   // velocity routing (VCA/VCF) owned by ModRouting; passed through.
+    // Velocity is now ROUTED (task 162): record the per-note velocity [0,1] so the dispatch
+    // builds the VCA/VCF velocity terms (mw101.vel.{enable,depth}). Before 162 it was
+    // discarded; the Engine reads it back via currentVelocity().
+    velocity_ = std::clamp(velocity, 0.0f, 1.0f);
     currentNote_ = midiNote;
+
+    // LFO delay (task 162): a key restarts the LFO depth fade-in only when the voice was
+    // SILENT (a fresh note from idle, like the glide snap rule) — a legato re-press keeps
+    // the LFO swell that was already in progress. The fresh-from-idle reset is finalized in
+    // the first applyControls after this keypress (where pendingNoteOnLegato_ is consumed).
+    if (state_ == VoiceState::Idle)
+        lfoDelayElapsedSamples_ = 0;
 
     // legato = a note was already sounding (drives the glide slew-vs-snap rule). The VCO
     // pitch CV is owned by the ADR-028 dispatch (volts domain), so noteOn no longer seeds
@@ -196,11 +210,57 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
     for (int n = 0; n < steps; ++n)
         pitchCv = glide_.nextValue();
 
+    // --- LFO (task 162): advance the single per-voice LFO at the control-tick cadence and
+    // route its bipolar [-1,1] output to the dispatched destination. The LFO is configured
+    // (rate/shape) and advanced HERE (advanceSamples steps), then sampled ONCE — the same
+    // reconciliation the glide uses. The old per-sample lfo_.tick() in render() (which ticked
+    // the LFO but routed it NOWHERE — the LFO analogue of the discarded-glide bug) is removed,
+    // so the LFO advances exactly once per tick and its output modulates a real destination.
+    // The LFO is a control-rate modulator by design (docs/design/03 §3.1 "advances on the
+    // control-rate tick"); sampling it once per chunk + summing into the per-tick CVs gives a
+    // smooth vibrato/wobble/PWM-sweep at the chunk cadence (<= kRenderBlock). -----------------
+    lfo_.setRateHz(c.lfoRateHz);
+    lfo_.setShape(c.lfoShape);
+    float lfoOut = lfo_.value();
+    for (int n = 0; n < steps; ++n)
+        lfoOut = lfo_.tick();
+
+    // LFO depth fade-in (mw101.lfo.delay): ramp a 0->1 depth scale over lfoDelaySec from the
+    // keypress so a held note's modulation swells in. delaySamples == 0 => instant full depth.
+    // Bounded integer counter; the elapsed count saturates at the delay length.
+    const double delaySamples = static_cast<double>(c.lfoDelaySec) * sampleRate_;
+    float lfoDelayScale = 1.0f;
+    if (delaySamples > 0.0) {
+        const double elapsed = static_cast<double>(lfoDelayElapsedSamples_);
+        lfoDelayScale = (elapsed >= delaySamples)
+                            ? 1.0f
+                            : static_cast<float>(elapsed / delaySamples);
+    }
+    // Advance the elapsed counter by this chunk's samples (saturating well below overflow).
+    lfoDelayElapsedSamples_ += static_cast<std::uint32_t>(steps);
+
+    const float lfoEff = lfoOut * lfoDelayScale;   // delayed bipolar LFO output
+
+    // Route to EXACTLY ONE destination per lfo.dest (the single MOD switch). Each term is the
+    // bipolar LFO times the per-dest depth (already scaled to volts/octaves/norm by the Engine).
+    float lfoPitchVolts = 0.0f;     // -> summed into the pitch CV (vibrato)
+    float lfoCutoffOct  = 0.0f;     // -> summed into the cutoff CV (wobble)
+    float lfoPwmNorm    = 0.0f;     // -> summed into the PWM CV (PWM sweep)
+    switch (c.lfoDest) {
+        case 1:  lfoCutoffOct = lfoEff * c.lfoCutoffDepthOct;   break;  // Filter
+        case 2:  lfoPwmNorm   = lfoEff * c.lfoPwmDepthNorm;     break;  // PWM
+        default: lfoPitchVolts = lfoEff * c.lfoPitchDepthVolts; break;  // Pitch
+    }
+
     // --- assemble the oscillator-section control block (§7.2) ---------------------------
+    // The pitch CV summed into the oscillator is the glided base note CV + the LFO vibrato
+    // term + the resolved pitch-bend term (bendVcoVolts; zero with no live wheel). Vibrato is
+    // NOT glided (fast modulation rides on top of the slewed base pitch). The PWM CV is the
+    // base width + the LFO PWM-sweep term, clamped to the valid [0,1] duty range.
     mw101::dsp::OscillatorSection::Controls oc{};
-    oc.vco.pitchCvVolts = pitchCv;
+    oc.vco.pitchCvVolts = pitchCv + lfoPitchVolts + c.bendVcoVolts;
     oc.vco.footage      = c.footage;
-    oc.vco.pwmCvNorm    = c.pwmCvNorm;
+    oc.vco.pwmCvNorm    = std::clamp(c.pwmCvNorm + lfoPwmNorm, 0.0f, 1.0f);
     oc.vco.aaMode       = qualityAaMode_;     // tier; section forces it onto all sources
     oc.subShape         = c.subShape;
     oc.aaMode           = qualityAaMode_;
@@ -221,10 +281,18 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
     // over time as the dispatch fires each chunk (a control-rate envelope-follow — the
     // filter cutoff is a control-rate setter, not a per-sample one). Pure arithmetic +
     // one table-backed setter; noexcept, alloc-free [docs/design/02 §5.2; ADR-003 F-08].
+    // The summed cutoff CV adds the task-162 modulators on top of the 161 terms: the LFO
+    // wobble (lfoCutoffOct, octaves of CV, when dest=Filter), the velocity->cutoff term
+    // (velCutoffVolts, a hard key opens the filter when vel.enable), and the resolved
+    // pitch-bend->VCF term (bendVcfVolts; zero with no live wheel). All are volts in the same
+    // 1 V/oct CV frame the filter consumes [docs/design/02 §1.2; ADR-028 item 3].
     const float envLevel = env_.level();
     const float cutoffCv = c.cutoffBaseCvVolts
                          + c.envModOctaves * envLevel
-                         + c.kbdTrackCvVolts;
+                         + c.kbdTrackCvVolts
+                         + lfoCutoffOct
+                         + c.velCutoffVolts
+                         + c.bendVcfVolts;
     vcf_.setCutoffCv(cutoffCv);
     vcf_.setResonance(c.resonance01);
 
@@ -253,6 +321,15 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
     // (which would distort the contour shape) [docs/design/03 §4.4].
     vcaGate_.setMode(c.vcaMode);
     vcaLevel_ = c.vcaLevel;
+
+    // --- velocity->VCA (task 162): fold this voice's velocity into a clean post-VCA gain --
+    // scale = (1 - depth) + depth*velocity, so depth 0 => 1.0 (velocity has no effect) and
+    // depth 1 => the velocity itself (a soft key plays softer, a hard key full). velVcaDepth
+    // is ZERO when vel.enable is off (the Engine zeroes it), so sensing-off keeps scale 1.0.
+    // Applied in render() as a linear amplitude scale beside vcaLevel_ (the §5 "velocity folded
+    // into the amplitude" routing) — NOT into the OTA control taper, so the gate contour stays
+    // intact. velocity_ was recorded at noteOn (task 162).
+    vcaVelScale_ = (1.0f - c.velVcaDepth) + c.velVcaDepth * velocity_;
 }
 
 void Voice::stageEnvParams(const mw101::dsp::EnvParams& ep) noexcept {
@@ -295,10 +372,12 @@ void Voice::render(float* outL, float* outR, int numSamples) noexcept {
     for (int i = 0; i < numSamples; ++i) {
         // --- per-sample modulation (the blocks own their internal DSP) ---
         const float envLevel = env_.tick();
-        lfo_.tick();
-        // NOTE: the VCO pitch CV glide is advanced ONCE per control tick in applyControls
-        // (the ADR-028 dispatch seam), NOT per sample here — the old per-sample
-        // glide_.nextValue() call was a DISCARD bug (§4.2) and is removed (task 160).
+        // NOTE: BOTH the VCO pitch CV glide AND the LFO are advanced ONCE per control tick in
+        // applyControls (the ADR-028 dispatch seam), NOT per sample here. The old per-sample
+        // glide_.nextValue() (task 160) and lfo_.tick() (task 162) calls modulated NOTHING
+        // (the LFO output was discarded) — both DISCARD bugs (§4.2), now removed. The LFO is a
+        // control-rate modulator (docs/design/03 §3.1) summed into the per-tick pitch/cutoff/
+        // PWM CVs in applyControls.
 
         // --- signal path: VCO+sub+noise -> source mixer -> VCF -> VCA ---
         // §4.1 SOURCE MIXER (task 160): sum ALL four raw sources by their level params
@@ -321,7 +400,9 @@ void Voice::render(float* outL, float* outR, int numSamples) noexcept {
         // channel-fader scale (mw101.vca.level), applied after the taper so it does not
         // reshape the OTA contour.
         const float ctrl = vcaGate_.tickControl(envLevel);
-        s = vca_.process(s, ctrl) * vcaLevel_;
+        // vcaLevel_ is the channel fader (mw101.vca.level); vcaVelScale_ folds in this voice's
+        // velocity (task 162) — both clean linear amplitude scales after the OTA taper.
+        s = vca_.process(s, ctrl) * vcaLevel_ * vcaVelScale_;
 
         // --- steal fade (§6.4): ramp stealGain_ 1 -> 0, then self-transition Idle ---
         if (state_ == VoiceState::Stealing) {

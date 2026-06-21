@@ -116,8 +116,42 @@ struct VoiceControls {
     float                vcaLevel = 0.8f;
     mw101::dsp::VcaMode  vcaMode  = mw101::dsp::VcaMode::Env;
 
-    // 162 extends here (LFO rate/shape/depth/dest, full modulation routing) behind the
-    // same applyControls call.
+    // --- LFO + modulation routing (task 162) — the MOD section finally modulates its
+    // destination + velocity opens the VCA/VCF. The single per-voice LFO is configured
+    // here (rate/shape) and ADVANCED at the control-tick cadence in applyControls (the
+    // same reconciliation the glide uses: the old per-sample lfo_.tick() in render() is
+    // REMOVED so the LFO is sampled exactly once per tick and routed). Its bipolar [-1,1]
+    // output is scaled by the per-dest depth and SUMMED into the existing 160/161 CVs:
+    //   dest=Pitch  -> + lfoOut * lfoPitchDepthVolts   into the pitch CV (vibrato)
+    //   dest=Filter -> + lfoOut * lfoCutoffDepthOct     into the cutoff CV (wobble)
+    //   dest=Pwm    -> + lfoOut * lfoPwmDepthNorm       into the PWM CV (PWM sweep)
+    // lfoDelaySec fades the depth in over time from the keypress; the effective depths
+    // already fold in the mod.lfo_mod_wheel routing param (the live wheel POSITION is not
+    // in the core seam — see Engine.cpp). ---
+    float                lfoRateHz       = 5.0f;
+    mw101::dsp::LfoShape lfoShape        = mw101::dsp::LfoShape::SmoothTri;
+    int                  lfoDest         = 0;     // 0 Pitch / 1 Filter / 2 PWM (decoded enum)
+    float                lfoPitchDepthVolts = 0.0f;  // peak pitch-CV swing at this depth (volts)
+    float                lfoCutoffDepthOct  = 0.0f;  // peak cutoff-CV swing at this depth (octaves)
+    float                lfoPwmDepthNorm    = 0.0f;  // peak PWM-CV swing at this depth (norm)
+    float                lfoDelaySec        = 0.0f;  // LFO depth fade-in time from keypress (s)
+
+    // --- velocity routing (task 162) — mw101.vel.{enable,depth}. The per-note velocity is
+    // held in the Voice (from noteOn). velVcaDepth folds velocity into the VCA control so a
+    // soft key plays quieter; velCutoffVolts is the per-voice velocity->cutoff CV term summed
+    // into the cutoff CV (a hard key opens the filter). Both are ZERO when vel.enable is off
+    // (the Engine zeroes them), so velocity has no effect with sensing disabled. ---
+    float                velVcaDepth    = 0.0f;   // 0 => velocity does not scale the VCA
+    float                velCutoffVolts = 0.0f;   // per-voice velocity->cutoff CV (volts)
+
+    // --- pitch-bend routing (task 162) — mw101.mod.{bend_dest,bend_range_vco,bend_range_vcf}.
+    // The bend RANGE (cents) per destination, decoded from the params; the live bend WHEEL
+    // value is not present in the core seam (BlockContext carries no continuous-controller
+    // state — see Engine.cpp), so these carry the decoded range and the resolved bend offset
+    // is bendWheel x range. With no wheel the offsets are zero (no audible bend) but the
+    // routing math + range decode are in place for when the controller seam lands. ---
+    float                bendVcoVolts   = 0.0f;   // resolved pitch-bend -> VCO CV (volts)
+    float                bendVcfVolts   = 0.0f;   // resolved pitch-bend -> VCF cutoff CV (volts)
 };
 
 // Inline per-voice drift state [ADR-006 §Decision item 1; docs/design/04 §4.2/§4.4].
@@ -144,7 +178,10 @@ public:
     void prepare(double sampleRate, int oversampleFactor,
                  int voiceIndex, std::uint32_t instanceSeed) noexcept;
 
-    // Note lifecycle. retrigger=true fires the ADSR from its trigger state.
+    // Note lifecycle. retrigger=true fires the ADSR from its trigger state. velocity is
+    // RECORDED here (task 162): the dispatch routes it to VCA/VCF per mw101.vel.{enable,
+    // depth} (before 162 it was discarded). Exposed via currentVelocity() so the Engine
+    // builds the per-voice velocity term in the seam.
     void noteOn(int midiNote, float velocity, bool retrigger) noexcept;
     void noteOff() noexcept;                          // gate de-assert -> release
     void setGlideTarget(float targetPitchHz) noexcept; // glide handled per-voice (§5.5)
@@ -195,6 +232,7 @@ public:
     [[nodiscard]] VoiceState state() const noexcept { return state_; }
     [[nodiscard]] bool       isActive() const noexcept { return state_ != VoiceState::Idle; }
     [[nodiscard]] int        currentNote() const noexcept { return currentNote_; }
+    [[nodiscard]] float      currentVelocity() const noexcept { return velocity_; }  // [0,1] (task 162)
     [[nodiscard]] float      currentLevel() const noexcept;       // VCA/env level for quietest-steal [C14]
     [[nodiscard]] std::uint64_t noteSerial() const noexcept { return noteSerial_; } // steal ordering [C14]
 
@@ -245,6 +283,13 @@ private:
     // level, so the contour shape stays intact). Default: the registry default 0.8. ---
     float vcaLevel_   = 0.8f;
 
+    // --- velocity->VCA scale (task 162) — cached from the dispatch, applied as a clean
+    // linear amplitude scale in render() alongside vcaLevel_. 1.0 == no velocity effect
+    // (vel.enable off, or vel.depth 0); a softer key yields a smaller scale when enabled.
+    // Folded as a post-VCA gain (the §4.1/§5 "velocity folded into the amplitude" routing),
+    // NOT into the OTA control taper, so it does not reshape the gate/anti-thump contour. ---
+    float vcaVelScale_ = 1.0f;
+
     // Structural AA tier (mw101.quality), set off the audio thread; folded into the
     // oscillator-section Controls each applyControls [ADR-018 Q5].
     mw101::dsp::OscAaMode qualityAaMode_ = mw101::dsp::OscAaMode::PolyBlep;
@@ -254,6 +299,23 @@ private:
     // tick (snap-vs-slew) instead of seeding the old Hz glide. freshNoteOn_ is consumed once.
     bool pendingNoteOnLegato_ = false;
     bool freshNoteOn_         = false;
+
+    // --- velocity (task 162) — the per-note velocity [0,1] recorded at noteOn. The dispatch
+    // reads it (currentVelocity) and builds the VCA/VCF velocity terms; the Voice itself only
+    // STORES it (routing depth is the Engine's, so vel.enable/depth live in one place). ---
+    float velocity_ = 1.0f;
+
+    // --- LFO modulation (task 162) — the single per-voice LFO is now ROUTED. Its bipolar
+    // output is sampled once per control tick (advanceSamples steps) in applyControls and
+    // summed into the pitch/cutoff/PWM CVs per the dispatched dest+depth. The per-sample
+    // lfo_.tick() in render() was the LFO analogue of the discarded-glide bug (the LFO ticked
+    // but modulated nothing) — it is REMOVED so the LFO advances exactly once per tick here.
+    //
+    // lfoDelayElapsedSamples_ counts samples since the keypress so the LFO depth fades in over
+    // mw101.lfo.delay (a per-voice ramp 0->1); reset on a fresh note-from-idle. The cached
+    // depth fields hold this tick's effective (post-delay, post-dest) routing so render() does
+    // not re-derive them — applyControls writes them, render() reads them. ---
+    std::uint32_t lfoDelayElapsedSamples_ = 0;
 
     // Latest dispatched ADSR (task 161). applyControls caches the decoded EnvParams here each
     // control tick; noteOn applies them to env_ BEFORE firing the attack so startAttack()
