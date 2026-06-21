@@ -45,6 +45,7 @@
 
 #include "DesignTokens.h"        // sibling ui/: mw::ui::DesignTokens (JUCE-free POD)
 #include "MwAudioLookAndFeel.h"  // sibling ui/: the custom vector LookAndFeel (task 108)
+#include "RenderBackend.h"       // sibling ui/: the §11 OpenGL opt-in escape hatch (task 130)
 
 #include "ui/Telemetry.h"        // mwcore (JUCE-free): mw::ui::Telemetry::Consumer/Snapshot (107)
 
@@ -86,6 +87,19 @@ public:
     void setReduceMotion(bool reduceMotion);
     [[nodiscard]] bool reduceMotionEnabled() const noexcept { return reduceMotion_; }
 
+    // --- OpenGL opt-in escape hatch [§11; ADR-015 C9] -----------------------------
+    // The software/CPU render path is PRIMARY and DEFAULT: the render-backend context is
+    // NOT attached in the constructor. This setter is the ONLY way the context is
+    // attached, and only from an explicit ADVANCED user setting — ON attaches it, OFF
+    // detaches it CLEANLY (the destructor also detaches, so a teardown with an attached
+    // context never dangles). The opt-in is a UI PREFERENCE, not a host parameter, so it
+    // persists in the canonical <extras> subtree via the processor's narrow accessor pair
+    // (the same 114/115 pattern) and round-trips on session reload. The Linux x64 hard
+    // gate never requires OpenGL — it runs this software default [§11; ADR-015 C9;
+    // ADR-011 platform tiers; ADR-008 §4/§5]. Idempotent; message-thread only.
+    void setOpenGlEnabled(bool enabled);
+    [[nodiscard]] bool openGlEnabled() const noexcept { return openGlEnabled_; }
+
     // --- Test / inspection hooks (no audio-domain state) [§4.2, §13] --------------
     [[nodiscard]] juce::AffineTransform getDesignToPixels() const noexcept { return designToPixels_; }
     [[nodiscard]] float getScaleFactor() const noexcept;
@@ -102,6 +116,11 @@ public:
     [[nodiscard]] int  wholeEditorRepaintCountForTest() const noexcept { return wholeRepaints_; }
     [[nodiscard]] mw::ui::Telemetry::Snapshot lastSnapshotForTest() const noexcept { return lastSnapshot_; }
     [[nodiscard]] juce::Rectangle<int> scopeRepaintRegionForTest() const noexcept { return scopeRegionPx_; }
+
+    // True iff the §11 render-backend (OpenGL) context is currently attached. Lets a test
+    // prove the escape hatch is OFF (software path) by default and that the explicit
+    // setter attaches/detaches it (task 130). No audio-domain state.
+    [[nodiscard]] bool renderBackendAttachedForTest() const noexcept { return renderBackend_.isAttached(); }
 
     // The constrainer is exposed for geometry tests (aspect-ratio enforcement, §4.3).
     [[nodiscard]] const juce::ComponentBoundsConstrainer& constrainerForTest() const noexcept
@@ -153,6 +172,14 @@ private:
     mw::ui::Telemetry::Snapshot lastSnapshot_{};  // the most-recent pulled frame (display)
     bool  reduceMotion_ = false;                  // the UI-preference toggle state
     int   timerHz_      = 0;                       // the live Timer rate (Hz)
+
+    // --- OpenGL opt-in escape hatch (task 130) ------------------------------------
+    // The §11 render-backend hatch. Owned here but UNATTACHED by default (software path
+    // is primary); attached ONLY via setOpenGlEnabled(true) and detached on teardown.
+    // openGlEnabled_ mirrors the persisted <extras> opt-in (restored from the processor
+    // accessor on construction; written back when toggled) [§11; ADR-015 C9].
+    RenderBackend renderBackend_;
+    bool          openGlEnabled_ = false;
     bool  scopeIdle_    = false;                   // scope paints a static/idle frame (§10)
     juce::Rectangle<int> scopeRegionPx_;          // the targeted scope/indicator dirty-rect
 

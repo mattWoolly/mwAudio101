@@ -153,6 +153,19 @@ public:
     [[nodiscard]] bool getStoredReduceMotion() const noexcept { return storedReduceMotion_; }
     void setStoredReduceMotion(bool reduceMotion) noexcept { storedReduceMotion_ = reduceMotion; }
 
+    // --- OpenGL render-backend opt-in persistence (the <extras>-UI seam, task 130) ----
+    // The editor's OpenGL escape hatch is OFF by default (software/CPU render is primary);
+    // it attaches a juce::OpenGLContext ONLY when this explicit advanced opt-in is ON. The
+    // opt-in is a UI PREFERENCE, not a host parameter, so it restores from this accessor on
+    // editor construction and writes back through it when toggled. getStateInformation
+    // persists it into the DEDICATED canonical <extras> openGlOptIn key (ONLY when ON, so
+    // pre-130 blobs stay byte-compatible) and setStateInformation reads it back, so it
+    // round-trips on session reload exactly like the editor size / reduce-motion preference
+    // [docs/design/10-ui.md §11; ADR-015 C9; ADR-008 §4/§5]. Message-thread only; the audio
+    // thread never touches it. Default false (software path, no context attached).
+    [[nodiscard]] bool getStoredOpenGl() const noexcept { return storedOpenGl_; }
+    void setStoredOpenGl(bool openGlEnabled) noexcept { storedOpenGl_ = openGlEnabled; }
+
     // --- Audio -> GUI telemetry (the §8.3/§8.4 one-directional RT-safe read path) ---
     // processBlock PUBLISHES one Telemetry::Snapshot per block via the 107 SPSC Producer
     // (RT-safe: a seqlock byte copy, no heap alloc, no lock); the editor's Timer DRAINS
@@ -283,6 +296,14 @@ private:
     // the canonical <extras> reduceMotion key by get/setStateInformation so it survives a
     // session reload. Default false (animation on) [docs/design/10-ui.md §10; ADR-015 C8].
     bool storedReduceMotion_ = false;
+
+    // --- OpenGL render-backend opt-in (message thread only; task 130) -------------
+    // The persisted editor OpenGL opt-in. Serialized into / restored from the DEDICATED
+    // canonical <extras> openGlOptIn key (plugin/ui/EditorPrefsKeys.h, distinct from the
+    // core §9 sticky audio renderVersion opt-in) by get/setStateInformation (only written
+    // when ON) so it survives a session reload. Default false (software path; no context
+    // attached) [docs/design/10-ui.md §11; ADR-015 C9].
+    bool storedOpenGl_ = false;
 
     // --- Audio -> GUI telemetry (107) ----------------------------------------------
     // The pre-allocated, fixed-capacity, lock-free SPSC ring (the shared state) — owned
