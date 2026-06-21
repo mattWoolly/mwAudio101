@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 115
 title: Coalescing telemetry Timer + reduce-motion toggle in editor
-status: todo
+status: in-review
 depends-on: [020, 006, 107, 114, 111c]
 component: ui
 estimated-size: S
