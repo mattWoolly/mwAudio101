@@ -149,7 +149,10 @@ void VoiceManager::handleNoteEvent(const NoteEvent& e) noexcept {
 
     switch (e.type) {
         case NoteEvent::Type::NoteOn:
-            keyAssigner_.noteOn(static_cast<int>(e.note));
+            // Carry the per-note MIDI velocity into the held-key record (task 162b
+            // velocity-ingress) so resolve() emits the winning note's velocity in the
+            // NoteDecision and applyDecisionToVoice hands the Voice the REAL velocity.
+            keyAssigner_.noteOn(static_cast<int>(e.note), e.velocity);
             break;
         case NoteEvent::Type::NoteOff:
             keyAssigner_.noteOff(static_cast<int>(e.note));
@@ -202,9 +205,12 @@ void VoiceManager::applyDecisionToVoice(int voiceIndex, const NoteDecision& d) n
     if (d.gate && d.activeNote >= 0) {
         const float targetHz = midiToHz(d.activeNote);
         if (d.retrigger) {
-            // Fire the ADSR from its trigger state on the resolved note (K3/K4).
+            // Fire the ADSR from its trigger state on the resolved note (K3/K4). The
+            // resolved velocity (the WINNING note's, task 162b) is handed to the Voice so
+            // the 162 dispatch routes it to VCA/VCF when vel.enable is on; a retrigger
+            // uses the new note's velocity (the just-pressed key both wins + retriggers).
             v.setNoteSerial(nextSerial_++);
-            v.noteOn(d.activeNote, /*velocity=*/1.0f, /*retrigger=*/true);
+            v.noteOn(d.activeNote, d.velocity, /*retrigger=*/true);
             v.setGlideTarget(targetHz);
         } else if (v.isActive()) {
             // Gate stays asserted, no retrigger: glide to the (possibly new) note;
@@ -213,9 +219,10 @@ void VoiceManager::applyDecisionToVoice(int voiceIndex, const NoteDecision& d) n
         } else {
             // Gate is newly asserted (silence -> held) with no retrigger flagged
             // (e.g. MONO+Gate gate edge resolves retrigger itself; this is the
-            // first key). Sound the note without re-firing past trigger state.
+            // first key). Sound the note without re-firing past trigger state. The
+            // resolved velocity (task 162b) is handed to the Voice for the 162 routing.
             v.setNoteSerial(nextSerial_++);
-            v.noteOn(d.activeNote, /*velocity=*/1.0f, /*retrigger=*/false);
+            v.noteOn(d.activeNote, d.velocity, /*retrigger=*/false);
             v.setGlideTarget(targetHz);
         }
     } else {

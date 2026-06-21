@@ -24,9 +24,10 @@
 //   * var.cutoff / var.pw add per-voice spread that is bit-stable for a fixed seed but
 //     differs from the un-perturbed render (model-observable on the rendered spectrum);
 //   * amp.expression scales the VCA output amplitude (0 => silent, 0.5 => ~half, 1 => unity);
-//   * velocity routing (vel.enable/depth) is wired correct-but-inert at the seam — the
-//     per-note velocity INGRESS is hardcoded 1.0 upstream (task 162b), so a velocity sweep
-//     is currently inert; this suite asserts the INERT-but-correct contract + flags it;
+//   * velocity routing (vel.enable/depth): the per-note velocity INGRESS now reaches the
+//     voice (task 162b velocity-ingress landed), so a soft note records its soft velocity;
+//     the audible hard-vs-soft VCA/VCF effect is owned by the [velocity_ingress] suite, this
+//     suite keeps the orthogonal full-velocity identity + determinism guards;
 //   * MPE routing (mpe.*) decodes without perturbing the default render — the live per-note
 //     MPE position/pressure ingress is a separate controller seam (flagged), so the decode
 //     is correct-but-inert today;
@@ -433,28 +434,27 @@ TEST_CASE("dispatch_character: amp expression scales the vca output amplitude",
 }
 
 // ===========================================================================
-// VELOCITY routing (vel.enable / vel.depth) is WIRED (task 162's leg) but CORRECT-BUT-INERT
-// for a per-note velocity SWEEP today: the per-note velocity INGRESS is hardcoded 1.0
-// UPSTREAM — VoiceManager::controlTick fires v.noteOn(note, /*velocity=*/1.0f, ...) from the
-// KeyAssigner decision, which carries the resolved note but NOT the key velocity (the
-// KeyAssigner is a held-key priority model with no velocity field). So EVERY voice the
-// engine triggers records velocity == 1.0 regardless of the MIDI note-on value; wiring a
-// genuine per-note velocity ingress through to the voice is task 162b.
-//
-// This asserts the correct-but-inert contract WITHOUT faking an audible velocity sweep:
-//   (1) the recorded per-voice velocity IS pinned at 1.0 even for a soft (0.2) MIDI note-on
-//       — the SEAM GAP, surfaced via the Engine's voice accessor (proves it, not assumes it);
-//   (2) at that pinned full velocity the velocity->VCA AMPLITUDE leg is the identity
+// VELOCITY routing (vel.enable / vel.depth) is WIRED (task 162's leg). The per-note velocity
+// INGRESS that feeds it — MidiEvent.velocity -> KeyAssigner held-key record -> NoteDecision
+// -> Voice::noteOn — was hardcoded to 1.0 when task 164 was written (the 162b gap), so this
+// suite originally asserted the correct-but-inert state. Task 162b (velocity-ingress) has
+// since plumbed the real per-note velocity through, so part (1) now confirms the ingress
+// WORKS (a soft note records its soft velocity). The audible hard-vs-soft VCA/VCF effect is
+// owned by the [velocity_ingress] suite; this case retains the orthogonal character-leg
+// guards that are independent of the ingress:
+//   (1) the recorded per-voice velocity is the REAL note-on velocity (162b plumbing);
+//   (2) at FULL velocity (vel=1.0 fed below) the velocity->VCA AMPLITUDE leg is the identity
 //       ((1-depth)+depth*1 == 1), so vel.enable / vel.depth do not scale the output AMPLITUDE
 //       — sensing-off RMS == sensing-on full-depth RMS;
 //   (3) the velocity legs stay deterministic.
-// (The velocity->cutoff leg, by contrast, is a CONSTANT offset at the pinned full velocity —
-// it is not a per-note sweep, so we do not assert a tone change here; that awaits 162b.)
 // ===========================================================================
 TEST_CASE("dispatch_character: velocity routing is wired correct but inert without per note ingress",
           "[dispatch_character]") {
-    // (1) The per-note velocity ingress is pinned at 1.0 upstream — even a soft MIDI note-on
-    //     (0.2) records velocity 1.0 on the triggered voice. This proves the 162b gap.
+    // (1) The per-note velocity ingress now WORKS (task 162b velocity-ingress closed the gap
+    //     this assertion previously flagged): a soft MIDI note-on (0.2) records velocity 0.2
+    //     on the triggered voice (it used to be pinned to a hardcoded 1.0). The full audible
+    //     hard-vs-soft VCA/VCF effect is asserted by the [velocity_ingress] suite; here we just
+    //     confirm the real per-note velocity reaches the voice (no longer the seam gap).
     {
         Snap snap;
         snap.setChoice(mw::params::ids::kVelEnable, 1);
@@ -466,8 +466,8 @@ TEST_CASE("dispatch_character: velocity routing is wired correct but inert witho
         eng.process(c);
         REQUIRE(eng.voiceManager().activeCount() >= 1);
         const int vi = static_cast<int>(eng.voiceManager().activeIndex(0));
-        // Despite the 0.2 note-on, the recorded velocity is the pinned 1.0 (the seam gap).
-        REQUIRE(eng.voiceManager().voice(vi).currentVelocity() == Catch::Approx(1.0f));
+        // The 0.2 note-on now records velocity 0.2 (the 162b velocity-ingress plumbing).
+        REQUIRE(eng.voiceManager().voice(vi).currentVelocity() == Catch::Approx(0.2f));
     }
 
     // (2) At the pinned full velocity the velocity->VCA AMPLITUDE scale is the identity, so

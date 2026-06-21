@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 162b
 title: Plumb per-note velocity to the voice (NoteDecision + VoiceManager + KeyAssigner) so velocity->VCA/VCF works
-status: todo
+status: in-review
 depends-on: [162, 069, 074]
 component: core
 estimated-size: M

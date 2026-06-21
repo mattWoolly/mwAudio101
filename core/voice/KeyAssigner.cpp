@@ -16,6 +16,8 @@
 
 #include "KeyAssigner.h"
 
+#include <algorithm>   // std::clamp — velocity ledger clamp only (task 162b)
+
 namespace mw {
 
 namespace {
@@ -51,13 +53,14 @@ void KeyAssigner::reset() noexcept {
     held_.reset();
     prevScan_.reset();
     pressSerial_.fill(0u);   // 0 == "never pressed"
+    keyVelocity_.fill(1.0f); // neutral velocity for any key never pressed (task 162b)
     nextSerial_      = 1u;
     lastActive_      = -1;
     gateWasAsserted_ = false;
     newKeyThisTick_  = false;
 }
 
-void KeyAssigner::noteOn(int midiNote) noexcept {
+void KeyAssigner::noteOn(int midiNote, float velocity) noexcept {
     if (!inRange(midiNote)) {
         return;
     }
@@ -68,6 +71,11 @@ void KeyAssigner::noteOn(int midiNote) noexcept {
     if (!held_.test(i)) {
         pressSerial_[i] = nextSerial_++;
     }
+    // Record THIS key's velocity (task 162b velocity-ingress): EVERY press updates it
+    // (a re-press carries its new velocity), purely a value carrier — it does not touch
+    // the priority/retrigger scan. Clamped to [0,1]. resolve() reads it for the winning
+    // note so the VoiceManager hands the Voice the real per-note velocity (not 1.0).
+    keyVelocity_[i] = std::clamp(velocity, 0.0f, 1.0f);
     held_.set(i);
     // A keypress this tick re-phases the clock when in Lfo/Arp (§5.4 K6). Flagged
     // here so a multi-down tick still asserts CLOCK RESET exactly once.
@@ -121,6 +129,17 @@ NoteDecision KeyAssigner::resolve() noexcept {
     }
 
     d.activeNote = active;
+
+    // --- Velocity of the WINNING note (task 162b velocity-ingress) --------
+    // Emit the per-note velocity recorded for the resolved active note so the
+    // VoiceManager hands the Voice the REAL velocity instead of 1.0. MONO/UNISON drive
+    // the ONE decision, so this is exactly "the active note's velocity"; under GateTrig a
+    // just-pressed key both wins priority AND is the retrigger note, so a retrigger
+    // naturally uses the new note's velocity (§5.4 K3/K4). With no note held (gate off)
+    // keep neutral 1.0 — a gate-off tick must not perturb the velocity routing.
+    d.velocity = (active >= 0)
+                     ? keyVelocity_[static_cast<std::size_t>(active)]
+                     : 1.0f;
 
     // --- Retrigger (§5.4 NORMATIVE table) ---------------------------------
     // Gate (K1/K2):    retrigger ONLY on the gate's leading edge (silence -> held);

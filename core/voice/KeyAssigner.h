@@ -44,7 +44,14 @@ public:
     // Apply all note events that land within the current control tick, then
     // resolve. Events are applied in arrival order; multiple downs in one tick
     // are batched for the last-note XOR (§5.4, C4).
-    void noteOn(int midiNote) noexcept;
+    //
+    // velocity [0,1] is RECORDED per held key (task 162b velocity-ingress) so resolve()
+    // can emit the WINNING note's velocity in NoteDecision.velocity — the per-note MIDI
+    // velocity finally reaching the Voice. It is DEFAULTED to neutral 1.0 so every
+    // priority/retrigger call site (and the golden-trace oracle conformance battery) that
+    // does not care about velocity is unchanged and bit-faithful — velocity is a purely
+    // ADDITIVE ledger that never alters the §5.4 K1-K7 priority/retrigger resolution.
+    void noteOn(int midiNote, float velocity = 1.0f) noexcept;
     void noteOff(int midiNote) noexcept;
 
     // Resolve priority + trigger for the current control tick. MUST be called
@@ -69,6 +76,11 @@ private:
     // (re-press of an already-held key does NOT re-stamp), so the most-recently
     // pressed still-held key is well-defined independent of bitset order (§5.3).
     std::array<std::uint32_t, 128> pressSerial_{};
+    // Per-key velocity ledger [0,1] (task 162b velocity-ingress): stamped at each noteOn
+    // (every press updates it, so a re-press carries its new velocity), read by resolve()
+    // for the resolved active note. Purely a value carrier — it never participates in the
+    // priority/retrigger scan. Defaults to neutral 1.0 for keys never pressed.
+    std::array<float, 128> keyVelocity_{};
     std::uint32_t    nextSerial_ = 1;  // 0 reserved for "never pressed"
     GateTrigMode     mode_   = GateTrigMode::GateTrig;  // default per voice doc; param owned by doc 06
     int  lastActive_       = -1;   // active note emitted last tick
