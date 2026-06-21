@@ -278,7 +278,8 @@ std::vector<float> freshBurstThenSilence(const mw::ParamSnapshot* snap, int midi
         Block w(kBlk);
         std::vector<mw::MidiEvent> ev{ mw::MidiEvent{ mw::NormalizedType::NoteOff,
                                                       0, static_cast<std::int16_t>(midiNote),
-                                                      0.0f, 0.0f, 0 } };
+                                                      static_cast<float>(midiNote) /*data0=note (task 118f)*/,
+                                                      0.0f, 0 } };
         auto c = w.ctx(ev, kBlk, snap); eng.process(c);
         for (int i = 0; i < kBlk; ++i) out.push_back(w.L[static_cast<std::size_t>(i)]);
     }
@@ -861,7 +862,9 @@ TEST_CASE("dispatch_complete: env vca and glide params change contour amplitude 
               auto c = w.ctx(none, kBlk, &sn.s); eng.process(c); }
             { Block w(kBlk);
               std::vector<mw::MidiEvent> ev{ mw::MidiEvent{ mw::NormalizedType::NoteOff, 0,
-                                                            static_cast<std::int16_t>(note), 0.0f, 0.0f, 0 } };
+                                                            static_cast<std::int16_t>(note),
+                                                            static_cast<float>(note) /*data0=note (task 118f)*/,
+                                                            0.0f, 0 } };
               auto c = w.ctx(ev, kBlk, &sn.s); eng.process(c); }
             int blocks = 0;
             for (; blocks < 2000; ++blocks) {
@@ -1323,7 +1326,7 @@ TEST_CASE("dispatch_complete: every FX param changes the FX-processed output",
                 { Block w(kBlk); std::vector<mw::MidiEvent> ev{ noteOn(60, 1.0f, 0) };
                   auto c = w.ctx(ev, kBlk, &sn.s); eng.process(c); }
                 { Block w(kBlk);
-                  std::vector<mw::MidiEvent> ev{ mw::MidiEvent{ mw::NormalizedType::NoteOff, 0, 60, 0.0f, 0.0f, 0 } };
+                  std::vector<mw::MidiEvent> ev{ mw::MidiEvent{ mw::NormalizedType::NoteOff, 0, 60, 60.0f /*data0=note (task 118f)*/, 0.0f, 0 } };
                   auto c = w.ctx(ev, kBlk, &sn.s); eng.process(c); }
                 for (int b = 0; b < 40; ++b) { Block w(kBlk); std::vector<mw::MidiEvent> none;
                   auto c = w.ctx(none, kBlk, &sn.s); eng.process(c);
@@ -1365,7 +1368,7 @@ TEST_CASE("dispatch_complete: every FX param changes the FX-processed output",
                 { Block w(kBlk); std::vector<mw::MidiEvent> ev{ noteOn(60, 1.0f, 0) };
                   auto c = w.ctx(ev, kBlk, &sn.s); eng.process(c); }
                 { Block w(kBlk);
-                  std::vector<mw::MidiEvent> ev{ mw::MidiEvent{ mw::NormalizedType::NoteOff, 0, 60, 0.0f, 0.0f, 0 } };
+                  std::vector<mw::MidiEvent> ev{ mw::MidiEvent{ mw::NormalizedType::NoteOff, 0, 60, 60.0f /*data0=note (task 118f)*/, 0.0f, 0 } };
                   auto c = w.ctx(ev, kBlk, &sn.s); eng.process(c); }
                 for (int b = 0; b < 40; ++b) { Block w(kBlk); std::vector<mw::MidiEvent> none;
                   auto c = w.ctx(none, kBlk, &sn.s); eng.process(c);
