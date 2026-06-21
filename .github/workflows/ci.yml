@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Matt Woolly
+#
+# Cross-platform build+test matrix — a DUMB DISPATCHER of preset names only.
+#
+# Every job runs the IDENTICAL command a developer runs locally:
+#   scripts/check.sh <preset>   ==   cmake --preset <p>
+#                                    && cmake --build --preset <p>
+#                                    && ctest --preset <p> --no-tests=error --output-on-failure
+# No build or test logic lives in this YAML — it carries preset NAMES only, so
+# local == CI is structurally true [docs/design/11 §9.4; ADR-014 C1, Decision].
+#
+# Per-platform FORMAT scoping (macOS = VST3+AU+CLAP+Standalone; Linux =
+# VST3+CLAP+Standalone+LV2-goal; Windows = VST3+CLAP+Standalone) is inherited
+# from the platform presets in CMakePresets.json — it is NOT duplicated here
+# [docs/design/11 §9.3; ADR-014 C6]. The permanently-excluded proprietary format
+# (ADR-024 C4/C6) has no cell or target in any job below.
+#
+# Tiers: macOS arm64 (reference/bless) + Linux x64 (co-required) are HARD gates;
+# Windows x64 is goal-tier and runs continue-on-error [docs/design/11 §9.3;
+# ADR-014 C12].
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push to the same ref cancels the in-flight run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: ${{ matrix.preset }}
+    runs-on: ${{ matrix.runner }}
+    # Windows x64 is goal-tier: its failure must not fail the workflow, while
+    # macOS arm64 + Linux x64 stay hard gates [ADR-014 C12]. Driven per-entry so
+    # the boolean lives in the matrix, not as inline job logic.
+    continue-on-error: ${{ matrix.goal-tier }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS arm64 — reference/bless, bit-exact HARD gate.
+          - preset: macos-arm64
+            runner: macos-14
+            goal-tier: false
+          # Linux x64 — co-required HARD gate.
+          - preset: linux-x64
+            runner: ubuntu-latest
+            goal-tier: false
+          # Windows x64 — goal tier (continue-on-error).
+          - preset: windows-x64
+            runner: windows-latest
+            goal-tier: true
+
+    env:
+      # Shared local+CI dependency checkout cache so cold JUCE builds are bounded
+      # [docs/design/11 §10; ADR-014 C10]. scripts/check.sh honors this var.
+      CPM_SOURCE_CACHE: ${{ github.workspace }}/.cache/CPM
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache CPM source dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cache/CPM
+          key: cpm-${{ matrix.preset }}-${{ hashFiles('cmake/Dependencies.cmake') }}
+          restore-keys: |
+            cpm-${{ matrix.preset }}-
+
+      # The ONLY build/test step: a thin dispatch of the committed host script
+      # with the platform preset name. All configure/build/test logic lives in
+      # scripts/check.sh + CMakePresets.json, never here [ADR-014 C1]. Run under
+      # bash on every runner (Git Bash ships on windows-latest) so the single
+      # canonical command is byte-identical across platforms.
+      - name: Build and test (scripts/check.sh ${{ matrix.preset }})
+        shell: bash
+        run: scripts/check.sh ${{ matrix.preset }}
