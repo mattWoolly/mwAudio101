@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 156
 title: GitHub Actions cross-platform build+test matrix workflow (preset dispatcher)
-status: in-review
+status: done
 depends-on: [001, 006, 113, 077]
 component: infra
 estimated-size: M
