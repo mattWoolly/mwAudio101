@@ -173,7 +173,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 16 | 127 | ScopeMeterOverlay (telemetry-driven, reduce-motion gated) | ui | S | 006, 106, 107, 115 | done |
 | 16 | 129b | UI signposts: 440-vs-442 tuning-duality banner + 'running unblessed at this host rate' banner | ui | S | 129, 112, 115 | todo |
 | 16 | 139 | Cross-format bit-exactness test (VST3/AU/CLAP/Standalone identical DSP output) | qa | M | 113, 104, 119, 077, 136 | todo |
-| 16 | 140 | Host smoke matrix: headless Standalone launch + per-format validator invocation | qa | M | 113, 001, 006, 136, 137, 138 | todo |
+| 16 | 140 | Host smoke matrix: headless Standalone launch + per-format validator invocation | qa | M | 113, 001, 006, 136, 137, 138 | done |
 | 16 | 141 | Constant-PDC invariance + FX-off bit-exact integration test | qa | S | 113, 036, 091, 077, 136 | todo |
 | 16 | 142 | Cross-format capability ladder integration test (note-expression + transport rungs) | qa | M | 113, 104, 087, 114, 136 | todo |
 | 16 | 157 | CI verification gate steps: discovery, label-snapshot, MANIFEST, no-network | infra | M | 001, 006, 077, 156 | done |

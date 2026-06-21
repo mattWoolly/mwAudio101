@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 140
 title: Host smoke matrix: headless Standalone launch + per-format validator invocation
-status: in-review
+status: done
 depends-on: [113, 001, 006, 136, 137, 138]
 component: qa
 estimated-size: M
