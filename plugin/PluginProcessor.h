@@ -143,6 +143,16 @@ public:
     [[nodiscard]] juce::Point<int> getStoredEditorSize() const noexcept { return storedEditorSize_; }
     void setStoredEditorSize(juce::Point<int> sizePx) noexcept { storedEditorSize_ = sizePx; }
 
+    // --- Reduce-motion / low-CPU preference persistence (the <extras>-UI seam, 115) ---
+    // The editor's reduce-motion toggle (a UI PREFERENCE, not a host parameter) restores
+    // from this accessor on construction and writes back through it when toggled.
+    // getStateInformation persists it into the canonical <extras> subtree and
+    // setStateInformation reads it back, so it round-trips on session reload exactly like
+    // the editor size [docs/design/10-ui.md §10; ADR-015 C8; ADR-008 §4/§5]. Message-
+    // thread only; the audio thread never touches it. Default false (animation on).
+    [[nodiscard]] bool getStoredReduceMotion() const noexcept { return storedReduceMotion_; }
+    void setStoredReduceMotion(bool reduceMotion) noexcept { storedReduceMotion_ = reduceMotion; }
+
     // --- Audio -> GUI telemetry (the §8.3/§8.4 one-directional RT-safe read path) ---
     // processBlock PUBLISHES one Telemetry::Snapshot per block via the 107 SPSC Producer
     // (RT-safe: a seqlock byte copy, no heap alloc, no lock); the editor's Timer DRAINS
@@ -267,6 +277,12 @@ private:
     // Default {0,0} means "none stored yet" -> the editor falls back to its default
     // scale [docs/design/10-ui.md §4.4; ADR-015 C2].
     juce::Point<int> storedEditorSize_{ 0, 0 };
+
+    // --- Reduce-motion / low-CPU preference (message thread only; task 115) -------
+    // The persisted editor reduce-motion toggle state. Serialized into / restored from
+    // the canonical <extras> reduceMotion key by get/setStateInformation so it survives a
+    // session reload. Default false (animation on) [docs/design/10-ui.md §10; ADR-015 C8].
+    bool storedReduceMotion_ = false;
 
     // --- Audio -> GUI telemetry (107) ----------------------------------------------
     // The pre-allocated, fixed-capacity, lock-free SPSC ring (the shared state) — owned

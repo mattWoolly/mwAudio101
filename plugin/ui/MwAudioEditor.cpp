@@ -17,13 +17,15 @@
 
 #include "../../ui/MwAudioEditor.h"
 
-#include "../../core/calibration/UiConstants.h"  // (PI) design extent / aspect / scale presets
+#include "../../core/calibration/UiConstants.h"   // (PI) design extent / aspect / scale presets
+#include "../../core/calibration/TimerConstants.h" // (PI) Timer rate band + scope region (115)
 
 #include "../PluginProcessor.h"   // mw::plugin::MwAudioProcessor (apvts + stored editor size)
 
 namespace mw::ui {
 
-namespace cal = mw::cal::editor;
+namespace cal  = mw::cal::editor;
+namespace tcal = mw::cal::timer;
 
 // ---------------------------------------------------------------------------
 // Static design-space accessors (forward the (PI) constants; never inlined).
@@ -71,7 +73,10 @@ MwAudioEditor::MwAudioEditor(mw::plugin::MwAudioProcessor& processor)
     setConstrainer(&constrainer_);
 
     // Initial size: the persisted <extras> UI size if a valid one round-tripped,
-    // otherwise the default-scale design extent [§4.4].
+    // otherwise the default-scale design extent [§4.4]. (setSize triggers resized(),
+    // which computes the scope dirty-rect — so initialise the transform-dependent
+    // members below FIRST is unnecessary: recomputeScopeRegion() is robust to either
+    // order because it reads the live transform.)
     const juce::Point<int> stored = processor_.getStoredEditorSize();
     if (stored.x >= minW && stored.y >= minH && stored.x <= maxW && stored.y <= maxH)
     {
@@ -82,10 +87,22 @@ MwAudioEditor::MwAudioEditor(mw::plugin::MwAudioProcessor& processor)
         setSize(juce::roundToInt(cal::kDesignWidth  * cal::kDefaultScale),
                 juce::roundToInt(cal::kDesignHeight * cal::kDefaultScale));
     }
+
+    // --- Telemetry Timer + reduce-motion (task 115) -------------------------------
+    // Attach the SPSC Consumer view onto the processor-owned telemetry Buffer (message
+    // thread; the audio thread is the single producer) [§8.3]. Restore the reduce-motion
+    // UI preference from the <extras> subtree the processor persisted, then start the
+    // SINGLE coalescing Timer at the resulting rate [§8.4, §10; ADR-015 C5/C8].
+    telemetry_ = processor_.telemetryConsumer();
+    reduceMotion_ = processor_.getStoredReduceMotion();
+    scopeIdle_    = reduceMotion_;
+    startTimerAtHz(reduceMotion_ ? tcal::kReduceMotionTimerHz : tcal::kDefaultTimerHz);
 }
 
 MwAudioEditor::~MwAudioEditor()
 {
+    // Stop the coalescing Timer before any member it drains is destroyed [§8.4].
+    stopTimer();
     // Detach the LookAndFeel before it (a member) is destroyed [JUCE lifetime rule].
     setLookAndFeel(nullptr);
 }
@@ -107,6 +124,7 @@ void MwAudioEditor::paint(juce::Graphics& g)
 void MwAudioEditor::resized()
 {
     recomputeTransform();
+    recomputeScopeRegion();   // keep the Timer's dirty-rect in sync with the new transform
     persistSize();
 }
 
@@ -162,6 +180,81 @@ float MwAudioEditor::getScaleFactor() const noexcept
     float rx = cal::kDesignWidth, ry = 0.0f;
     designToPixels_.transformPoint(rx, ry);
     return (rx - ox) / cal::kDesignWidth;
+}
+
+// ---------------------------------------------------------------------------
+// Coalescing telemetry Timer [§8.4; ADR-015 C5/C7].
+//
+// One Timer tick: pull the MOST-RECENT Snapshot from the SPSC (the Consumer coalesces
+// past every intermediate frame). If nothing new was published, do NOTHING — no
+// repaint. Otherwise cache the frame and, unless reduce-motion has idled the scope,
+// trigger a TARGETED repaint of the scope/indicator dirty-rect ONLY — never the whole
+// editor. The whole-editor repaint() is deliberately NOT called here (C7).
+// ---------------------------------------------------------------------------
+void MwAudioEditor::timerCallback()
+{
+    mw::ui::Telemetry::Snapshot frame{};
+    lastPulled_ = telemetry_.pull(frame);
+    if (! lastPulled_)
+        return;                      // nothing new published since the last tick (§8.3)
+
+    lastSnapshot_ = frame;           // coalesced to the newest frame (display cache)
+
+    if (scopeIdle_)
+        return;                      // reduce-motion: scope paints a static/idle frame (§10)
+
+    // Targeted, NOT whole-editor: invalidate only the scope/indicator dirty-rect [C7].
+    repaint(scopeRegionPx_);
+    ++scopeRepaints_;
+}
+
+// ---------------------------------------------------------------------------
+// Reduce-motion / low-CPU toggle [§10; ADR-015 C8].
+//
+// Downsample the single Timer to the (PI) reduce-motion rate and idle the scope (a
+// static frame, no animation), or restore the default rate and resume animation. This
+// touches ZERO APVTS attachment — it is a pure UI preference. The state is written back
+// through the processor's narrow <extras>-UI accessor so it persists on reload.
+// ---------------------------------------------------------------------------
+void MwAudioEditor::setReduceMotion(bool reduceMotion)
+{
+    if (reduceMotion_ == reduceMotion)
+        return;                      // idempotent; no redundant Timer restart
+
+    reduceMotion_ = reduceMotion;
+    scopeIdle_    = reduceMotion;    // ON => the scope settles to a static/idle frame (§10)
+
+    // Persist the preference (message thread) so it round-trips on session reload. No
+    // control attachment is involved — this is a <extras> UI preference only [ADR-008 C8].
+    processor_.setStoredReduceMotion(reduceMotion_);
+
+    // Re-rate the single Timer: downsampled when reducing motion, default otherwise. The
+    // Timer is never destroyed/recreated — only its interval changes (no attachment churn).
+    startTimerAtHz(reduceMotion_ ? tcal::kReduceMotionTimerHz : tcal::kDefaultTimerHz);
+}
+
+// ---------------------------------------------------------------------------
+// Restart the single Timer at `hz`, recording the active rate. Clamped defensively to a
+// positive interval; the (PI) rates are validated by static_assert in TimerConstants.h.
+// ---------------------------------------------------------------------------
+void MwAudioEditor::startTimerAtHz(int hz)
+{
+    timerHz_ = hz;
+    startTimerHz(hz);   // juce::Timer: (re)arm at hz; replaces any prior interval
+}
+
+// ---------------------------------------------------------------------------
+// Map the (PI) DESIGN-unit scope/indicator region through the single design->pixels
+// transform to the pixel dirty-rect the Timer repaints. Clamped to the local bounds so
+// the targeted region is always a valid sub-rectangle of the editor [§8.4; ADR-015 C7].
+// ---------------------------------------------------------------------------
+void MwAudioEditor::recomputeScopeRegion()
+{
+    const juce::Rectangle<float> design{
+        tcal::kScopeRegionX, tcal::kScopeRegionY, tcal::kScopeRegionW, tcal::kScopeRegionH };
+
+    const juce::Rectangle<float> px = design.transformedBy(designToPixels_);
+    scopeRegionPx_ = px.getSmallestIntegerContainer().getIntersection(getLocalBounds());
 }
 
 } // namespace mw::ui

@@ -39,6 +39,7 @@
 #include "state/StateTree.h"          // mw::state::kParamsId etc.
 #include "state/SeqPatternCodec.h"    // readSeqPattern: <extras><seq> tree -> Extras POD (111c)
 #include "version/EngineVersion.h"    // schema / plugin / engine / render versions
+#include "ui/EditorPrefsKeys.h"       // <extras> reduce-motion UI-preference key (task 115)
 
 namespace mw::plugin {
 
@@ -378,6 +379,22 @@ void MwAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
         juce::String(mw101::version::kEngineVersion),
         mw101::version::kCurrentRenderVersion,
         mw::plugin::state::UiEditorSize{ uiSize.x, uiSize.y });
+
+    // Persist the reduce-motion / low-CPU UI preference directly on the canonical
+    // <extras> node (a UI preference, NOT a host parameter, exactly like the editor
+    // size) [docs/design/10-ui.md §10; ADR-008 §4/§5 C8]. Written here (not threaded
+    // through the canonical serializer) to keep this a localized, conflict-free edit:
+    // the key is owned by plugin/ui/EditorPrefsKeys.h. Only written when ON, so a
+    // default-OFF session stays byte-compatible with pre-115 blobs. Message-thread only.
+    if (storedReduceMotion_)
+    {
+        auto extrasNode = canonical.getChildWithName(
+            juce::Identifier{ mw::state::kExtrasId });
+        if (extrasNode.isValid())
+            extrasNode.setProperty(
+                juce::Identifier{ mw::plugin::ui::prefs::kExtrasReduceMotion }, true, nullptr);
+    }
+
     mw::plugin::state::writeToBlob(canonical, destData);
 }
 
@@ -398,6 +415,19 @@ void MwAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     const mw::plugin::state::UiEditorSize uiSize =
         mw::plugin::state::readUiEditorSize(recovered);
     storedEditorSize_ = { uiSize.width, uiSize.height };
+
+    // Restore the reduce-motion / low-CPU UI preference from the recovered <extras> node
+    // (the inverse of getStateInformation's write). Absent / garbage -> false (animation
+    // on), so pre-115 blobs and never-toggled sessions keep the default [docs/design/
+    // 10-ui.md §10; ADR-008 C8; ADR-021 fallback]. Message-thread only.
+    storedReduceMotion_ = false;
+    if (const auto extrasNode = recovered.getChildWithName(
+            juce::Identifier{ mw::state::kExtrasId });
+        extrasNode.isValid())
+    {
+        storedReduceMotion_ = static_cast<bool>(extrasNode.getProperty(
+            juce::Identifier{ mw::plugin::ui::prefs::kExtrasReduceMotion }, false));
+    }
 
     // Restore the EDITED <extras><seq> 100-step pattern from the recovered tree into the
     // message-thread canonical copy, and republish it to the audio thread via the RT-safe
