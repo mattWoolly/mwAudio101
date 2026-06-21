@@ -166,7 +166,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 15 | 129 | StatusBanner (non-modal load-failure + disclaimer surface) | ui | S | 111, 119, 006, 106, 114 | done |
 | 15 | 130 | OpenGL opt-in escape hatch (OFF by default) | ui | S | 020, 006, 114 | done |
 | 15 | 136 | Wire MwAudioProcessor: engine + frontend + capability shim + latency reporter | app | M | 111, 104, 113, 020, 118 | done |
-| 15 | 137 | Per-platform format resolution + configure-time validator gate (Formats.cmake) | infra | M | 001, 113 | todo |
+| 15 | 137 | Per-platform format resolution + configure-time validator gate (Formats.cmake) | infra | M | 001, 113 | done |
 | 15 | 138 | Locate/declare validator targets (Validators.cmake) | infra | M | 001, 113 | done |
 | 15 | 156 | GitHub Actions cross-platform build+test matrix workflow (preset dispatcher) | infra | M | 001, 006, 113, 077 | done |
 | 16 | 126 | SequencerGrid (100-step pattern editor view) | ui | M | 020, 111, 087, 006, 109, 107, 125 | todo |
