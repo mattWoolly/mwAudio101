@@ -342,16 +342,19 @@ private:
         int mpePressureDest  = -1;  // choice 0..2 -> {VCF,VCA,PW} pressure destination
     } slots_{};
 
-    // --- live continuous-controller state (task 162c; ADR-028 control-dispatch repair).
-    // The 162 dispatch WIRED pitch-bend->{VCO,VCF} and mod-wheel->LFO-depth, but the live
-    // controller POSITION never reached the engine: BlockContext carried no continuous-
-    // controller field and renderChunk's note translator DROPPED PitchBend/ControlChange
-    // MidiEvents. This running state carries the latest bend + mod-wheel position the engine
-    // CONSUMES from the per-sub-block PitchBend + CC1 MidiEvent stream (and seeds from
-    // BlockContext::controllers at block entry); applyParamSnapshot reads it each control tick
-    // so the 162 bend/wheel legs ACTIVATE. Neutral defaults (centered bend / wheel down) are
-    // the no-controller identity. Written only on the single-threaded audio path; no alloc,
-    // no lock — a plain pair of floats. ---
+    // --- live continuous-controller state (task 162c; ADR-028 control-dispatch repair;
+    // bend authority reconciled in task 162d). The 162 dispatch WIRED pitch-bend->{VCO,VCF}
+    // and mod-wheel->LFO-depth, but the live controller POSITION never reached the engine.
+    // This running state carries the latest bend + mod-wheel position applyParamSnapshot reads
+    // each control tick so the 162 bend/wheel legs ACTIVATE. Their ingress differs:
+    //   * pitchBend_ — the centered [-1,+1] WHEEL unit, seeded by process() from
+    //     BlockContext::controllers.pitchBend. It is NOT re-read from the per-chunk PitchBend
+    //     MidiEvent: that event carries the §4.4 bend-range-scaled SEMITONE offset (the Pre-Q
+    //     tuning path), not a unit, so re-reading it mis-scaled the wheel (task 162d fix).
+    //   * modWheel_ — the [0,1] CC1 position, seeded by process() from
+    //     BlockContext::controllers.modWheel and updated per-chunk from the CC1 MidiEvent.
+    // Neutral defaults (centered bend / wheel down) are the no-controller identity. Written
+    // only on the single-threaded audio path; no alloc, no lock — a plain pair of floats. ---
     float pitchBend_ = 0.0f;   // [-1,+1]; 0 == centered (neutral)
     float modWheel_  = 0.0f;   // [0,1];   0 == wheel down (neutral)
 

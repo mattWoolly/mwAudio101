@@ -17,6 +17,10 @@
 // now produces the 162c audible effect END-TO-END:
 //   * a host pitch-bend (bend_dest=VCO, non-zero bend_range_vco) bends the rendered VCO
 //     fundamental UP and DOWN — measured on the rendered output (Goertzel);
+//   * the bend SCALES with the wheel position — a HALF wheel bends HALF the range (x sqrt2 at a
+//     1200-cent range; +1 semitone at a +-2-semitone range), NOT the full range. This is the
+//     162d regression guard for the bug QA caught: the core used to re-read the semitone-valued
+//     PitchBend MidiEvent as a [-1,+1] unit, so a half wheel clamped to a FULL octave;
 //   * a host pitch-bend with bend_dest=VCF opens the filter (brightness rises) WITHOUT
 //     moving the VCO fundamental;
 //   * a host CC1/mod-wheel move RAISES the LFO modulation depth per mod.lfo_mod_wheel —
@@ -171,6 +175,16 @@ double estimateFundamental(const std::vector<float>& x, double sr,
     return bestF;
 }
 
+// Estimate the fundamental near an EXPECTED frequency: search a tight log-spaced band around
+// `expectedHz` (a factor `band` each side, default x0.7..x1.43) so the estimator locks onto the
+// right partial instead of a neighbouring harmonic when the bend moves the pitch. The bend math
+// gives a precise expected Hz per wheel position, so anchoring the search there is both robust
+// (no harmonic mis-lock) and a STRONGER assertion than a wide blind search.
+double estimateNear(const std::vector<float>& x, double sr, double expectedHz,
+                    double band = 1.43) noexcept {
+    return estimateFundamental(x, sr, expectedHz / band, expectedHz * band);
+}
+
 std::vector<float> rmsEnvelope(const std::vector<float>& x, int hop) noexcept {
     std::vector<float> env;
     const int N = static_cast<int>(x.size());
@@ -252,31 +266,138 @@ TEST_CASE("cc_ingress: a host pitch-bend bends the VCO fundamental in the real p
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
-    auto fundamentalAtBend = [&](float bendUnit) {
+    // Render at a MODERATE base pitch (note 60 at the 8' reference footage, no coarse tune) so
+    // both bent endpoints stay comfortably inside the estimator band (a +1-octave bend up is
+    // ~523 Hz, a -1-octave bend down is ~131 Hz at the ~262 Hz base). The absolute played octave
+    // is owned by the core voice stream (out of this task's scope), so we estimate the NEUTRAL
+    // fundamental with a wide search and anchor the bent searches to neutral x expected-ratio —
+    // octave-agnostic AND harmonic-lock-proof (the assertion is the bend RATIO, not absolute Hz).
+    auto bufAtBend = [&](float bendUnit) {
         mw::plugin::MwAudioProcessor proc;
         proc.prepareToPlay(kSr, kBlockSize);
         using namespace mw::params::ids;
         openFilterIsolateBend(proc);
-        // Raise the base pitch into a comfortably-measurable band (tune up + 2' footage) so a
-        // FULL octave down is still well above the estimator floor. The bend RATIO is invariant
-        // to the base pitch — this just keeps both bent endpoints in range.
-        setParam(proc, kVcoRange, 3.0f);             // 2' == +2 octaves above the 8' reference
-        setParam(proc, kVcoTune, 24.0f);             // +24 semitones coarse
+        setParam(proc, kVcoRange, 1.0f);             // 8' reference footage (+0 oct)
+        setParam(proc, kVcoTune, 0.0f);
         setParam(proc, kModBendDest, 0.0f);          // VCO (choice index 0)
         setParam(proc, kModBendRangeVco, 1200.0f);   // 1 octave at full bend
-        auto buf = renderHeld(proc, 60, 0.40, bendUnit, /*wheel7=*/-1);
-        return estimateFundamental(buf, kSr, 30.0, 6000.0);
+        return renderHeld(proc, 60, 0.40, bendUnit, /*wheel7=*/-1);
     };
 
-    const double neutral = fundamentalAtBend(0.0f);
-    const double bentUp  = fundamentalAtBend(1.0f);
-    const double bentDn  = fundamentalAtBend(-1.0f);
-
+    const double neutral = estimateFundamental(bufAtBend(0.0f), kSr, 60.0, 2000.0);
     REQUIRE(neutral > 0.0);
+    const double bentUp = estimateNear(bufAtBend(1.0f),  kSr, neutral * 2.0);   // +1 octave
+    const double bentDn = estimateNear(bufAtBend(-1.0f), kSr, neutral * 0.5);   // -1 octave
+
     // Full bend up == +1 octave (x2) and full bend down == -1 octave (x0.5), measured as the
     // rendered-fundamental ratio — the 1 V/oct bend the live controller drives through the plugin.
     REQUIRE((bentUp / neutral) == Catch::Approx(2.0).epsilon(0.06));
     REQUIRE((bentDn / neutral) == Catch::Approx(0.5).epsilon(0.06));
+}
+
+// ============================================================================
+// PITCH-BEND SCALES WITH THE WHEEL POSITION (the 162d regression guard — the bug QA caught).
+//
+// A pitch-bend is PROPORTIONAL to the wheel position: a HALF wheel bends HALF the range, not
+// the full range. The earlier 162d suite only probed the FULL-bend endpoints (unit ±1), so it
+// passed VACUOUSLY even with the broken core re-read — at full bend the broken value (the
+// bend-range-scaled SEMITONE forwarded on the PitchBend MidiEvent, clamped to a [-1,+1] unit)
+// COINCIDENTALLY lands at full bend too. A half wheel is the discriminating probe.
+//
+// THE BUG: core/Engine.cpp renderChunk used to re-read the forwarded PitchBend MidiEvent's
+// `value` as if it were a [-1,+1] unit — but plugin/midi/MidiFrontEnd forwards `value = semis`
+// (the wheel unit x the channel bend range, default ±2 semitones, for the §4.4 Pre-Q path).
+// So a HALF wheel (unit 0.5) became semis = 0.5 x 2 = 1.0, which clamped to the unit 1.0 and
+// rendered a FULL bend. At a 1200-cent VCO range that is a FULL OCTAVE (x2.0) for a half wheel
+// instead of the correct HALF octave (x sqrt2 ~ 1.414). This test asserts the half-octave and
+// would FAIL at x2.0 — the exact half-bend probe QA used to reject the vacuous suite.
+//
+// The fix: the bend authority is BlockContext::controllers.pitchBend (the centered [-1,+1] unit
+// the processor seeds each block), NOT the semitone-valued PitchBend MidiEvent. So the wheel
+// scales linearly and a half wheel is a half bend.
+// ============================================================================
+TEST_CASE("cc_ingress: a half host pitch-bend renders a half bend not a full octave in the real plugin",
+          "[cc_ingress]")
+{
+    const juce::ScopedJuceInitialiser_GUI juceInit;
+
+    // Moderate base pitch (note 60 at 8'); at a 1200-cent range a half wheel is +half an octave
+    // (~370 Hz) and a full wheel +1 octave (~523 Hz) — both well inside the band. Anchor each
+    // bent search to neutral x expected-ratio (octave-agnostic; the bend RATIO is the assertion).
+    auto bufAtBend = [&](float bendUnit) {
+        mw::plugin::MwAudioProcessor proc;
+        proc.prepareToPlay(kSr, kBlockSize);
+        using namespace mw::params::ids;
+        openFilterIsolateBend(proc);
+        setParam(proc, kVcoRange, 1.0f);             // 8' reference footage (+0 oct)
+        setParam(proc, kVcoTune, 0.0f);
+        setParam(proc, kModBendDest, 0.0f);          // VCO (choice index 0)
+        setParam(proc, kModBendRangeVco, 1200.0f);   // 1 octave at FULL bend (so half bend == sqrt2)
+        return renderHeld(proc, 60, 0.40, bendUnit, /*wheel7=*/-1);
+    };
+
+    const double kHalfOctave = std::pow(2.0, 0.5);   // ~1.41421
+
+    const double neutral = estimateFundamental(bufAtBend(0.0f), kSr, 60.0, 2000.0);
+    REQUIRE(neutral > 0.0);
+    const double halfUp   = estimateNear(bufAtBend(0.5f),  kSr, neutral * kHalfOctave);
+    const double fullUp   = estimateNear(bufAtBend(1.0f),  kSr, neutral * 2.0);
+    const double halfDown = estimateNear(bufAtBend(-0.5f), kSr, neutral / kHalfOctave);
+
+    // A HALF wheel at a 1200-cent range bends HALF an octave: x 2^0.5 (~1.414), NOT a full
+    // octave (x2.0). This is the assertion the old semitone-as-unit re-read FAILS: it would
+    // render x2.0 here (the clamped-to-full-unit bug). sqrt2 vs 2.0 is a ~40% gap — far outside
+    // any estimator tolerance, so this is an unambiguous negative control.
+    REQUIRE((halfUp   / neutral) == Catch::Approx(kHalfOctave).epsilon(0.06));
+    REQUIRE((halfDown / neutral) == Catch::Approx(1.0 / kHalfOctave).epsilon(0.06));
+
+    // The half bend must be STRICTLY LESS than the full bend (proves proportionality, not a
+    // clamp to full): the old bug collapsed both half and full onto the same full-octave value.
+    REQUIRE((fullUp / neutral) == Catch::Approx(2.0).epsilon(0.06));
+    REQUIRE((halfUp / neutral) < (fullUp / neutral) * 0.85);   // clearly below the full bend
+}
+
+// ============================================================================
+// PITCH-BEND IS SEMITONE-ACCURATE AT A REALISTIC RANGE (the task's worked example): with the
+// VCO bend range at +-2 semitones (200 cents), a FULL wheel bends +2 semitones (x2^(2/12) ~
+// 1.122) and a HALF wheel bends +1 semitone (x2^(1/12) ~ 1.0595). The OLD bug rendered the half
+// wheel as a FULL +2-semitone bend (x1.122) — so the correct half value (x1.0595) is the probe
+// that distinguishes the fix from the bug at this realistic range too.
+// ============================================================================
+TEST_CASE("cc_ingress: a host pitch-bend is semitone-accurate at a plus-or-minus-two-semitone range in the real plugin",
+          "[cc_ingress]")
+{
+    const juce::ScopedJuceInitialiser_GUI juceInit;
+
+    const double kTwoSemi = std::pow(2.0, 2.0 / 12.0);   // ~1.1225
+    const double kOneSemi = std::pow(2.0, 1.0 / 12.0);   // ~1.0595
+
+    auto bufAtBend = [&](float bendUnit) {
+        mw::plugin::MwAudioProcessor proc;
+        proc.prepareToPlay(kSr, kBlockSize);
+        using namespace mw::params::ids;
+        openFilterIsolateBend(proc);
+        setParam(proc, kVcoRange, 1.0f);            // 8' reference footage (+0 oct)
+        setParam(proc, kVcoTune, 0.0f);
+        setParam(proc, kModBendDest, 0.0f);         // VCO
+        setParam(proc, kModBendRangeVco, 200.0f);   // +-2 semitones (the channel-bend default range)
+        return renderHeld(proc, 60, 0.50, bendUnit, /*wheel7=*/-1);
+    };
+
+    const double neutral = estimateFundamental(bufAtBend(0.0f), kSr, 60.0, 2000.0);
+    REQUIRE(neutral > 0.0);
+    // Tight search bands around the expected fundamental (the bends are < a semitone apart at
+    // this range, so a narrow band keeps the estimator on the right bin for a precise ratio).
+    const double full = estimateNear(bufAtBend(1.0f), kSr, neutral * kTwoSemi, /*band=*/1.05);  // +2 semis
+    const double half = estimateNear(bufAtBend(0.5f), kSr, neutral * kOneSemi, /*band=*/1.05);  // +1 semi
+
+    // Full wheel == +2 semitones; half wheel == +1 semitone. The old bug rendered the half wheel
+    // as the FULL +2-semitone bend (x1.1225), so the half-bend assertion is the discriminator.
+    REQUIRE((full / neutral) == Catch::Approx(kTwoSemi).epsilon(0.025));
+    REQUIRE((half / neutral) == Catch::Approx(kOneSemi).epsilon(0.025));
+    // Guard the discriminator explicitly: the half-bend ratio sits CLOSER to +1 semitone than to
+    // the old-bug +2-semitone value, so the test cannot pass under the semitone-as-unit re-read.
+    REQUIRE(std::abs((half / neutral) - kOneSemi) < std::abs((half / neutral) - kTwoSemi));
 }
 
 // ============================================================================
