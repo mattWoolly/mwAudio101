@@ -18,15 +18,19 @@
 //   THAT slot to INIT (§11) and records a warning NAMING it; construction NEVER aborts
 //   or empties the bank — every other slot still loads [§10.2; ADR-021 L9].
 //
-// EMPTY BANK IS VALID. At this development stage there is NO embedded preset BinaryData
-// yet (authoring the 64 files + the BinaryData embedding are later tasks 131/144-150,
-// explicitly OUT OF SCOPE here). The default constructor therefore produces an empty
-// bank gracefully: getNumPresets()==0 is valid and never a crash/abort. A test-only
-// injection constructor takes in-memory JSON sources so the bank-load, the L9 per-slot
-// fallback and indicesForCategory can be exercised without real embedded files.
+// EMBEDDED BANK (task 131). The default constructor enumerates the JUCE BinaryData
+// resource list — EVERY presets/**/*.mw101preset (incl. INIT) compiled in by
+// plugin/CMakeLists.txt's juce_add_binary_data target — and decodes each via the SAME
+// decodeSlot()/loadPresetJson path the injection ctor uses, so getNumPresets() returns
+// the real factory count (~64) and the §6.5 category index is populated in the shipped
+// plugin. An EMPTY embedded set still yields getNumPresets()==0 gracefully (never a
+// crash/abort) [§10.2]. A test-only injection constructor takes in-memory JSON sources
+// so the bank-load, the L9 per-slot fallback and indicesForCategory can be exercised
+// against fixtures, independent of the embedded files.
 //
 // OUT OF SCOPE (other tasks, per §10 / the task spec): authoring the 64 preset files
-// (task 131/144-150); the SPSC double-buffer audio-thread swap that publishes the
+// (tasks 144-150, DONE); the flat-POD bake (task 144b); the SPSC double-buffer
+// audio-thread swap that publishes the
 // applied <extras> to the audio thread (plugin-processor, task 111); the browser UI
 // (ui-skeleton). This module only assembles the message-thread bank and applies via the
 // §5.3 path; it does no audio-thread work [docs/design/06 §10.2, §12; ADR-008 C19].
@@ -56,17 +60,19 @@ class PresetManager {
 public:
     // A test-only in-memory preset source: a display name + the raw .mw101preset JSON
     // text for that slot. This is the injection seam the task spec calls for — the bank
-    // is exercised by injecting JSON fixtures rather than depending on real embedded
-    // files (none exist yet; tasks 131/144-150). The embedded-BinaryData constructor is
-    // a later task; nothing in this seam is on the audio thread.
+    // is exercised by injecting JSON fixtures, independent of the embedded files. The
+    // default (embedded-BinaryData) constructor gathers each BinaryData entry into the
+    // same decode path; nothing in this seam is on the audio thread.
     struct SlotSource {
         juce::String name;  // the slot's display name (also the L9 warning subject)
         juce::String json;  // the raw .mw101preset JSON text to decode (task-025)
     };
 
-    // Default constructor: loads the embedded factory bank (message thread). At this
-    // stage there is no embedded BinaryData, so the bank is empty — getNumPresets()==0
-    // is valid and construction never aborts/crashes [§10.1; §10.2; §8.3 L9].
+    // Default constructor: loads the embedded factory bank (message thread) by
+    // enumerating the JUCE BinaryData resource list and decoding each via decodeSlot.
+    // getNumPresets() then returns the real factory count (~64); an empty embedded set
+    // still yields getNumPresets()==0 gracefully (never aborts/crashes) [§10.1; §10.2;
+    // §8.3 L9].
     PresetManager();
 
     // Test-only injection constructor: build the bank from in-memory JSON sources. Each
