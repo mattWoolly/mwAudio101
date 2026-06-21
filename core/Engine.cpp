@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cmath>       // std::pow — control-rate skew inverse only, never the audio hot path
 #include <cstdint>
+#include <limits>
 #include <span>
 
 #include "calibration/EngineConstants.h"
@@ -25,6 +26,9 @@
 #include "calibration/ControlDispatchLfoConstants.h" // LFO/vel/bend routing depths (task 162)
 #include "calibration/FxDispatchConstants.h"          // FX free-ms / chorus-Hz decode (task 163)
 #include "calibration/PitchAssemblyConstants.h"      // kVoltsPerCount (count->volt anchor)
+#include "calibration/ControlDispatchCharacterConstants.h" // a4 ref / cents->volts / expression (task 164)
+
+#include "dsp/drift/VintageMacro.h"   // the Age-macro -> drift/var target mapping (task 164)
 
 #include "params/ParamDefs.h"   // kParamDefs registry order (slot lookup, off-thread only)
 #include "params/ParamIDs.h"    // canonical parameter string-IDs (no hand-typed strings)
@@ -161,6 +165,16 @@ void Engine::prepare(double sampleRate, int maxBlockSize, int maxVoices) noexcep
     sequencer_.prepare(sampleRate_, std::max(maxBlockSize_, 1));   // arp/seq/clock (task 118c)
     fx_.prepare(sampleRate_, maxBlockSize_);
 
+    // The analog-character drift engine (task 164; ADR-028 / docs/design/08). Seed it with the
+    // SAME fixed kInstanceSeed the voice pool uses so the per-voice drift personality is
+    // deterministic + byte-stable across runs and re-prepare (the plugin overrides the seed per
+    // instance off the audio thread, out of scope here). De-zipper / OU step at the per-chunk
+    // (kRenderBlock) cadence — the dispatch advances it once per renderChunk, matching the
+    // control-tick site the rest of the seam runs on. Sizes nothing dynamically (the
+    // DriftState[kMaxVoices] array is by-value) [docs/design/08 §8.2, §12.1].
+    drift_.setInstanceSeed(static_cast<std::uint64_t>(kInstanceSeed));
+    drift_.prepare(sampleRate_, cal::engine::kRenderBlock, mw::kMaxVoices);
+
     // Resolve the dispatch-consumed parameter slot indices ONCE, off the audio thread, so
     // the per-control-tick dispatch reads the ParamSnapshot by index with no string scan
     // (ADR-028; task 160). RT-safe-by-construction: the hot path never resolves IDs.
@@ -216,6 +230,14 @@ void Engine::reset() noexcept {
     seqPlayMirror_  = 0;
     seqWasPlaying_  = false;
     fx_.reset();
+    // Re-derive the drift engine's known start (re-draw Tier-1 from the seed, clear the
+    // thermal/smoother state) so reset() is a deterministic fixed point for the character
+    // model too (task 164). Clear the per-voice note-serial shadow to a sentinel so the FIRST
+    // note after reset registers as a fresh trigger and fires the note-on draw [docs/design/08
+    // §5.5 lifecycle parity].
+    drift_.reset();
+    std::fill(lastDriftSerial_.begin(), lastDriftSerial_.end(),
+              std::numeric_limits<std::uint64_t>::max());
     std::fill(mixL_.begin(), mixL_.end(), 0.0f);
     std::fill(mixR_.begin(), mixR_.end(), 0.0f);
     std::fill(mono_.begin(), mono_.end(), 0.0f);
@@ -691,6 +713,25 @@ void Engine::cacheParamSlots() noexcept {
     slots_.fxDelayMix      = find(kFxDelayMix);
     slots_.fxDelayPingpong = find(kFxDelayPingpong);
     slots_.outMono         = find(kOutMono);
+
+    // --- analog character / tuning / expression / MPE (task 164) ---
+    slots_.vintageEnable    = find(kVintageEnable);
+    slots_.vintageAge       = find(kVintageAge);
+    slots_.vintageCalSpread = find(kVintageCalSpread);
+    slots_.vintageDetuneAmt = find(kVintageDetuneAmt);
+    slots_.driftDepth       = find(kDriftDepth);
+    slots_.driftRate        = find(kDriftRate);
+    slots_.tuneA4           = find(kTuneA4);
+    slots_.tuneSlop         = find(kTuneSlop);
+    slots_.warmupTime       = find(kWarmupTime);
+    slots_.varCutoff        = find(kVarCutoff);
+    slots_.varEnvTime       = find(kVarEnvTime);
+    slots_.varPw            = find(kVarPw);
+    slots_.varGlide         = find(kVarGlide);
+    slots_.ampExpression    = find(kAmpExpression);
+    slots_.mpeEnable        = find(kMpeEnable);
+    slots_.mpeBendRange     = find(kMpeBendRange);
+    slots_.mpePressureDest  = find(kMpePressureDest);
 }
 
 VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
@@ -761,6 +802,61 @@ VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
                           * cal::dispatch::kLfoPwmDepthNorm;
 
     return vc;
+}
+
+mw::dsp::drift::DriftParams Engine::decodeDriftParams(const ParamSnapshot& snap) const noexcept {
+    // Decode the analog-character group into the DriftModel's DriftParams (task 164). The whole
+    // group is GATED by mw101.vintage.enable: when OFF, return the default DriftParams (all
+    // bands zero / scales at identity) so the DriftModel contributes nothing and the default
+    // render is bit-identical to pre-164 [docs/design/08 §4.2/§5.1 — spread=0 => no offset].
+    mw::dsp::drift::DriftParams p{};   // identity baseline (depth/slop/var = 0, rate min)
+
+    const bool vintageOn = choiceIndex(snap, slots_.vintageEnable) != 0;
+    if (!vintageOn)
+        return p;
+
+    // The manual analog-character knobs (engineering units). drift.rate is kDriftRate-skewed in
+    // the registry, so deskew it against its own skew; the others are linear.
+    const float manualDepthCents = contValue(snap, slots_.driftDepth);        // 0..50 cents
+    const float manualRate01     = contValueSkewed(snap, slots_.driftRate);   // 0.01..1 Hz, here 0..1-ish
+    const float slopCents        = contValue(snap, slots_.tuneSlop);          // 0..20 cents
+    const float calSpread01      = contValue(snap, slots_.vintageCalSpread);  // 0..1
+    const float detuneAmt01      = contValue(snap, slots_.vintageDetuneAmt);  // 0..1
+    const float varCutoff01      = contValue(snap, slots_.varCutoff);         // 0..1
+    const float varEnv01         = contValue(snap, slots_.varEnvTime);        // 0..1
+    const float varPw01          = contValue(snap, slots_.varPw);             // 0..1
+    const float varGlide01       = contValue(snap, slots_.varGlide);          // 0..1
+    const float warmupMin        = contValue(snap, slots_.warmupTime);        // 0..30 min
+
+    // mw101.vintage.age — the host Age MACRO. The real shell maps it off-thread onto the
+    // drift/variance group targets (VintageMacro, docs/design/08 §3.2/§10.1); replicate that
+    // mapping at the seam so age alone opens the model. The resolved value the DriftModel sees
+    // is the MAX of the manual knob and the age-derived target — a manual knob and a high Age
+    // both open the model, neither cancels the other (the macro is additive in spirit).
+    const float age01 = contValue(snap, slots_.vintageAge);   // 0..1
+    const mw::dsp::drift::VintageTargets ageT =
+        mw::dsp::drift::VintageMacro::computeTargets(age01);
+
+    // drift.rate target is in Hz; DriftParams.driftRate01 is the 0..1 control the OU rate map
+    // consumes (ThermalState log-maps it), so normalize the age target Hz across the schema
+    // 0.01..1 Hz span before folding. The manual deskewed value is already the 0..1 control.
+    const float ageRate01 = (ageT.driftRateHz - mw::cal::drift::kAgeDriftRateMinHz)
+                          / std::max(1.0e-6f, (mw::cal::drift::kAgeDriftRateMaxHz
+                                               - mw::cal::drift::kAgeDriftRateMinHz));
+
+    p.driftDepthCents = std::max(manualDepthCents, ageT.driftDepthCents);
+    p.driftRate01     = std::clamp(std::max(manualRate01, ageRate01), 0.0f, 1.0f);
+    p.slopCents       = std::max(slopCents, ageT.tuneSlopCents);
+    p.calSpread01     = calSpread01;          // cal spread is its own knob (not an Age target)
+    p.detuneAmt01     = detuneAmt01;
+    p.varCutoff01     = std::max(varCutoff01, ageT.varCutoff);
+    p.varEnv01        = std::max(varEnv01,    ageT.varEnvTime);
+    p.varPw01         = std::max(varPw01,     ageT.varPw);
+    p.varGlide01      = std::max(varGlide01,  ageT.varGlide);
+    p.warmupTimeMin   = warmupMin;
+    p.useWarmup       = warmupMin > 0.0f;     // warm-up engaged only when a time is dialed in
+    p.usePink         = false;                // 1/f component stays off by default (§5.1)
+    return p;
 }
 
 fx::FxParams Engine::decodeFxParams(const ParamSnapshot& snap, double hostBpm) const noexcept {
@@ -897,6 +993,78 @@ void Engine::applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noe
           * static_cast<float>(cal::pitch::kVoltsPerCount)
         : 0.0f;
 
+    // --- analog character: tuning reference + expression + MPE decode (task 164) ----------
+    // tune.a4: the A4 tuning reference (400..460 Hz, default 440). The CEM3340 VCO homes on
+    // kHardwareRefHz (442) at the 8' reference, so to land the rendered A4 on the configured
+    // a4Hz the dispatch adds log2(a4Hz / 442) OCTAVES (== volts at 1 V/oct) as a GLOBAL pitch
+    // bias on every voice. a4 == 442 => 0 (the hardware home, an exact identity); 440 => a
+    // small flat shift; 460 => sharp. A global bias — it never re-anchors note spacing.
+    const float a4Hz = contValue(snap, slots_.tuneA4);
+    const float pitchRefVolts =
+        (a4Hz > 0.0f)
+            ? static_cast<float>(std::log2(static_cast<double>(a4Hz)
+                                           / cal::character::kHardwareRefHz)
+                                 * cal::pitch::kVoltsPerOctave)
+            : 0.0f;
+
+    // amp.expression (CC11): a clean linear VCA output scaler. The PARAM reaches the seam
+    // (schema default 1.0 == unity), so this is directly audible — 1 unity, 0 silent. Clamped
+    // to the [min,max] floor/ceiling so a stray normalized value never inverts the gain.
+    const float ampExpression = std::clamp(contValue(snap, slots_.ampExpression),
+                                           cal::character::kExpressionMin,
+                                           cal::character::kExpressionMax);
+
+    // MPE routing decode (mpe.{enable,bend_range,pressure_dest}). The routing is DECODED here,
+    // but the live per-note MPE pitch-bend / pressure POSITION ingress is a SEPARATE controller
+    // seam — BlockContext carries no per-note MPE state (the same gap the task-162 bend leg has).
+    // So the resolved MPE bend offset (position x range) is ZERO today (no position source), and
+    // the pressure destination is decoded but routes nothing. The decode + routing math are in
+    // place so a future MPE-ingress seam only supplies the live per-note position/pressure.
+    const bool  mpeEnable      = choiceIndex(snap, slots_.mpeEnable) != 0;
+    const float mpeBendSemis   = contValue(snap, slots_.mpeBendRange);   // 0..96 semitones
+    const int   mpePressureDest = choiceIndex(snap, slots_.mpePressureDest);
+    constexpr float kMpePosition = 0.0f;   // no live per-note MPE position in the core seam
+    const float mpeBendVolts = mpeEnable
+        ? kMpePosition * mpeBendSemis * static_cast<float>(cal::pitch::kVoltsPerCount)
+        : 0.0f;
+
+    // --- the analog-character DRIFT engine (task 164; ADR-028 / docs/design/08) ------------
+    // Publish the decoded DriftParams (gated by vintage.enable — identity when off), fire a
+    // per-voice note-on DRAW for any voice that was freshly triggered (detected by its monotonic
+    // noteSerial changing), then ADVANCE the drift engine ONCE for this chunk so its per-voice
+    // smoothed outputs (pitch/cutoff drift cents, var.pw, the env/glide time scales) are current.
+    // The DriftModel is the existing analog-character orchestration engine — the dispatch WIRES
+    // it (it was un-consumed before this task), it does not re-implement the drift DSP.
+    const mw::dsp::drift::DriftParams driftParams = decodeDriftParams(snap);
+    const bool vintageOn = choiceIndex(snap, slots_.vintageEnable) != 0;
+    drift_.setParams(driftParams);
+
+    const int activeCountForDrift = voices_.activeCount();
+    if (vintageOn) {
+        // Fire the note-on draw for freshly-triggered voices (the monotonic noteSerial the
+        // VoiceManager stamps on allocation changed since we last saw this slot), so each note
+        // freezes its Tier-3 slop + the four variance spreads ONCE. midiHz for the octave-slop
+        // hook is the voice's resolved note at the a4 reference (the draw is octave-independent
+        // in v1, so the exact Hz is advisory) [docs/design/08 §6/§7].
+        for (int k = 0; k < activeCountForDrift; ++k) {
+            const int vi = static_cast<int>(voices_.activeIndex(k));
+            const Voice& v = voices_.voiceMutable(vi);   // const read of serial/note only here
+            const std::uint64_t serial = v.noteSerial();
+            if (serial != lastDriftSerial_[static_cast<std::size_t>(vi)]) {
+                lastDriftSerial_[static_cast<std::size_t>(vi)] = serial;
+                const int note = v.currentNote();
+                const double noteHz = (note >= 0)
+                    ? static_cast<double>(a4Hz) * std::pow(2.0, (note - cal::dispatch::kReferenceMidiNote) / 12.0)
+                    : static_cast<double>(a4Hz);
+                drift_.noteOn(vi, noteHz);
+            }
+        }
+        // Advance the OU thermal integrator + the de-zipper smoothers ONCE for this chunk
+        // (control-rate, the §12.2 once-per-block contract; the per-voice accessors below then
+        // read the settled-toward value). Bounded O(activeCount); no alloc, no lock.
+        drift_.processBlock(activeCountForDrift);
+    }
+
     // Apply to every ACTIVE voice (MONO drives exactly one; UNISON/POLY share the same VCO/
     // VCF/Env/VCA controls + a per-voice pitch and keyboard-track CV). The non-const voice is
     // taken through VoiceManager::voiceMutable (task 161 cleanup of the 160 const_cast smell);
@@ -941,6 +1109,26 @@ void Engine::applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noe
         // --- pitch-bend (task 162): the resolved per-dest bend CV (zero with no live wheel). ---
         vc.bendVcoVolts = bendVcoVolts;
         vc.bendVcfVolts = bendVcfVolts;
+
+        // --- analog character (task 164): the tune.a4 reference bias + expression + MPE decode
+        // (note-independent, shared across voices), then the PER-VOICE drift/variance outputs
+        // read from the DriftModel (identity when vintage is off). The DriftModel speaks CENTS
+        // for pitch + cutoff and a duty FRACTION for PW; convert cents->volts for the CV frame.
+        vc.pitchRefVolts = pitchRefVolts;
+        vc.ampExpression = ampExpression;
+        vc.mpeEnable     = mpeEnable;
+        vc.mpeBendVolts  = mpeBendVolts;
+        vc.mpePressureDest = mpePressureDest;
+        if (vintageOn) {
+            vc.pitchDriftVolts  = static_cast<float>(
+                cal::character::centsToVolts(drift_.pitchOffsetCents(vi)));
+            vc.cutoffDriftVolts = static_cast<float>(
+                cal::character::centsToVolts(drift_.cutoffOffset(vi)));
+            vc.pwDriftNorm      = drift_.pwOffset(vi);
+            vc.envTimeScale     = drift_.envTimeScale(vi);
+            vc.glideTimeScale   = drift_.glideTimeScale(vi);
+        }
+        // (else: VoiceControls' defaults are the identity — 0 offsets, unit scales.)
 
         v.applyControls(vc, chunkSamples);
     }

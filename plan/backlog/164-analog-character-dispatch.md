@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 164
 title: Control-dispatch — analog character + tuning + expression (drift/vintage/variance/tune.a4/warmup/expression/MPE)
-status: todo
+status: in-review
 depends-on: [160, 161, 162]
 component: core
 estimated-size: M

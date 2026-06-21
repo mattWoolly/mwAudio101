@@ -51,6 +51,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -63,6 +64,7 @@
 #include "control/ControlTypes.h"     // KeyEvent / ControlEvent PODs (doc 05 §2.3)
 #include "control/SequencerEngine.h"  // arp/seq/clock fixed-order state machine (task 087)
 #include "dsp/fx/FxChain.h"
+#include "dsp/drift/DriftModel.h"     // the analog-character drift/vintage/variance engine (task 164)
 
 namespace mw {
 
@@ -140,6 +142,14 @@ private:
     ControlCore  control_{};
     seq::SequencerEngine sequencer_{};   // arp/seq/clock fixed-order state machine (task 087)
     fx::FxChain  fx_{};
+    // The analog-character orchestration engine (task 164; ADR-028 / docs/design/08). It owns
+    // the per-voice DriftState + thermal OU integrators + de-zipper smoothers, advanced once
+    // per control tick; its per-voice smoothed outputs (pitch/cutoff drift cents, var.pw, the
+    // env/glide time scales) feed the analog-character fields of VoiceControls. Seeded off the
+    // SAME kInstanceSeed as the voice pool so the personality is deterministic + reproducible.
+    // GATED by mw101.vintage.enable: when off, the dispatch feeds identity (zero offset / unit
+    // scale) and does NOT advance it, so the default render is bit-identical to pre-164.
+    mw::dsp::drift::DriftModel drift_{};
 
     // Translate the SequencerEngine's emitted ControlEvents for this chunk into the
     // VoiceManager's single note ingress (handleNoteEvent into the sole KeyAssigner),
@@ -169,6 +179,17 @@ private:
     // that are the SAME for every active voice). Per-voice pitch (which depends on each
     // voice's resolved note) is filled in applyParamSnapshot. Pure arithmetic; noexcept.
     [[nodiscard]] VoiceControls decodeShared(const ParamSnapshot& snap) const noexcept;
+
+    // Decode the analog-character group of the snapshot into the DriftModel's DriftParams POD
+    // (task 164; ADR-028 / docs/design/08): drift.{depth,rate}, tune.slop, vintage.{cal_spread,
+    // detune_amt}, var.{cutoff,env_time,pw,glide}, warmup.time. mw101.vintage.age is the host
+    // Age MACRO — folded in here via VintageMacro::computeTargets so a high Age opens the drift
+    // depth/rate + variance group (the macro the host bridge applies off-thread is replicated at
+    // the seam so age alone perturbs the model). vintage.enable gates the whole group: when off
+    // every field is the identity (zero / schema-min) so the DriftModel contributes nothing.
+    // Pure arithmetic; noexcept. The std::pow inside the Age curve is control-rate only.
+    [[nodiscard]] mw::dsp::drift::DriftParams decodeDriftParams(const ParamSnapshot& snap)
+        const noexcept;
 
     // -----------------------------------------------------------------------------------
     // THE FX-PARAM DISPATCH (task 163; ADR-028 item 5). Decode the FX range of the
@@ -222,6 +243,14 @@ private:
     // not-playing -> playing transition (the StepSequencer rewinds playPos to 0 there).
     int seqPlayMirror_ = 0;
     bool seqWasPlaying_ = false;
+
+    // Per-voice note-serial shadow for the analog-character note-on draw (task 164). The
+    // VoiceManager stamps a fresh monotonic noteSerial on every allocation; when a voice's
+    // live serial differs from the value last seen here, that voice was freshly triggered, so
+    // the dispatch fires DriftModel::noteOn(voiceIndex) ONCE to freeze its Tier-3 slop + the
+    // four variance spreads for the note. Reset to a sentinel on prepare/reset. A plain array
+    // of integers written only on the single-threaded audio path; no alloc, no lock.
+    std::array<std::uint64_t, mw::kMaxVoices> lastDriftSerial_{};
 
     // --- cached registry slot indices for the dispatch-consumed params (ADR-028; task
     // 160). Resolved once in prepare() (cacheParamSlots) so applyParamSnapshot reads the
@@ -290,6 +319,25 @@ private:
         int fxDelayMix      = -1;  // 0..1 -> delay.mix
         int fxDelayPingpong = -1;  // bool -> delay.pingpong
         int outMono         = -1;  // bool -> FxParams.monoOutput
+
+        // --- analog character / tuning / expression / MPE (task 164) ---
+        int vintageEnable    = -1;  // bool  -> the master gate for the whole character group
+        int vintageAge       = -1;  // 0..1  -> Age macro (folded into drift depth/rate + var)
+        int vintageCalSpread = -1;  // 0..1  -> Tier-1 cal spread width
+        int vintageDetuneAmt = -1;  // 0..1  -> per-voice (unison/poly) detune spread scale
+        int driftDepth       = -1;  // 0..50 cents -> thermal->pitch drift depth
+        int driftRate        = -1;  // 0.01..1 Hz (skew) -> OU drift rate
+        int tuneA4           = -1;  // 400..460 Hz -> A4 pitch reference (442 == hardware home)
+        int tuneSlop         = -1;  // 0..20 cents -> Tier-3 per-note tuning slop
+        int warmupTime       = -1;  // 0..30 min -> warm-up transient (gated by useWarmup)
+        int varCutoff        = -1;  // 0..1  -> per-voice cutoff variance
+        int varEnvTime       = -1;  // 0..1  -> per-voice env-time variance (multiplier)
+        int varPw            = -1;  // 0..1  -> per-voice PW variance (additive duty)
+        int varGlide         = -1;  // 0..1  -> per-voice glide-time variance (multiplier)
+        int ampExpression    = -1;  // 0..1  -> CC11 VCA output scaler (1 == unity)
+        int mpeEnable        = -1;  // bool  -> MPE routing enable (decode; inert without ingress)
+        int mpeBendRange     = -1;  // 0..96 semitones -> MPE per-note bend range
+        int mpePressureDest  = -1;  // choice 0..2 -> {VCF,VCA,PW} pressure destination
     } slots_{};
 
     double sampleRate_      = 0.0;

@@ -152,6 +152,47 @@ struct VoiceControls {
     // routing math + range decode are in place for when the controller seam lands. ---
     float                bendVcoVolts   = 0.0f;   // resolved pitch-bend -> VCO CV (volts)
     float                bendVcfVolts   = 0.0f;   // resolved pitch-bend -> VCF cutoff CV (volts)
+
+    // --- analog character: drift / vintage / variance / tuning / warm-up (task 164) ------
+    // The existing drift/vintage/variance model (core/dsp/drift/DriftModel) is advanced once
+    // per control tick by the Engine; its per-voice smoothed outputs are decoded into THESE
+    // fields and SUMMED into the same CVs the 160/161/162 legs feed. All are the ZERO/IDENTITY
+    // value when vintage.enable is off (the Engine gates them), so the character group is
+    // perfectly inert by default — the disabled render is bit-identical to the no-character
+    // baseline [docs/design/08; ADR-009; ADR-028 item 3].
+    //
+    //   pitchRefVolts    : mw101.tune.a4 — the A4 tuning-reference CV offset (log2(a4/442)
+    //                      octaves == volts), a GLOBAL pitch bias summed into the pitch CV.
+    //                      a4 == 442 => 0 (the hardware home); != 442 shifts the reference.
+    //   pitchDriftVolts  : DriftModel pitchOffsetCents (Tier1 cal tune + Tier2 thermal drift +
+    //                      Tier3 tune.slop) converted cents->volts, summed into the pitch CV.
+    //   cutoffDriftVolts : DriftModel cutoffOffset (Tier1 cal + Tier2 drift + var.cutoff)
+    //                      converted cents->volts, summed into the cutoff CV.
+    //   pwDriftNorm      : DriftModel pwOffset (var.pw additive duty fraction), summed into PWM.
+    //   envTimeScale     : DriftModel envTimeScale (var.env_time), a MULTIPLIER on A/D/R times.
+    //   glideTimeScale   : DriftModel glideTimeScale (var.glide), a MULTIPLIER on glide time.
+    float pitchRefVolts    = 0.0f;   // tune.a4 reference offset (volts); 0 == 442 Hz home
+    float pitchDriftVolts  = 0.0f;   // drift/cal/slop -> pitch CV (volts)
+    float cutoffDriftVolts = 0.0f;   // drift/cal/var  -> cutoff CV (volts)
+    float pwDriftNorm      = 0.0f;   // var.pw additive duty fraction -> PWM CV
+    float envTimeScale     = 1.0f;   // var.env_time multiplier on A/D/R times
+    float glideTimeScale   = 1.0f;   // var.glide multiplier on glide time
+
+    // --- expression (task 164) — mw101.amp.expression (CC11). A clean linear post-VCA output
+    // scaler folded beside vca.level + the velocity scale in render(). The PARAM reaches the
+    // seam (schema default 1.0 == unity), so this is DIRECTLY audible (unlike the bend/MPE
+    // position ingress). 1 => unity, 0 => silent. ---
+    float ampExpression    = 1.0f;   // amp.expression VCA output scaler (1 == unity)
+
+    // --- MPE routing decode (task 164) — mw101.mpe.{enable,bend_range,pressure_dest}. The
+    // routing is DECODED here, but the live per-note MPE pitch-bend / pressure POSITION
+    // ingress is a SEPARATE controller seam (BlockContext carries no per-note MPE state), so
+    // these carry the decoded config + the resolved offset is mpePosition x range — ZERO with
+    // no live position, hence inert today (flagged). The decode is in place for when the MPE
+    // ingress seam lands. ---
+    bool                 mpeEnable      = false;  // mpe.enable
+    float                mpeBendVolts   = 0.0f;   // resolved MPE per-note bend -> VCO CV (zero: no ingress)
+    int                  mpePressureDest = 0;     // 0 VCF / 1 VCA / 2 PW (decoded; inert: no ingress)
 };
 
 // Inline per-voice drift state [ADR-006 §Decision item 1; docs/design/04 §4.2/§4.4].
@@ -289,6 +330,11 @@ private:
     // Folded as a post-VCA gain (the §4.1/§5 "velocity folded into the amplitude" routing),
     // NOT into the OTA control taper, so it does not reshape the gate/anti-thump contour. ---
     float vcaVelScale_ = 1.0f;
+
+    // --- expression scale (task 164) — mw101.amp.expression (CC11), cached from the dispatch
+    // and applied as a clean linear post-VCA amplitude scale in render() alongside vcaLevel_
+    // + vcaVelScale_. Default 1.0 (unity == the schema default, no attenuation). ---
+    float vcaExprScale_ = 1.0f;
 
     // Structural AA tier (mw101.quality), set off the audio thread; folded into the
     // oscillator-section Controls each applyControls [ADR-018 Q5].
