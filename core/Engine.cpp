@@ -282,28 +282,31 @@ void Engine::renderChunk(const BlockContext& ctx, int n0, int len) noexcept {
     const MidiEventView& midi = ctx.midi;
     const bool transportRunning = ctx.transport.isPlaying;
 
-    // 0. CONTINUOUS-CONTROLLER INGRESS (task 162c; ADR-028 control-dispatch repair). The 162
-    //    dispatch wired pitch-bend->{VCO,VCF} and mod-wheel->LFO-depth, but the live controller
-    //    POSITION never reached the engine — BlockContext carried no controller field and this
-    //    translator DROPPED PitchBend/ControlChange MidiEvents (toNoteEvent returns false for
-    //    them). Consume the PitchBend + CC1 (mod-wheel) events that fall within THIS chunk into
-    //    the engine's running controller state so the latest position is applied at the control
-    //    tick below; the 162 bend/wheel legs then activate. Independent of the note path (it
-    //    runs whether the keyboard or the sequencer owns note ingress) and order-preserving:
-    //    events are sampleOffset-ascending so the last in-window value wins for this chunk.
-    //    A PitchBend value is the centered signed unit [-1,+1] (the controller position, doc 09
-    //    §4.4); a CC1 value is the raw 7-bit 0..127 normalized to [0,1]. Other CC numbers are
-    //    NOT consumed here — they reach the engine as ParamValue events via the plugin's
-    //    CcLearnMap (a separate path; docs/design/09 §6.2). Pure POD read + arithmetic; noexcept,
-    //    alloc-free, lock-free [ADR-001 §9].
+    // 0. CONTINUOUS-CONTROLLER INGRESS (task 162c; ADR-028 control-dispatch repair; bend
+    //    authority reconciled in task 162d). The 162 dispatch wired pitch-bend->{VCO,VCF} and
+    //    mod-wheel->LFO-depth, but the live controller POSITION never reached the engine.
+    //
+    //    BEND. The pitch-bend WHEEL position is the centered signed unit [-1,+1] that
+    //    process() seeded into pitchBend_ from BlockContext::controllers.pitchBend (the host
+    //    half, task 162d). It is NOT re-read from the PitchBend MidiEvent here: that event's
+    //    `value` carries the bend-range-scaled SEMITONE offset for the §4.4 Pre-Q tuning path
+    //    (plugin/midi/MidiFrontEnd forwards `value = semis`), NOT a [-1,+1] unit — re-reading
+    //    it as a unit (the old 162c code) mis-scaled the wheel (a half-wheel that is +1 semis
+    //    at a ±2-semitone channel range was clamped to a unit of 1.0 and rendered a FULL bend).
+    //    So the bend authority is the process() controllers seed; the forwarded SEMITONE
+    //    PitchBend MidiEvent stays untouched for the §4.4 path (no regression to midi_tuning).
+    //
+    //    MOD WHEEL. CC1 (mod wheel) DOES update per-chunk here: its `value` is the raw 7-bit
+    //    0..127, normalized to [0,1] — sample-accurate within the block, last-in-window wins
+    //    (events are sampleOffset-ascending). Other CC numbers are NOT consumed here — they
+    //    reach the engine as ParamValue events via the plugin's CcLearnMap (a separate path;
+    //    docs/design/09 §6.2). Independent of the note path. Pure POD read + arithmetic;
+    //    noexcept, alloc-free, lock-free [ADR-001 §9; docs/design/09 §4.4].
     for (int i = 0; i < midi.numEvents; ++i) {
         const MidiEvent& e = midi.events[i];
         if (e.sampleOffset < n0 || e.sampleOffset >= n0 + len) continue;
-        if (e.type == NormalizedType::PitchBend) {
-            pitchBend_ = std::clamp(e.value, cal::ccingress::kPitchBendMin,
-                                    cal::ccingress::kPitchBendMax);
-        } else if (e.type == NormalizedType::ControlChange
-                   && static_cast<int>(e.data0) == cal::ccingress::kModWheelCcNumber) {
+        if (e.type == NormalizedType::ControlChange
+            && static_cast<int>(e.data0) == cal::ccingress::kModWheelCcNumber) {
             modWheel_ = std::clamp(e.value / cal::ccingress::kSevenBitMax,
                                    cal::ccingress::kModWheelMin, cal::ccingress::kModWheelMax);
         }
@@ -1038,18 +1041,21 @@ void Engine::applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noe
     const bool  velOn    = choiceIndex(snap, slots_.velEnable) != 0;   // bool index 0/1
     const float velDepth = velOn ? contValue(snap, slots_.velDepth) : 0.0f;
 
-    // --- pitch-bend routing (task 162 leg, ACTIVATED by 162c): mw101.mod.{bend_dest,bend_range_*}.
-    // The bend RANGE (cents) per destination is decoded here; the live bend WHEEL position is the
-    // engine's running pitchBend_ (the [-1,+1] centered unit consumed from PitchBend MidiEvents /
-    // seeded from BlockContext::controllers — task 162c closes the ingress gap the 162 leg flagged).
-    // The resolved bend offset is wheel x (rangeCents/100 semitones) x kVoltsPerCount, summed into
-    // the pitch CV (dest VCO) and/or the cutoff CV (dest VCF); Both routes to both. A centered wheel
-    // (pitchBend_ == 0) yields a zero offset — the neutral identity. Full bend (+-1) at a 1200-cent
-    // range is +-1 octave at exactly 1 V/oct [ControlDispatchConstants.h; ADR-005; ADR-028 item 3].
+    // --- pitch-bend routing (task 162 leg, ACTIVATED by 162c; bend authority fixed in 162d):
+    // mw101.mod.{bend_dest,bend_range_*}. The bend RANGE (cents) per destination is decoded here;
+    // the live bend WHEEL position is the engine's running pitchBend_ — the [-1,+1] centered unit
+    // seeded by process() from BlockContext::controllers.pitchBend (NOT re-read from the forwarded
+    // PitchBend MidiEvent, whose value is the §4.4 SEMITONE offset, not a unit — see the ingress
+    // note at the top of renderChunk; task 162d). The resolved bend offset is
+    // wheel x (rangeCents/100 semitones) x kVoltsPerCount, summed into the pitch CV (dest VCO)
+    // and/or the cutoff CV (dest VCF); Both routes to both. A centered wheel (pitchBend_ == 0)
+    // yields a zero offset — the neutral identity. A HALF wheel (+0.5) at a 1200-cent range is
+    // +half an octave (x sqrt2 ~ 1.414); a full wheel (+-1) at 1200 cents is +-1 octave at
+    // exactly 1 V/oct [ControlDispatchConstants.h; ADR-005; ADR-028 item 3].
     const int   bendDest      = choiceIndex(snap, slots_.modBendDest);   // 0 VCO / 1 VCF / 2 Both
     const float bendRangeVcoCents = contValue(snap, slots_.modBendRangeVco);
     const float bendRangeVcfCents = contValue(snap, slots_.modBendRangeVcf);
-    const float bendWheel = pitchBend_;   // live centered [-1,+1] bend position (task 162c)
+    const float bendWheel = pitchBend_;   // live centered [-1,+1] bend position (162c seed; 162d authority)
     const float bendVcoVolts = (bendDest == 0 || bendDest == 2)
         ? bendWheel * (bendRangeVcoCents / 100.0f)
           * static_cast<float>(cal::pitch::kVoltsPerCount)

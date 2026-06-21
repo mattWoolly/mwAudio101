@@ -208,6 +208,12 @@ public:
     [[nodiscard]] int  lastCoreEventCountForTest() const noexcept { return lastCoreEventCount_; }
     [[nodiscard]] int  lastProgramChangeForTest() const noexcept { return lastProgramChange_; }
     [[nodiscard]] int  latencySetCountForTest() const noexcept { return latencySetCalls_; }
+    // The live continuous-controller position the LAST processBlock fed into
+    // BlockContext::controllers (task 162d). Lets a test prove the host pitch-bend / CC1
+    // mod-wheel reached the controller-ingress seam through the real processor. Plain
+    // members written on the audio thread; read off-thread in tests (no audio-thread mutation).
+    [[nodiscard]] float lastBendUnitForTest() const noexcept { return lastBendUnit_; }
+    [[nodiscard]] float lastModWheelForTest() const noexcept { return lastModWheel_; }
     // The number of times the message-thread handoff (handleAsyncUpdate) applied a
     // preset recall. Lets a test prove a Program Change in the MIDI stream actually
     // reached setCurrentProgram via the AsyncUpdater (NOT just a host setCurrentProgram).
@@ -335,6 +341,11 @@ private:
     int lastProgramChange_  = -1;
     int programRecalls_     = 0;   // message-thread handoff recall count (handleAsyncUpdate)
     int lastRecalledProgram_ = -1; // last index the consumer applied via setCurrentProgram
+
+    // The live controller position the last processBlock fed BlockContext::controllers
+    // (task 162d test introspection; written on the audio thread, read off-thread in tests).
+    float lastBendUnit_ = 0.0f;
+    float lastModWheel_ = 0.0f;
 
     // The voice cap the engine is prepared with (bootstrap value; the real cap is a
     // param in the voice stream).

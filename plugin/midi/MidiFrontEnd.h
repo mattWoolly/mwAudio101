@@ -47,6 +47,7 @@
 
 #include "params/Smoother.h"     // mw::params::OnePoleSmoother — the canonical de-zipper (task 008)
 #include "calibration/MidiFrontEndConstants.h"   // mw::cal::midifront::* (PI) constants
+#include "calibration/ControlDispatchCcIngressConstants.h"   // mw::cal::ccingress::kModWheelCcNumber (task 162c)
 
 namespace mw::plugin {
 
@@ -118,6 +119,23 @@ public:
         return unitOffset * channelBendSemis_;
     }
 
+    // --- Live continuous-controller POSITION for the core ingress seam (task 162d) ----
+    // processMidi() tracks the LATEST pitch-wheel + CC1 (mod-wheel) message it saw this
+    // block as the RAW controller position the core continuous-controller seam consumes:
+    //   * the pitch-wheel as a CENTERED signed unit [-1,+1] (0 == centered; this is the
+    //     SAME value mw::ContinuousControllers::pitchBend / a core PitchBend MidiEvent
+    //     carries — NOT the bend-range-scaled semitone offset the PitchBend HostEvent
+    //     forwards for the §4.4 Pre-Q path, which stays unchanged);
+    //   * the mod-wheel as the [0,1] CC1 value (raw 7-bit / 127).
+    // The processor reads these AFTER processMidi() and writes them into
+    // BlockContext::controllers each block so the engine's 162c bend->{VCO,VCF} and
+    // mod-wheel->LFO-depth legs activate END-TO-END (they were inert in the plugin before
+    // this task). The values PERSIST across blocks (a real wheel holds its position until
+    // the next message), so a block with no controller message keeps the last held position.
+    // Message arrival sets these in processMidi(); reset() snaps them to the neutral identity.
+    [[nodiscard]] float liveBendUnit()    const noexcept { return liveBendUnit_; }
+    [[nodiscard]] float liveModWheelNorm() const noexcept { return liveModWheelNorm_; }
+
 private:
     // Fixed-cost one-pole de-zippers (O(1)/sample) — the canonical smoother (task 008).
     // Bend rides the Pitch de-zipper class, channel pressure the Fast class [§6.4].
@@ -138,6 +156,13 @@ private:
 
     // Velocity switch (ON by default) [§4.5; ADR-016 R-2].
     bool  velocityEnabled_ = mw::cal::midifront::kDefaultVelocityEnabled;
+
+    // --- Live continuous-controller POSITION held for the core ingress seam (task 162d) ---
+    // The latest pitch-wheel position as a CENTERED signed unit [-1,+1] (0 == centered) and
+    // the latest CC1 mod-wheel value normalized to [0,1]. Updated on the matching message in
+    // processMidi(); both at the neutral no-controller identity by default + after reset().
+    float liveBendUnit_     = 0.0f;   // [-1,+1]; 0 == centered (neutral)
+    float liveModWheelNorm_ = 0.0f;   // [0,1];   0 == wheel down (neutral)
 };
 
 } // namespace mw::plugin

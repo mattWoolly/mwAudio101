@@ -89,6 +89,11 @@ void MidiFrontEnd::reset() noexcept {
     tuneCents_          = cal::kDefaultTuneCents;
     modernUnquantized_  = false;
     velocityEnabled_    = cal::kDefaultVelocityEnabled;
+
+    // Live continuous-controller position back to the neutral no-controller identity
+    // (centered bend, wheel down) so a reset is the bend/wheel fixed point too (task 162d).
+    liveBendUnit_     = 0.0f;
+    liveModWheelNorm_ = 0.0f;
 }
 
 void MidiFrontEnd::setTuning(float a4Hz, float tuneCents) noexcept {
@@ -177,6 +182,13 @@ void MidiFrontEnd::processMidi(const juce::MidiBuffer& midi,
             const float semis = bendUnitToSemis(unit);
             bendSmoother_.setTarget(static_cast<double>(semis));   // O(1)/sample de-zipper TARGET only
 
+            // Hold the RAW centered unit [-1,+1] as the live bend position the core
+            // continuous-controller seam consumes (task 162d). The processor copies this into
+            // BlockContext::controllers.pitchBend, where the engine multiplies it by
+            // mod.bend_range_{vco,vcf} per mod.bend_dest — so the wheel actually bends the
+            // VCO/VCF in the plugin, not just sets the unconsumed semitone HostEvent below.
+            liveBendUnit_ = unit;
+
             HostEvent bend{};
             bend.type         = HostEventType::PitchBend;
             bend.channel      = channel;
@@ -216,11 +228,32 @@ void MidiFrontEnd::processMidi(const juce::MidiBuffer& midi,
         }
 
         if (m.isController()) {
-            // Resolve the CC number through the learn map to a doc-06 param index (or the
+            const auto ccNumber = static_cast<std::uint8_t>(m.getControllerNumber());
+
+            // CC1 (mod wheel) RECONCILIATION (task 162d). CC1 drives the LIVE controller-
+            // ingress mod-wheel position the core 162c seam consumes (the LFO-depth
+            // multiplier scaled by mod.lfo_mod_wheel) — and ONLY that. We hold the [0,1]
+            // wheel position here for the processor to copy into
+            // BlockContext::controllers.modWheel, and we DELIBERATELY DO NOT also route CC1
+            // through the CcLearnMap to a mod.lfo_mod_wheel ParamValue: routing it BOTH ways
+            // would double-apply the wheel (it would raise the routing-depth PARAM and the
+            // live wheel multiplier at once). The canonical routing is: CC1 == the live
+            // performance mod-wheel position; mod.lfo_mod_wheel stays the patch routing-depth
+            // knob the user sets, NOT a MIDI-CC target. The §6.2 CcLearnMap seed still maps
+            // CC1 -> mod.lfo_mod_wheel (untouched here — other readers/tests rely on it), but
+            // the front-end no longer EMITS that ParamValue, so the engine sees CC1 exactly
+            // once, via the controller ingress [docs/design/09 §4.4/§6.2; ADR-028 item 3;
+            // core/calibration/ControlDispatchCcIngressConstants.h]. RT-safe: a POD write.
+            if (static_cast<std::int32_t>(ccNumber) == mw::cal::ccingress::kModWheelCcNumber) {
+                liveModWheelNorm_ = std::clamp(
+                    static_cast<float>(m.getControllerValue()) / cal::kSevenBitMax, 0.0f, 1.0f);
+                continue;
+            }
+
+            // Every OTHER CC: resolve through the learn map to a doc-06 param index (or the
             // HOLD sentinel for CC64). An unmapped / disabled CC returns kUnmapped (-1)
             // and is DROPPED — no CC invents a control the hardware lacks [§6.2-6.3;
             // ADR-012 C15, C20]. The lookup is branch-free + lock-free (single atomic load).
-            const auto ccNumber = static_cast<std::uint8_t>(m.getControllerNumber());
             const std::int32_t paramIndex = map.lookup(ccNumber);
             if (paramIndex != CcLearnMap::kUnmapped) {
                 const float norm = static_cast<float>(m.getControllerValue()) / cal::kSevenBitMax;
