@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 157
 title: CI verification gate steps: discovery, label-snapshot, MANIFEST, no-network
-status: in-review
+status: done
 depends-on: [001, 006, 077, 156]
 component: infra
 estimated-size: M

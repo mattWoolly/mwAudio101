@@ -176,7 +176,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 16 | 140 | Host smoke matrix: headless Standalone launch + per-format validator invocation | qa | M | 113, 001, 006, 136, 137, 138 | todo |
 | 16 | 141 | Constant-PDC invariance + FX-off bit-exact integration test | qa | S | 113, 036, 091, 077, 136 | todo |
 | 16 | 142 | Cross-format capability ladder integration test (note-expression + transport rungs) | qa | M | 113, 104, 087, 114, 136 | todo |
-| 16 | 157 | CI verification gate steps: discovery, label-snapshot, MANIFEST, no-network | infra | M | 001, 006, 077, 156 | todo |
+| 16 | 157 | CI verification gate steps: discovery, label-snapshot, MANIFEST, no-network | infra | M | 001, 006, 077, 156 | done |
 | 17 | 154 | Adversarial multi-dimension QA audit report (docs/QA-REPORT.md) | qa | M | 118, 006, 077, 006, 139, 140, 141, 142, 143 | todo |
 | 18 | 155 | (PI) pragmatic-invention ledger sweep section in docs/QA-REPORT.md | qa | S | 118, 077, 006, 154 | todo |
 
