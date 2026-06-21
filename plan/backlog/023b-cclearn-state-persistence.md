@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 023b
 title: Persist CC-learn bindings in plugin state (extend Extras + StateSerializer round-trip)
-status: in-review
+status: done
 depends-on: [023, 100, 017]
 component: app
 estimated-size: S
