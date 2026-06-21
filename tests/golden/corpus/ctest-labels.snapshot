@@ -15,6 +15,7 @@
 [core]
 [cpu]
 [crossformat_exact]
+[dispatch_vcf]
 [dispatch_vco]
 [e2e_determinism]
 [e2e_smoke]
