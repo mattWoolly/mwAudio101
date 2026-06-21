@@ -259,6 +259,7 @@ private:
         int vcoTune    = -1;
         int vcoFine    = -1;
         int vcoPw      = -1;
+        int vcoPwmDepth = -1;  // 0..1 -> MANUAL static PWM depth (task 162e; distinct from lfo.depth_pwm)
         int vcoRange   = -1;   // choice 0..5 -> footage(+ext octaves)
         int subMode    = -1;   // choice 0..2 -> SubShape
         int sawLevel   = -1;
@@ -272,6 +273,7 @@ private:
         int vcfCutoff    = -1;   // 0..1 -> cutoff CV volts (skew kCutoff)
         int vcfResonance = -1;   // 0..1 -> setResonance (self-osc at 1)
         int vcfEnvMod    = -1;   // 0..1 -> ENV->cutoff depth (octaves)
+        int vcfLfoMod    = -1;   // 0..1 -> VCF-panel LFO->cutoff amount (task 162e; distinct from lfo.depth_cutoff)
         int vcfKbdTrack  = -1;   // 0..1 -> keyboard-track depth (1 V/oct at 1)
         int envAttack    = -1;   // 0..1 -> seconds (skew kEnvTime)
         int envDecay     = -1;   // 0..1 -> seconds (skew kEnvTime)

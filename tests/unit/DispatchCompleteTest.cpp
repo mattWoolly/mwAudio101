@@ -32,13 +32,15 @@
 // each var.* leg's specific effect (cutoff spread / env-time spread / pw duty spread / glide-time
 // spread) is independently asserted, not entangled with the cal-spread pitch perturbation.
 //
-// HONEST FINDINGS (a HIGH-finding NOT fixed here — TESTS ONLY; flagged loudly in the PR): two
-// live registry params have NO dispatch path and therefore NO observable effect today:
-//   * mw101.vco.pwm_depth  (kVcoPwmDepth)  — not in Engine::ParamSlots, never decoded/applied.
-//   * mw101.vcf.lfo_mod    (kVcfLfoMod)    — not in Engine::ParamSlots, never decoded/applied.
-// Each is documented in the manifest as FINDING_UNWIRED and asserted INERT (bit-identical
-// low-vs-high) so the audit RECORDS the gap honestly (it does not fake an effect). When a future
-// task wires them, the inert assertion fails loudly and is flipped to an audio-effect assertion.
+// HONEST FINDINGS (history): the 165 audit ORIGINALLY found two live registry params with NO
+// dispatch path (no observable effect):
+//   * mw101.vco.pwm_depth  (kVcoPwmDepth)  — the MANUAL PWM depth.
+//   * mw101.vcf.lfo_mod    (kVcfLfoMod)    — the VCF-panel LFO->cutoff amount.
+// Each was documented as FINDING_UNWIRED and asserted INERT. Task 162e WIRED both into the
+// ADR-028 seam (Engine::ParamSlots + decode + Voice::applyControls); the manifest entries are now
+// Dim::Spectrum (asserted-audio) and the inert assertions are flipped to audio-effect assertions
+// (the detailed per-leg ratios live in DispatchGapPwmVcfTest, [dispatch_gap]). The finding count
+// is now ZERO — the completeness audit is clean.
 //
 // The Engine consumes the seam's immutable mw::ParamSnapshot once per control tick; this file
 // builds that POD directly (the off-thread bridge's job in the real shell) and reads the audible
@@ -448,7 +450,7 @@ constexpr std::array<ManifestRow, 91> kManifest = {{
     { P::kVcoTune,      Dim::Pitch },
     { P::kVcoFine,      Dim::Pitch },
     { P::kVcoPw,        Dim::Spectrum },
-    { P::kVcoPwmDepth,  Dim::FindingUnwired },   // FINDING: no ParamSlots entry, never decoded
+    { P::kVcoPwmDepth,  Dim::Spectrum },   // wired (task 162e): MANUAL PWM duty -> even harmonics
     { P::kVcoRange,     Dim::Pitch },
     // --- source mixer / sub / noise ---
     { P::kSawLevel,     Dim::Amplitude },
@@ -460,7 +462,7 @@ constexpr std::array<ManifestRow, 91> kManifest = {{
     { P::kVcfCutoff,    Dim::Spectrum },
     { P::kVcfResonance, Dim::Spectrum },
     { P::kVcfEnvMod,    Dim::Spectrum },
-    { P::kVcfLfoMod,    Dim::FindingUnwired },    // FINDING: no ParamSlots entry, never decoded
+    { P::kVcfLfoMod,    Dim::Spectrum },    // wired (task 162e): VCF-panel LFO->cutoff wobble
     { P::kVcfKbdTrack,  Dim::Spectrum },
     // --- envelope ---
     { P::kEnvAttack,    Dim::Time },
@@ -1642,9 +1644,8 @@ TEST_CASE("dispatch_complete: each var leg is isolated and independently observa
 //                   true effect lives on the Re-roll path / the poly-unison voice-spread tests
 //                   (off this MONO completeness seam). Asserted bit-identical here so a regression
 //                   that wrongly let either perturb the live MONO render would fail.
-//   FindingUnwired: vco.pwm_depth, vcf.lfo_mod — LIVE registry params with NO dispatch path
-//                   (no Engine::ParamSlots entry). A HIGH finding (flagged in the PR); asserted
-//                   INERT so the audit records the gap honestly (it does not fake an effect).
+//   (FindingUnwired: NONE — task 162e wired the two former findings vco.pwm_depth + vcf.lfo_mod
+//                   into the seam; they are now Dim::Spectrum, asserted-audio below.)
 // =====================================================================================
 TEST_CASE("dispatch_complete: exempt params are enumerated with rationale and behave as classified",
           "[dispatch_complete]") {
@@ -1663,18 +1664,19 @@ TEST_CASE("dispatch_complete: exempt params are enumerated with rationale and be
         }
     }
     // The five structural params (ADR-028 item 4) + the three MPE decode-inert + the two
-    // unwired findings + the two frozen/unison-only inert are fixed; the subsystem set is the
-    // arp/seq/key/pitch/lfo-sync group.
+    // frozen/unison-only inert are fixed; the subsystem set is the arp/seq/key/pitch/lfo-sync
+    // group. The two former FindingUnwired params (vco.pwm_depth + vcf.lfo_mod) are now WIRED
+    // (task 162e) — asserted-audio (Spectrum), so the finding count is ZERO (the audit is clean).
     REQUIRE(structural == 5);
     REQUIRE(decodeInert == 3);
-    REQUIRE(finding == 2);
+    REQUIRE(finding == 0);   // task 162e wired both former findings -> 0 outstanding
     REQUIRE(frozen == 2);
     // arp(5) + seq(3) + key.trigger_priority(1) + pitch.modern_unquantized(1) + lfo sync(2).
     REQUIRE(subsystem == 12);
     REQUIRE(structural + subsystem + decodeInert + finding + frozen + audio
             == static_cast<int>(kManifest.size()));   // all 91 classified
-    // The remaining 67 are the asserted audio/character dimensions (91 - 5 - 12 - 3 - 2 - 2).
-    REQUIRE(audio == 67);
+    // The remaining 69 are the asserted audio/character dimensions (91 - 5 - 12 - 3 - 2 - 0).
+    REQUIRE(audio == 69);
 
     // --- STRUCTURAL: NOT read per control tick. Confirm they are NOT in the dispatch slot set
     // by construction (they have no Engine::ParamSlots field); the audit asserts the seam does
@@ -1752,18 +1754,46 @@ TEST_CASE("dispatch_complete: exempt params are enumerated with rationale and be
         REQUIRE(frozenLiveSeam(P::kVintageDetuneAmt));  // unison/poly spread scaler; inert in MONO
     }
 
-    // --- FINDING_UNWIRED: vco.pwm_depth + vcf.lfo_mod have NO dispatch path. Asserted INERT
-    // (bit-identical low-vs-high) so the audit RECORDS the gap. When a future task wires either,
-    // THIS assertion fails loudly — the signal to flip it to an audio-effect assertion. (TESTS
-    // ONLY: 165 does not fix production; the finding is raised in the PR.)
+    // --- FORMERLY FINDING_UNWIRED, now WIRED (task 162e): vco.pwm_depth + vcf.lfo_mod each have
+    // a dispatch path and an observable effect. The audit now asserts the AUDIO effect (Spectrum
+    // dimension) rather than the inert bit-identical baseline. The detailed per-leg ratios live in
+    // DispatchGapPwmVcfTest ([dispatch_gap]); here the completeness critic re-checks that each
+    // moves the spectrum, so a regression that dropped either wiring (back to inert) FAILS here.
     {
-        auto unwired = [](const char* id) {
-            Snap lo; lo.setNorm(id, 0.0f);
-            Snap hi; hi.setNorm(id, 1.0f);
-            return bitIdentical(freshHeld(&lo.s, 60, 0.20), freshHeld(&hi.s, 60, 0.20));
-        };
-        REQUIRE(unwired(P::kVcoPwmDepth));   // FINDING: no observable effect (flagged in PR)
-        REQUIRE(unwired(P::kVcfLfoMod));     // FINDING: no observable effect (flagged in PR)
+        const int    note = 60;
+        const double f0   = midiHz(note);
+
+        // vco.pwm_depth: MANUAL PWM with the LFO OFF. A pulse-only base square (vco.pw == 0, weak
+        // even harmonics) has its duty narrowed by the manual depth alone -> the 2nd harmonic jumps
+        // (distinct from lfo.depth_pwm, held at zero). [docs/design/01 §4.6; docs/design/06 §3.0]
+        {
+            auto manualPwm = [&](float depth) {
+                Snap sn; flatSaw(sn);
+                sn.setCont(P::kSawLevel, 0.0f); sn.setCont(P::kPulseLevel, 1.0f);
+                sn.setCont(P::kVcoPw, 0.0f);                 // base square
+                sn.setChoice(P::kLfoDest, 0);                // LFO NOT routed to PWM
+                sn.setCont(P::kLfoDepthPwm, 0.0f);           // the LFO->PWM amount stays zero
+                sn.setCont(P::kVcoPwmDepth, depth);
+                return secondOverFirst(freshHeld(&sn.s, note, 0.30), f0, kSr);
+            };
+            REQUIRE(manualPwm(1.0f) > manualPwm(0.0f) * cc::kMinRatioStrong);
+        }
+
+        // vcf.lfo_mod: the VCF-panel LFO->cutoff amount wobbles the output envelope even with the
+        // LFO dest switch NOT on Filter and lfo.depth_cutoff == 0 (distinct from lfo.depth_cutoff,
+        // which fires only at dest==Filter). [docs/design/02 §1.2; docs/design/05 §3.1]
+        {
+            auto vcfLfoWobble = [&](float amt) {
+                Snap sn; flatSaw(sn);
+                sn.setCont(P::kVcfCutoff, 0.45f); sn.setCont(P::kVcfResonance, 0.6f);
+                sn.setChoice(P::kLfoDest, 0);                // dest=Pitch (NOT Filter)
+                sn.setCont(P::kLfoDepthCutoff, 0.0f);        // lfo.depth_cutoff term stays zero
+                sn.setCont(P::kLfoRate, 5.0f); sn.setCont(P::kLfoDelay, 0.0f);
+                sn.setCont(P::kVcfLfoMod, amt);
+                return envAcEnergy(rmsEnvelope(freshHeld(&sn.s, note, 0.8), 128));
+            };
+            REQUIRE(vcfLfoWobble(1.0f) > vcfLfoWobble(0.0f) * cc::kMinRatioStrong);
+        }
     }
 }
 
