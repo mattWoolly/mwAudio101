@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 118c
 title: Wire SequencerEngine (arp/seq/clock) into the Engine audio path — make the sequencer + arpeggiator actually run
-status: todo
+status: in-review
 depends-on: [087, 118, 071, 074, 075b, 069]
 component: core
 estimated-size: L
