@@ -38,6 +38,7 @@
 #include "state/Extras.h"             // mw::state::Extras (audio-thread POD payload)
 #include "state/StateTree.h"          // mw::state::kParamsId etc.
 #include "state/SeqPatternCodec.h"    // readSeqPattern: <extras><seq> tree -> Extras POD (111c)
+#include "state/CcLearnCodec.h"       // write/readCcLearn: CC-learn bindings round-trip (023b)
 #include "version/EngineVersion.h"    // schema / plugin / engine / render versions
 #include "ui/EditorPrefsKeys.h"       // <extras> reduce-motion UI-preference key (task 115)
 
@@ -412,6 +413,17 @@ void MwAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
                 juce::Identifier{ mw::plugin::ui::prefs::kExtrasOpenGlOptIn }, true, nullptr);
     }
 
+    // Persist the user MIDI-learn (CC-learn) bindings directly on the canonical <extras>
+    // node (task 023b), mirroring the reduce-motion / OpenGL writes above. writeCcLearn
+    // emits a <ccLearn> child holding ONLY the NON-DEFAULT rows (diffed against the §6.2
+    // seed), so a never-learned session writes NO node and the blob stays byte-compatible
+    // with pre-023b state. The live ccLearnMap_ is read on the message thread here (the
+    // single writer); the audio thread only ever reads its atomic live pointer
+    // [docs/design/06 §5.4; docs/design/09 §6.3; ADR-012 C16; ADR-008 C19].
+    if (auto extrasNode = canonical.getChildWithName(juce::Identifier{ mw::state::kExtrasId });
+        extrasNode.isValid())
+        mw::plugin::state::writeCcLearn(extrasNode, ccLearnMap_);
+
     mw::plugin::state::writeToBlob(canonical, destData);
 }
 
@@ -464,6 +476,14 @@ void MwAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     // missing/garbage <seq> decodes to an empty default pattern [ADR-021 fallback].
     seqPattern_ = mw::plugin::state::readSeqPattern(recovered);
     seqPatternHandoff_.publish(seqPattern_);
+
+    // Restore the user MIDI-learn (CC-learn) bindings from the recovered <extras><ccLearn>
+    // node into the live map (the inverse of getStateInformation's writeCcLearn). The map
+    // starts from its §6.2 default seed and each well-formed, validated <binding> is applied
+    // over it, then published in one atomic swap. An absent / garbage <ccLearn> leaves the
+    // map at the default seed WITHOUT failing the load, so pre-023b blobs still restore
+    // [docs/design/06 §5.4; docs/design/09 §6.3; ADR-012 C16; ADR-021]. Message-thread only.
+    mw::plugin::state::readCcLearn(recovered, ccLearnMap_);
 
     const auto params = recovered.getChildWithName(juce::Identifier{ mw::state::kParamsId });
     if (! params.isValid())
