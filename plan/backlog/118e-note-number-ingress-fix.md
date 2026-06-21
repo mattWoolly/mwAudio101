@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 118e
 title: CRITICAL — toNoteEvent must read data0 (the note number), not noteId, so MIDI notes play the right pitch
-status: todo
+status: in-review
 depends-on: [118, 160, 162e]
 component: core
 estimated-size: S

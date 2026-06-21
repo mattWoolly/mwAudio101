@@ -113,7 +113,17 @@ private:
         default:
             return false; // not voice-routed by this assembly
     }
-    out.note         = static_cast<std::uint8_t>(std::clamp<int>(e.noteId, 0, 127));
+    // The played NOTE NUMBER is `data0` — NOT `noteId` (task 118e; the ADR-028 ingress fix).
+    // Per docs/design/09 §3.3 + BlockContext.h: `data0` is the note number (widened to float;
+    // the §3.3 HostEvent->MidiEvent translation puts the note number here), while `noteId` is
+    // the CLAP note-id, which is -1 for a MIDI-derived event and exists ONLY for note-expression
+    // VOICE matching — it is NOT the pitch. The pre-fix `out.note = clamp(e.noteId,...)` made a
+    // real DAW MIDI note (noteId == -1) resolve to note 0, so the synth played the WRONG note for
+    // its primary input (and the seq/arp path that reads ne.note inherited the same wrong note).
+    // Truncate the float note number toward zero and clamp into the standard MIDI 0..127 range;
+    // the velocity / NoteOn-Off type / noteId (note-expression) handling above is unchanged.
+    out.note         = static_cast<std::uint8_t>(
+        std::clamp<int>(static_cast<int>(e.data0), 0, 127));
     out.velocity     = std::clamp(e.value, 0.0f, 1.0f);
     out.sampleOffset = e.sampleOffset - chunkOffset;
     return true;

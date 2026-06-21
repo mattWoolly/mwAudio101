@@ -194,9 +194,9 @@ inline void gateOnFullLoad(mw::Engine& engine, double sampleRate, int blockSize,
         mw::MidiEvent e{};
         e.type         = mw::NormalizedType::NoteOn;
         e.channel      = 0;
-        e.noteId       = 60;     // middle C
+        e.noteId       = 60;     // middle C (note-expression id; not the pitch)
         e.value        = 1.0f;   // full velocity
-        e.data0        = 0.0f;
+        e.data0        = 60.0f;  // the NOTE NUMBER = middle C (the pitch source; task 118e §3.3)
         e.sampleOffset = 0;
         noteOns.push_back(e);
     }
