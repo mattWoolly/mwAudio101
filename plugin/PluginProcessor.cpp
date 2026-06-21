@@ -240,6 +240,24 @@ void MwAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
     ctx.transport = transport;
     ctx.midi      = mw::MidiEventView{ events_.data(), coreEventCount };
 
+    // 7b. CONTINUOUS-CONTROLLER INGRESS (task 162d — the plugin half of the 162c seam).
+    //     Feed the LIVE host pitch-bend + CC1 (mod-wheel) position the MidiFrontEnd tracked
+    //     while draining this block's MidiBuffer (step 2) into BlockContext::controllers, so
+    //     the engine's 162c legs activate END-TO-END: pitchBend (centered unit [-1,+1]) bends
+    //     {VCO,VCF} per mod.bend_dest / mod.bend_range_*, and modWheel ([0,1]) scales the LFO
+    //     depth per mod.lfo_mod_wheel. Before this task the processor built BlockContext WITHOUT
+    //     these, so bend/wheel were inert in the real plugin despite working in the core test.
+    //     The front-end holds each position across blocks (a real wheel keeps its position until
+    //     the next message), so a block with no controller message keeps the last held value.
+    //     CC1 reaches the engine EXACTLY ONCE — via this controller ingress, NOT also as a
+    //     mod.lfo_mod_wheel ParamValue (the front-end no longer emits that for CC1) — so there
+    //     is no double-application [docs/design/09 §4.4/§6.2; ADR-028 item 3]. RT-safe: two POD
+    //     reads + two POD writes; no alloc, no lock.
+    ctx.controllers.pitchBend = midiFrontEnd_.liveBendUnit();
+    ctx.controllers.modWheel  = midiFrontEnd_.liveModWheelNorm();
+    lastBendUnit_ = ctx.controllers.pitchBend;   // test introspection (plain member write)
+    lastModWheel_ = ctx.controllers.modWheel;
+
     // 8. Pure render through the seam (the engine writes its stereo output directly into
     //    the borrowed host channels) [ADR-001 C3].
     engine_.process(ctx);

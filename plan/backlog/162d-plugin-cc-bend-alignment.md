@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 162d
 title: Align the plugin MIDI path to feed pitch-bend + mod-wheel into the core controller-ingress seam (so bend/wheel work IN the plugin)
-status: todo
+status: in-review
 depends-on: [162c, 104, 101, 111]
 component: app
 estimated-size: M
