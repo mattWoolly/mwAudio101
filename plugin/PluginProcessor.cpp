@@ -395,6 +395,21 @@ void MwAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
                 juce::Identifier{ mw::plugin::ui::prefs::kExtrasReduceMotion }, true, nullptr);
     }
 
+    // Persist the OpenGL render-backend opt-in directly on the canonical <extras> node,
+    // mirroring the reduce-motion write above (a UI preference, NOT a host parameter)
+    // [docs/design/10-ui.md §11; ADR-015 C9; ADR-008 §4/§5]. ONLY written when ON, so a
+    // default-OFF session stays BYTE-COMPATIBLE with pre-130 blobs (the software path is
+    // the default and writes no key). The canonical <extras> renderOptIn key is the
+    // §9 sticky render opt-in [core/state/StateTree.h kExtrasRenderOptIn]. Message-thread.
+    if (storedOpenGl_)
+    {
+        auto extrasNode = canonical.getChildWithName(
+            juce::Identifier{ mw::state::kExtrasId });
+        if (extrasNode.isValid())
+            extrasNode.setProperty(
+                juce::Identifier{ mw::state::kExtrasRenderOptIn }, true, nullptr);
+    }
+
     mw::plugin::state::writeToBlob(canonical, destData);
 }
 
@@ -421,12 +436,20 @@ void MwAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     // on), so pre-115 blobs and never-toggled sessions keep the default [docs/design/
     // 10-ui.md §10; ADR-008 C8; ADR-021 fallback]. Message-thread only.
     storedReduceMotion_ = false;
+    storedOpenGl_       = false;
     if (const auto extrasNode = recovered.getChildWithName(
             juce::Identifier{ mw::state::kExtrasId });
         extrasNode.isValid())
     {
         storedReduceMotion_ = static_cast<bool>(extrasNode.getProperty(
             juce::Identifier{ mw::plugin::ui::prefs::kExtrasReduceMotion }, false));
+
+        // Restore the OpenGL render-backend opt-in from the recovered <extras> node (the
+        // inverse of getStateInformation's write). Absent / garbage -> false (software
+        // path), so pre-130 blobs and never-opted-in sessions keep the default
+        // [docs/design/10-ui.md §11; ADR-015 C9; ADR-021 fallback]. Message-thread only.
+        storedOpenGl_ = static_cast<bool>(extrasNode.getProperty(
+            juce::Identifier{ mw::state::kExtrasRenderOptIn }, false));
     }
 
     // Restore the EDITED <extras><seq> 100-step pattern from the recovered tree into the

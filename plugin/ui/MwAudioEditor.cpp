@@ -97,12 +97,28 @@ MwAudioEditor::MwAudioEditor(mw::plugin::MwAudioProcessor& processor)
     reduceMotion_ = processor_.getStoredReduceMotion();
     scopeIdle_    = reduceMotion_;
     startTimerAtHz(reduceMotion_ ? tcal::kReduceMotionTimerHz : tcal::kDefaultTimerHz);
+
+    // --- OpenGL opt-in escape hatch (task 130) ------------------------------------
+    // The software/CPU render path is PRIMARY and DEFAULT — the render-backend context is
+    // NOT attached here. Restore the persisted advanced opt-in from the processor's narrow
+    // <extras>-UI accessor; only if it was explicitly turned ON in a prior session do we
+    // attach the context now (via the same setter the advanced setting drives). A default
+    // (key-less / never-opted-in) session leaves the hatch OFF [docs/design/10-ui.md §11;
+    // ADR-015 C9].
+    if (processor_.getStoredOpenGl())
+        setOpenGlEnabled(true);
 }
 
 MwAudioEditor::~MwAudioEditor()
 {
     // Stop the coalescing Timer before any member it drains is destroyed [§8.4].
     stopTimer();
+    // Detach the OpenGL render-backend context (if the advanced opt-in attached it) BEFORE
+    // this component is torn down, so a teardown with an attached context never leaves a
+    // dangling context [docs/design/10-ui.md §11; ADR-015 C9]. Idempotent: a no-op when the
+    // software path (the default) was active. (RenderBackend's own destructor also detaches,
+    // but doing it here keeps the detach ordered ahead of the component teardown.)
+    renderBackend_.detach();
     // Detach the LookAndFeel before it (a member) is destroyed [JUCE lifetime rule].
     setLookAndFeel(nullptr);
 }
@@ -231,6 +247,33 @@ void MwAudioEditor::setReduceMotion(bool reduceMotion)
     // Re-rate the single Timer: downsampled when reducing motion, default otherwise. The
     // Timer is never destroyed/recreated — only its interval changes (no attachment churn).
     startTimerAtHz(reduceMotion_ ? tcal::kReduceMotionTimerHz : tcal::kDefaultTimerHz);
+}
+
+// ---------------------------------------------------------------------------
+// OpenGL opt-in escape hatch [docs/design/10-ui.md §11; ADR-015 C9].
+//
+// The software/CPU render path is PRIMARY and DEFAULT. This is the ONLY place the
+// render-backend context is attached, and only when an explicit advanced user setting
+// requests it. ON attaches the context to this component; OFF detaches it CLEANLY. The
+// opt-in is a UI PREFERENCE, persisted in the <extras> subtree via the processor's narrow
+// accessor pair so it round-trips on reload (the same 114/115 pattern). It touches ZERO
+// APVTS attachment. Idempotent; message-thread only.
+// ---------------------------------------------------------------------------
+void MwAudioEditor::setOpenGlEnabled(bool enabled)
+{
+    if (openGlEnabled_ == enabled)
+        return;                      // idempotent; no redundant attach/detach
+
+    openGlEnabled_ = enabled;
+
+    if (enabled)
+        renderBackend_.attach(*this);   // attach the §11 escape-hatch context to the editor
+    else
+        renderBackend_.detach();        // detach cleanly — back to the software path
+
+    // Persist the preference (message thread) so it round-trips on session reload. No
+    // control attachment is involved — this is a <extras> UI preference only [§11; C9].
+    processor_.setStoredOpenGl(openGlEnabled_);
 }
 
 // ---------------------------------------------------------------------------
