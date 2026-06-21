@@ -19,6 +19,11 @@
 #include "calibration/EngineConstants.h"
 #include "calibration/OversampledZoneConstants.h"
 #include "calibration/SequencerRoutingConstants.h"
+#include "calibration/ControlDispatchConstants.h"   // pitch-CV anchor + vco.range mapping (ADR-028)
+#include "calibration/PitchAssemblyConstants.h"      // kVoltsPerCount (count->volt anchor)
+
+#include "params/ParamDefs.h"   // kParamDefs registry order (slot lookup, off-thread only)
+#include "params/ParamIDs.h"    // canonical parameter string-IDs (no hand-typed strings)
 
 namespace mw {
 
@@ -151,6 +156,11 @@ void Engine::prepare(double sampleRate, int maxBlockSize, int maxVoices) noexcep
     control_.prepare(sampleRate_);
     sequencer_.prepare(sampleRate_, std::max(maxBlockSize_, 1));   // arp/seq/clock (task 118c)
     fx_.prepare(sampleRate_, maxBlockSize_);
+
+    // Resolve the dispatch-consumed parameter slot indices ONCE, off the audio thread, so
+    // the per-control-tick dispatch reads the ParamSnapshot by index with no string scan
+    // (ADR-028; task 160). RT-safe-by-construction: the hot path never resolves IDs.
+    cacheParamSlots();
 
     prepared_ = true;
 
@@ -323,6 +333,21 @@ void Engine::renderChunk(const BlockContext& ctx, int n0, int len) noexcept {
     //    Engine::setGateTrigMode (incl. LFO clock-reset) audibly takes effect.
     control_.advance(len, voices_);
 
+    // 2b. THE CONTROL-DISPATCH SEAM (ADR-028; task 160, the keystone). The control tick(s)
+    //     above resolved the sole KeyAssigner and drove each active voice's note lifecycle;
+    //     NOW read BlockContext::params and apply the per-voice control values to the DSP
+    //     setters (VCO pitch from the ADR-005 count-domain authority, footage, PWM, sub
+    //     shape, the source-mixer levels, and the glide mode/time). Before this task the
+    //     snapshot was NEVER read, so the synth ignored every knob and played one fixed
+    //     pitch through a fixed saw. The snapshot pointer is borrowed + immutable (§5.4);
+    //     an init patch with no bridge supplies nullptr (each voice then keeps its INIT
+    //     saw-only mix and its default pitch — unchanged from the pre-dispatch behavior).
+    //     Applied at the chunk cadence (<= kRenderBlock, finer than the ~2 ms vintage tick)
+    //     so the glide slew is smooth. RT-safe: POD read + arithmetic + setters, no alloc,
+    //     no lock [ADR-028 items 1-4; ADR-001 §9].
+    if (ctx.params != nullptr)
+        applyParamSnapshot(*ctx.params, len);
+
     // 3. Render every active voice for this chunk, ACCUMULATING into the mono mix in
     //    FIXED voice-index order; single-threaded, no synchronization primitive
     //    (§6.1; ADR-019 VT-01/VT-02/VT-03). Clear the segment of the stereo scratch
@@ -470,6 +495,155 @@ void Engine::routeControlEvents(int eventCount) noexcept {
                 seqHeldNote_ = -1;
             }
         }
+    }
+}
+
+// ===========================================================================
+// The control-dispatch seam (ADR-028; task 160). Off-thread slot resolution + the
+// RT-safe per-control-tick decode/apply.
+// ===========================================================================
+
+namespace {
+
+// Denormalize a CONTINUOUS registry slot's snapshot value to its engineering value. The
+// bridge stores convertTo0to1(value); every dispatch-consumed continuous param here is
+// LINEAR-skew (vco.tune/fine/pw, the four mixer levels, glide.time — see ParamDefs.h), so
+// the inverse is exactly min + norm*(max-min). (Non-linear-skew params are owned by 161/
+// 162 and will denormalize against their own skew there.) Returns the registry default if
+// the slot is unresolved. noexcept, pure arithmetic.
+[[nodiscard]] float contValue(const mw::ParamSnapshot& s, int slot) noexcept {
+    if (slot < 0) return 0.0f;
+    const auto& d = mw::params::kParamDefs[static_cast<std::size_t>(slot)];
+    const float span = d.maxValue - d.minValue;
+    return d.minValue + s.normalized(slot) * span;
+}
+
+// The typed option index for a CHOICE/BOOL slot (the bridge stored it in indexValues).
+[[nodiscard]] int choiceIndex(const mw::ParamSnapshot& s, int slot) noexcept {
+    return slot < 0 ? 0 : s.index(slot);
+}
+
+// mw101.glide.mode choice {Off=0, Auto=1, On=2} (ParamDefs detail::kGlideMode) -> GlideMode.
+[[nodiscard]] mw::GlideMode glideModeFor(int idx) noexcept {
+    switch (idx) {
+        case 1:  return mw::GlideMode::Auto;
+        case 2:  return mw::GlideMode::On;
+        default: return mw::GlideMode::Off;
+    }
+}
+
+// mw101.sub.mode choice {-1 Oct Sq=0, -2 Oct Sq=1, -2 Oct Pulse=2} -> SubShape (ordered to
+// match, SubOscillator.h §5.2). Defensive default = OctDownSquare.
+[[nodiscard]] mw101::dsp::SubShape subShapeFor(int idx) noexcept {
+    switch (idx) {
+        case 1:  return mw101::dsp::SubShape::TwoOctDownSquare;
+        case 2:  return mw101::dsp::SubShape::TwoOctDown25Pulse;
+        default: return mw101::dsp::SubShape::OctDownSquare;
+    }
+}
+
+} // namespace
+
+void Engine::cacheParamSlots() noexcept {
+    // Resolve each consumed ID to its kParamDefs index ONCE (off the audio thread). A tiny
+    // local linear scan over the 91-row registry; never run on the hot path. The string-ID
+    // constants are the canonical ones from ParamIDs.h (no hand-typed strings) [ADR-008 C1].
+    auto find = [](const char* id) noexcept -> int {
+        for (int i = 0; i < static_cast<int>(mw::params::kParamDefs.size()); ++i) {
+            const char* a = mw::params::kParamDefs[static_cast<std::size_t>(i)].id;
+            const char* b = id;
+            int k = 0;
+            while (a[k] != '\0' && b[k] != '\0' && a[k] == b[k]) ++k;
+            if (a[k] == '\0' && b[k] == '\0') return i;
+        }
+        return -1;
+    };
+    using namespace mw::params::ids;
+    slots_.vcoTune    = find(kVcoTune);
+    slots_.vcoFine    = find(kVcoFine);
+    slots_.vcoPw      = find(kVcoPw);
+    slots_.vcoRange   = find(kVcoRange);
+    slots_.subMode    = find(kSubMode);
+    slots_.sawLevel   = find(kSawLevel);
+    slots_.pulseLevel = find(kPulseLevel);
+    slots_.subLevel   = find(kSubLevel);
+    slots_.noiseLevel = find(kNoiseLevel);
+    slots_.glideTime  = find(kGlideTime);
+    slots_.glideMode  = find(kGlideMode);
+}
+
+VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
+    // Decode the parts of VoiceControls that are identical for every active voice (the VCO
+    // shape controls, the source-mixer levels, the glide config). Per-voice PITCH depends on
+    // each voice's resolved note and is filled by the caller. Pure arithmetic; noexcept.
+    VoiceControls vc{};
+
+    // VCO range choice -> footage (+ software-ext 32'/64' octave offset applied to pitch).
+    const cal::dispatch::RangeMapping rng =
+        cal::dispatch::rangeMappingFor(choiceIndex(snap, slots_.vcoRange));
+    vc.footage   = rng.footage;
+    vc.pwmCvNorm = contValue(snap, slots_.vcoPw);          // 0..1 (0 => square)
+    vc.subShape  = subShapeFor(choiceIndex(snap, slots_.subMode));
+
+    // Source mixer (§4.1).
+    vc.sawLevel   = contValue(snap, slots_.sawLevel);
+    vc.pulseLevel = contValue(snap, slots_.pulseLevel);
+    vc.subLevel   = contValue(snap, slots_.subLevel);
+    vc.noiseLevel = contValue(snap, slots_.noiseLevel);
+
+    // Glide config (§5.5) — the single per-voice Glide owns the count-domain pitch slew.
+    vc.glideMode    = glideModeFor(choiceIndex(snap, slots_.glideMode));
+    vc.glideSeconds = contValue(snap, slots_.glideTime);
+
+    return vc;
+}
+
+void Engine::applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noexcept {
+    // Shared (note-independent) controls decoded once.
+    VoiceControls shared = decodeShared(snap);
+
+    // The tune (coarse semitones) + fine (sub-semitone) sum into the pitch, in DAC-count
+    // units (1 count == 1 semitone). vco.range's software-ext positions (32'/64') add whole
+    // octaves on top of the footage offset (12 counts/octave).
+    const float tuneSemis  = contValue(snap, slots_.vcoTune);   // -24..+24
+    const float fineSemis  = contValue(snap, slots_.vcoFine);   // -1..+1
+    const double extraOct   =
+        cal::dispatch::rangeMappingFor(choiceIndex(snap, slots_.vcoRange)).extraOctaves;
+    const float pitchShiftCounts = tuneSemis + fineSemis;
+    const double extraOctCounts  =
+        extraOct * static_cast<double>(cal::pitch::kCountsPerOctave);
+
+    // Anchor: the reference key (A4) at the reference footage maps to the VCO converter's
+    // reference CV (kPitchRefVolts), so the count-domain CV lands in the VCO's CV frame and
+    // 1 V/octave is exact between notes [ControlDispatchConstants.h; ADR-005; ADR-028].
+    const float anchorVolts =
+        ControlCore::countsToVolts(cal::dispatch::kReferenceMidiNote);
+
+    // Apply to every ACTIVE voice (MONO drives exactly one; UNISON/POLY share the same VCO
+    // controls + per-voice pitch). The VoiceManager exposes a const Voice& only; voices_ is
+    // a genuinely non-const member of this Engine, so const_cast to the real (non-const)
+    // pool object is well-defined — no UB — and lets the dispatch call the per-voice setters
+    // without widening the VoiceManager surface (kept inside this task's edit waiver). The
+    // active scan is bounded O(activeCount) [§6.1; ADR-019 VT-02].
+    const int activeCount = voices_.activeCount();
+    for (int k = 0; k < activeCount; ++k) {
+        const int vi = static_cast<int>(voices_.activeIndex(k));
+        Voice& v = const_cast<Voice&>(voices_.voice(vi));
+
+        const int note = v.currentNote();
+        VoiceControls vc = shared;
+        if (note >= 0) {
+            // Count-domain pitch CV via the ControlCore authority (ADR-005). MODERN pole
+            // (default) keeps continuous float so fine tune resolves; VINTAGE quantizes to
+            // 6-bit counts at the S/H boundary. Anchored into the VCO converter's CV frame.
+            const float counts = static_cast<float>(note)
+                               + pitchShiftCounts
+                               + static_cast<float>(extraOctCounts);
+            const float countVolts = control_.blendedPitchVolts(counts);
+            vc.targetPitchCvVolts = countVolts - anchorVolts
+                                  + static_cast<float>(mw::cal::vco::kPitchRefVolts);
+        }
+        v.applyControls(vc, chunkSamples);
     }
 }
 

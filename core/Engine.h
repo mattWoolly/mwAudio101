@@ -55,8 +55,10 @@
 #include <vector>
 
 #include "BlockContext.h"
+#include "params/ParamSnapshot.h"  // the registry-indexed normalized param POD the dispatch reads (ADR-028)
 
 #include "voice/VoiceManager.h"   // owns the SOLE KeyAssigner (doc 04 §5.1/§9); GateTrigMode via VoiceTypes
+#include "voice/Voice.h"          // VoiceControls — the ADR-028 dispatch payload (task 160)
 #include "control/ControlCore.h"
 #include "control/ControlTypes.h"     // KeyEvent / ControlEvent PODs (doc 05 §2.3)
 #include "control/SequencerEngine.h"  // arp/seq/clock fixed-order state machine (task 087)
@@ -147,6 +149,31 @@ private:
     // telemetry. noexcept, alloc-free, lock-free.
     void routeControlEvents(int eventCount) noexcept;
 
+    // -----------------------------------------------------------------------------------
+    // THE CONTROL-DISPATCH SEAM (ADR-028; task 160, the keystone). Read once per control
+    // tick: decode BlockContext::params (the immutable, registry-indexed mw::ParamSnapshot)
+    // into a per-voice VoiceControls and drive the active voice(s)' DSP setters. This is
+    // the ONLY site that reads ctx.params — before this task the snapshot was never read,
+    // so the synth ignored every knob. RT-safe: a POD read + arithmetic + setters; NO heap,
+    // NO lock; noexcept. The VCO pitch is the ADR-005 count-domain CV (ControlCore authority)
+    // for each voice's KeyAssigner-resolved active note, anchored into the VCO converter's CV
+    // frame; tune/fine sum into pitch; range->footage(+software-ext octaves); pw->PWM CV;
+    // sub.mode->sub shape; the source mixer levels feed Voice's saw+pulse+sub+noise sum.
+    // STRUCTURAL params (quality/voice.mode/voice.count/unison.count/control.vintage) are
+    // NOT read here — they are off-thread setters (ADR-028 item 4). Tasks 161 (VCF/Env/VCA)
+    // and 162 (LFO/mod) EXTEND VoiceControls + this decode behind the same per-tick call.
+    void applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noexcept;
+
+    // Decode the snapshot into the shared VCO/mixer/glide VoiceControls fields (the parts
+    // that are the SAME for every active voice). Per-voice pitch (which depends on each
+    // voice's resolved note) is filled in applyParamSnapshot. Pure arithmetic; noexcept.
+    [[nodiscard]] VoiceControls decodeShared(const ParamSnapshot& snap) const noexcept;
+
+    // Resolve the registry slot index for every dispatch-consumed parameter ID ONCE, off
+    // the audio thread (prepare), so applyParamSnapshot never scans the 91-row registry on
+    // the hot path. -1 means "not found" (defensive; a layout drift fails loudly elsewhere).
+    void cacheParamSlots() noexcept;
+
     // Preallocated scratch (sized to maxBlockSize_ in prepare): the per-voice stereo
     // accumulation buffers and the mono voice-sum the FX chain consumes [§9 RT6].
     std::vector<float> mixL_{};
@@ -172,6 +199,23 @@ private:
     // not-playing -> playing transition (the StepSequencer rewinds playPos to 0 there).
     int seqPlayMirror_ = 0;
     bool seqWasPlaying_ = false;
+
+    // --- cached registry slot indices for the dispatch-consumed params (ADR-028; task
+    // 160). Resolved once in prepare() (cacheParamSlots) so applyParamSnapshot reads the
+    // snapshot by index with no per-tick string scan. ---
+    struct ParamSlots {
+        int vcoTune    = -1;
+        int vcoFine    = -1;
+        int vcoPw      = -1;
+        int vcoRange   = -1;   // choice 0..5 -> footage(+ext octaves)
+        int subMode    = -1;   // choice 0..2 -> SubShape
+        int sawLevel   = -1;
+        int pulseLevel = -1;
+        int subLevel   = -1;
+        int noiseLevel = -1;
+        int glideTime  = -1;
+        int glideMode  = -1;   // choice 0..2 -> GlideMode {Off,Auto,On}
+    } slots_{};
 
     double sampleRate_      = 0.0;
     int    maxBlockSize_    = 0;

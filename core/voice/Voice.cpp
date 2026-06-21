@@ -35,12 +35,6 @@ inline void equalPowerPan(float pan, float& gainL, float& gainR) noexcept {
     gainR = std::sin(theta);
 }
 
-// MIDI note -> Hz (A4 = note 69 = 440 Hz). Used only to seed the glide on note-on
-// before the ControlCore feeds a resolved glide target in Hz (§4.2 / out-of-scope).
-inline float midiToHz(int midiNote) noexcept {
-    return 440.0f * std::pow(2.0f, static_cast<float>(midiNote - 69) / 12.0f);
-}
-
 } // namespace
 
 void Voice::prepare(double sampleRate, int oversampleFactor,
@@ -101,6 +95,14 @@ void Voice::prepare(double sampleRate, int oversampleFactor,
     noteSerial_  = 0;
     stealGain_   = 1.0f;
     detuneCents_ = 0.0f;
+    // Source-mixer levels back to the saw-only INIT mix; glide-domain note-on flags clear.
+    // A known fixed point so reset()/prepare() are byte-stable (§5.5) [ADR-001 Decision].
+    sawLevel_   = 0.8f;
+    pulseLevel_ = 0.0f;
+    subLevel_   = 0.0f;
+    noiseLevel_ = 0.0f;
+    pendingNoteOnLegato_ = false;
+    freshNoteOn_         = false;
     setStereoPan(0.0f);
     env_.reset();
     lfo_.reset();
@@ -114,10 +116,14 @@ void Voice::noteOn(int midiNote, float velocity, bool retrigger) noexcept {
     (void) velocity;   // velocity routing (VCA/VCF) owned by ModRouting; passed through.
     currentNote_ = midiNote;
 
-    // Glide target follows the note (Hz); ControlCore overrides via setGlideTarget for
-    // the resolved/quantized pitch. legato = a note was already sounding.
+    // legato = a note was already sounding (drives the glide slew-vs-snap rule). The VCO
+    // pitch CV is owned by the ADR-028 dispatch (volts domain), so noteOn no longer seeds
+    // the glide in Hz (that seeded the old DISCARDED per-sample glide); instead it records
+    // whether this keypress is legato, and the first applyControls after the keypress sets
+    // the glide target in the VOLTS domain with that legato flag (task 160 reconciliation).
     const bool legato = (state_ != VoiceState::Idle);
-    glide_.setTarget(midiToHz(midiNote), legato, /*arpActive=*/false);
+    pendingNoteOnLegato_ = legato;
+    freshNoteOn_         = true;
 
     // Fire the ADSR from its trigger state when the decision says so (retrigger).
     env_.noteOn(/*legato=*/legato && !retrigger);
@@ -140,6 +146,62 @@ void Voice::noteOff() noexcept {
 
 void Voice::setGlideTarget(float targetPitchHz) noexcept {
     glide_.setTarget(targetPitchHz, /*legato=*/true, /*arpActive=*/false);
+}
+
+void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
+    // ADR-028 dispatch seam (task 160). The Engine decoded the ParamSnapshot into `c` for
+    // THIS control tick; here we drive the per-voice DSP setters. RT-safe: a bounded glide
+    // loop + one osc_.setControls re-derive (pure arithmetic), no heap, no lock.
+
+    // --- VCO PITCH (ADR-005 count-domain authority, applied EXACTLY ONCE) ---------------
+    // The single per-voice Glide owns portamento. We slew the pitch CV in the VOLTS domain
+    // (the hardware glides the CV, not Hz, giving a correct exponential pitch sweep), so the
+    // Glide target is the count-domain target CV. This RECONCILES the duplicate glide: the
+    // old per-sample glide_.nextValue() in render() was DISCARDED (the §4.2 bug); glide is
+    // advanced here at the per-sample rate (advanceSamples steps) and its output drives the
+    // oscillator. The Glide coefficient is a PER-SAMPLE one-pole, so it must be stepped once
+    // per elapsed sample (not once per chunk) to reach the target in the configured TIME.
+    glide_.setMode(c.glideMode);
+    glide_.setTimeSeconds(c.glideSeconds);
+
+    // A note pressed from SILENCE (the voice was Idle at keypress, !pendingNoteOnLegato_)
+    // has no prior pitch to glide FROM, so it SNAPS to its target regardless of glide mode
+    // (matches the hardware: portamento glides note-to-note, the first note lands directly).
+    // Any later keypress while a note is sounding (legato) glides per the mode: On always
+    // glides between distinct holds, Auto glides on legato, Off snaps (Glide owns the rules).
+    // This keeps glide applied EXACTLY ONCE in the volts domain.
+    const bool freshFromIdle = freshNoteOn_ && !pendingNoteOnLegato_;
+    freshNoteOn_ = false;
+    if (freshFromIdle) {
+        glide_.snapTo(c.targetPitchCvVolts);   // land directly on the new pitch
+    } else {
+        glide_.setTarget(c.targetPitchCvVolts, /*legato=*/true, /*arpActive=*/false);
+    }
+
+    // Advance the per-sample glide by the elapsed sample count so it slews in real time. A
+    // bounded loop (advanceSamples <= the chunk cap kRenderBlock); each step is the same
+    // one-pole the de-zipper uses. The LAST value is the CV applied to the oscillator this
+    // chunk. >=1 step always (a zero/negative count still advances one so the CV is current).
+    const int steps = advanceSamples > 0 ? advanceSamples : 1;
+    float pitchCv = glide_.current();
+    for (int n = 0; n < steps; ++n)
+        pitchCv = glide_.nextValue();
+
+    // --- assemble the oscillator-section control block (§7.2) ---------------------------
+    mw101::dsp::OscillatorSection::Controls oc{};
+    oc.vco.pitchCvVolts = pitchCv;
+    oc.vco.footage      = c.footage;
+    oc.vco.pwmCvNorm    = c.pwmCvNorm;
+    oc.vco.aaMode       = qualityAaMode_;     // tier; section forces it onto all sources
+    oc.subShape         = c.subShape;
+    oc.aaMode           = qualityAaMode_;
+    osc_.setControls(oc);
+
+    // --- cache the source-mixer levels render() sums (§4.1) -----------------------------
+    sawLevel_   = c.sawLevel;
+    pulseLevel_ = c.pulseLevel;
+    subLevel_   = c.subLevel;
+    noiseLevel_ = c.noiseLevel;
 }
 
 void Voice::setDetuneCents(float cents) noexcept {
@@ -172,11 +234,20 @@ void Voice::render(float* outL, float* outR, int numSamples) noexcept {
         // --- per-sample modulation (the blocks own their internal DSP) ---
         const float envLevel = env_.tick();
         lfo_.tick();
-        glide_.nextValue();
+        // NOTE: the VCO pitch CV glide is advanced ONCE per control tick in applyControls
+        // (the ADR-028 dispatch seam), NOT per sample here — the old per-sample
+        // glide_.nextValue() call was a DISCARD bug (§4.2) and is removed (task 160).
 
-        // --- signal path: VCO+sub+noise -> VCF -> VCA ---
+        // --- signal path: VCO+sub+noise -> source mixer -> VCF -> VCA ---
+        // §4.1 SOURCE MIXER (task 160): sum ALL four raw sources by their level params
+        // (mw101.{saw,pulse,sub,noise}.level), cached from the dispatch. Before this task
+        // render() summed ONLY src.saw — pulse/sub/noise were silently dropped (the audit
+        // finding). The four sources are bipolar, pre-level [docs/design/01 §8].
         const mw101::dsp::OscillatorSection::Sources src = osc_.renderSample();
-        float s = src.saw;   // pre-mix tap (the source mixer is the engine's, §4.1)
+        float s = src.saw   * sawLevel_
+                + src.pulse * pulseLevel_
+                + src.sub   * subLevel_
+                + src.noise * noiseLevel_;
 
         // Oversampled-zone filter: run the per-voice ratio so the zone advances at
         // fs_os. The decimation/up-sampling pair is the engine's; here we drive the
