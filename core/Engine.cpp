@@ -23,6 +23,7 @@
 #include "calibration/ControlDispatchConstants.h"   // pitch-CV anchor + vco.range mapping (ADR-028)
 #include "calibration/ControlDispatchVcfConstants.h" // cutoff-CV / env-mod / kbd-track law (task 161)
 #include "calibration/ControlDispatchLfoConstants.h" // LFO/vel/bend routing depths (task 162)
+#include "calibration/FxDispatchConstants.h"          // FX free-ms / chorus-Hz decode (task 163)
 #include "calibration/PitchAssemblyConstants.h"      // kVoltsPerCount (count->volt anchor)
 
 #include "params/ParamDefs.h"   // kParamDefs registry order (slot lookup, off-thread only)
@@ -383,6 +384,19 @@ void Engine::renderChunk(const BlockContext& ctx, int n0, int len) noexcept {
         m[i] = 0.5f * (L[i] + R[i]);
     }
 
+    // 4b. THE FX-PARAM DISPATCH (task 163; ADR-028 item 5). Before running the FX, decode
+    //     the snapshot's FX range (fx.bypass + drive/chorus/delay enables+params + out.mono)
+    //     into FxParams and publish it via fx_.setParams() — ONCE per chunk, at this §4.1 FX
+    //     site, a SEPARATE site from the per-voice applyParamSnapshot (the FX run once on the
+    //     mono voice sum, not per voice). Before this task the FxParams were never fed, so
+    //     the FX section was permanently bypassed/at-defaults regardless of the knobs/preset.
+    //     hostBpm comes from the block transport so the Delay tempo-sync conversion tracks.
+    //     When ctx.params is null (an init path with no bridge) the FX keep their prepared
+    //     defaults (master bypass ON -> FX-off, bit-exact per task 141 — unchanged). RT-safe:
+    //     a POD read + arithmetic + a lock-free double-buffer publish; no alloc, no lock.
+    if (ctx.params != nullptr)
+        fx_.setParams(decodeFxParams(*ctx.params, ctx.transport.bpm));
+
     // 5. Run the post-voice FX chain ONCE on the mono sum, writing the final stereo into
     //    the host's borrowed output channels for this segment (§4.1; ADR-017 §Decision).
     //    The output view is borrowed; the core writes, never grows/frees it (ADR-001 C3).
@@ -654,6 +668,29 @@ void Engine::cacheParamSlots() noexcept {
     slots_.modBendRangeVcf = find(kModBendRangeVcf);
     slots_.velEnable      = find(kVelEnable);
     slots_.velDepth       = find(kVelDepth);
+
+    // --- FX param dispatch (task 163; ADR-028 item 5) ---
+    slots_.fxBypass        = find(kFxBypass);
+    slots_.fxDriveEnable   = find(kFxDriveEnable);
+    slots_.fxDriveAmount   = find(kFxDriveAmount);
+    slots_.fxDriveTone     = find(kFxDriveTone);
+    slots_.fxDriveOutput   = find(kFxDriveOutput);
+    slots_.fxChorusEnable  = find(kFxChorusEnable);
+    slots_.fxChorusMode    = find(kFxChorusMode);
+    slots_.fxChorusRate    = find(kFxChorusRate);
+    slots_.fxChorusDepth   = find(kFxChorusDepth);
+    slots_.fxChorusWidth   = find(kFxChorusWidth);
+    slots_.fxChorusMix     = find(kFxChorusMix);
+    slots_.fxDelayEnable   = find(kFxDelayEnable);
+    slots_.fxDelaySync     = find(kFxDelaySync);
+    slots_.fxDelayDivision = find(kFxDelayDivision);
+    slots_.fxDelayTime     = find(kFxDelayTime);
+    slots_.fxDelayFeedback = find(kFxDelayFeedback);
+    slots_.fxDelayDamp     = find(kFxDelayDamp);
+    slots_.fxDelayWidth    = find(kFxDelayWidth);
+    slots_.fxDelayMix      = find(kFxDelayMix);
+    slots_.fxDelayPingpong = find(kFxDelayPingpong);
+    slots_.outMono         = find(kOutMono);
 }
 
 VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
@@ -724,6 +761,70 @@ VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
                           * cal::dispatch::kLfoPwmDepthNorm;
 
     return vc;
+}
+
+fx::FxParams Engine::decodeFxParams(const ParamSnapshot& snap, double hostBpm) const noexcept {
+    // Decode the FX range of the snapshot into a single flat FxParams (task 163; ADR-028
+    // item 5). This is the SEPARATE FX site: the FX run once on the mono voice sum, so the
+    // FxParams are NOT per-voice — one decode per block, published via fx_.setParams().
+    //
+    // Field conventions (see FxDispatchConstants.h + docs/design/07 §7):
+    //  - bypass / enables / sync / pingpong / out.mono : bool option index (0/1).
+    //  - drive amount/tone/output, chorus depth/width/mix, delay damp/width/mix : the
+    //    registry stores these as LINEAR 0..1 knobs the stages interpret internally, so
+    //    contValue passes the engineering value (== the 0..1 knob) straight through.
+    //  - delay.feedback : registry range is already 0..kDelayFeedbackMax (engineering), so
+    //    contValue yields the clamped feedback the stage wants directly.
+    //  - delay.timeMs : free-delay MILLISECONDS — deskew delay_time to a linear 0..1, then
+    //    log-map across the 1..2000 ms musical span.
+    //  - chorus.rate : LFO Hz OVERRIDE — log-map the linear 0..1 across 0.05..10 Hz (0 keeps
+    //    the mode preset, per the Chorus stage's p.rate>0 test).
+    //  - chorus.mode / delay.division : the typed choice option index.
+    //  - hostBpm : from the block transport so the Delay tempo-sync conversion tracks.
+    fx::FxParams p{};
+
+    p.masterBypass = (choiceIndex(snap, slots_.fxBypass) != 0);
+    p.monoOutput   = (choiceIndex(snap, slots_.outMono) != 0);
+    p.hostBpm      = (hostBpm > 0.0) ? hostBpm : 120.0;
+
+    // --- Drive ---
+    p.drive.on     = (choiceIndex(snap, slots_.fxDriveEnable) != 0);
+    p.drive.amount = contValue(snap, slots_.fxDriveAmount);
+    p.drive.tone   = contValue(snap, slots_.fxDriveTone);
+    p.drive.output = contValue(snap, slots_.fxDriveOutput);
+
+    // --- Chorus. The chain treats mode==Off (0) as the per-block bypass; the chorus_enable
+    // bool gates it so a patch can disable the chorus without losing its selected mode
+    // (enable off -> mode Off regardless of the mode choice). ---
+    const bool chorusOn = (choiceIndex(snap, slots_.fxChorusEnable) != 0);
+    const int  chorusModeChoice = choiceIndex(snap, slots_.fxChorusMode);
+    p.chorus.mode  = chorusOn ? chorusModeChoice
+                              : static_cast<int>(fx::Chorus::Mode::Off);
+    p.chorus.rate  = cal::fxdispatch::chorusRateHz(contValue(snap, slots_.fxChorusRate));
+    p.chorus.depth = contValue(snap, slots_.fxChorusDepth);
+    p.chorus.width = contValue(snap, slots_.fxChorusWidth);
+    p.chorus.mix   = contValue(snap, slots_.fxChorusMix);
+
+    // --- Delay ---
+    p.delay.on       = (choiceIndex(snap, slots_.fxDelayEnable) != 0);
+    p.delay.sync     = (choiceIndex(snap, slots_.fxDelaySync) != 0);
+    p.delay.pingpong = (choiceIndex(snap, slots_.fxDelayPingpong) != 0);
+    p.delay.division = choiceIndex(snap, slots_.fxDelayDivision);
+    // delay_time is kDelayTime-skewed in the registry; deskew to linear 0..1 then log-map
+    // to free ms. contValueSkewed inverts the registry skew (returning the engineering
+    // value across the registry's 0..1 range == a linear 0..1 here), which we re-map.
+    {
+        const float deskewedNorm = (slots_.fxDelayTime < 0)
+            ? 0.0f
+            : contValueSkewed(snap, slots_.fxDelayTime);   // linear 0..1 (registry range is 0..1)
+        p.delay.timeMs = cal::fxdispatch::delayFreeMs(deskewedNorm);
+    }
+    p.delay.feedback = contValue(snap, slots_.fxDelayFeedback);   // already 0..kDelayFeedbackMax
+    p.delay.damp     = contValue(snap, slots_.fxDelayDamp);
+    p.delay.width    = contValue(snap, slots_.fxDelayWidth);
+    p.delay.mix      = contValue(snap, slots_.fxDelayMix);
+
+    return p;
 }
 
 void Engine::stageEnvParams(const ParamSnapshot& snap) noexcept {

@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 163
 title: Control-dispatch — FX params (bypass + drive/chorus/delay) decoded from the snapshot into FxChain
-status: todo
+status: in-review
 depends-on: [160, 118]
 component: core
 estimated-size: M
