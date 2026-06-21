@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 118f
 title: Fix dispatch_complete #181/#185 — complete 118e's data0 reconciliation (inline NoteOff events) + diagnose the FX case
-status: in-review
+status: done
 depends-on: [118e, 165, 163]
 component: qa
 estimated-size: S
