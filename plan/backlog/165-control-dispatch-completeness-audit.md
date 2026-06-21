@@ -7,7 +7,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 id: 165
 title: Control-dispatch completeness audit — assert every one of the 91 params has an audible/observable effect
 status: todo
-depends-on: [160, 161, 162, 163, 164]
+depends-on: [160, 161, 162, 163, 164, 162b, 162c]
 component: qa
 estimated-size: M
 stream: integration
