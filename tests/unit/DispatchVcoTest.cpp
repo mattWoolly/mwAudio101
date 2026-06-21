@@ -110,10 +110,16 @@ struct Snap {
     }
 };
 
+// MIDI-realistic note events (task 118e ingress reconcile): the played NOTE NUMBER goes in
+// `data0` and `noteId` is -1 (the MIDI-derived value the §3.3 HostEvent->MidiEvent translation
+// emits). Pre-118e this suite fed `noteId = note` (encoding the ingress bug's own assumption);
+// it now drives the REAL data0 pitch path so the pitch-ratio assertions below test what a DAW
+// MIDI note actually does. `noteId == -1` proves the engine never reads it for pitch.
 mw::MidiEvent noteOn(int note, float vel, int offset) noexcept {
     mw::MidiEvent e{};
     e.type = mw::NormalizedType::NoteOn;
-    e.noteId = static_cast<std::int16_t>(note);
+    e.noteId = -1;                                   // MIDI-derived: no CLAP note id
+    e.data0 = static_cast<float>(note);              // the NOTE NUMBER (the pitch source)
     e.value = vel;
     e.sampleOffset = offset;
     return e;
@@ -121,7 +127,8 @@ mw::MidiEvent noteOn(int note, float vel, int offset) noexcept {
 mw::MidiEvent noteOff(int note, int offset) noexcept {
     mw::MidiEvent e{};
     e.type = mw::NormalizedType::NoteOff;
-    e.noteId = static_cast<std::int16_t>(note);
+    e.noteId = -1;
+    e.data0 = static_cast<float>(note);
     e.value = 0.0f;
     e.sampleOffset = offset;
     return e;

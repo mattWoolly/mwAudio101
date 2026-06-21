@@ -258,12 +258,18 @@ private:
         switch (e.kind) {
             case StimEventKind::NoteOn:
                 out.type   = mw::NormalizedType::NoteOn;
+                // The played NOTE NUMBER is `data0` (docs/design/09 §3.3; task 118e ingress
+                // fix). noteId is kept (round-trips) but the engine reads data0 for pitch, so
+                // the resolved note is identical to the pre-fix noteId value -> the blessed
+                // golden corpus is byte-stable (no re-bless).
                 out.noteId = clampNote(static_cast<int>(e.note) + noteOffset);
+                out.data0  = static_cast<float>(clampNote(static_cast<int>(e.note) + noteOffset));
                 out.value  = e.value;       // velocity (currently inert in the voice path)
                 break;
             case StimEventKind::NoteOff:
                 out.type   = mw::NormalizedType::NoteOff;
                 out.noteId = clampNote(static_cast<int>(e.note) + noteOffset);
+                out.data0  = static_cast<float>(clampNote(static_cast<int>(e.note) + noteOffset));
                 out.value  = 0.0f;
                 break;
             case StimEventKind::ControlChange:
