@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 151
 title: Bank coverage manifest + full-bank CI validation (~64 presets)
-status: todo
+status: in-review
 depends-on: [118, 025, 145, 146, 147, 148, 149, 150]
 component: qa
 estimated-size: S
