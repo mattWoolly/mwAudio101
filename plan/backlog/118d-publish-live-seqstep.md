@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 118d
 title: Publish the live sequencer step to telemetry (processor) — replace the monotonic display counter
-status: in-review
+status: done
 depends-on: [118c, 111c, 161, 162]
 component: app
 estimated-size: S
