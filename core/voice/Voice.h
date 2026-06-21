@@ -78,6 +78,11 @@ struct VoiceControls {
     float                          targetPitchCvVolts = mw::cal::vco::kPitchRefVolts;
     mw101::dsp::Footage            footage   = mw101::dsp::Footage::Eight;
     float                          pwmCvNorm = 0.0f;   // 0..1 pulse-width CV (0 => square)
+    // mw101.vco.pwm_depth (task 162e) — the MANUAL static PWM depth, a fixed LFO-INDEPENDENT
+    // contribution to the normalized PWM CV (docs/design/01 §4.6 PwmSource::Manual), DISTINCT
+    // from the LFO->PWM amount lfoPwmDepthNorm below. Summed into pwmCvNorm in applyControls
+    // (clamped to [0,1]); 0 == no manual width bias. [docs/design/06 §3.0; ADR-028]
+    float                          manualPwmDepthNorm = 0.0f;
     mw101::dsp::SubShape           subShape  = mw101::dsp::SubShape::OctDownSquare;
 
     // --- source mixer (§4.1; task 160) ---  saw+pulse+sub+noise summed by these levels.
@@ -103,6 +108,13 @@ struct VoiceControls {
     float resonance01       = 0.0f;
     float envModOctaves     = 0.0f;   // env_mod depth already scaled to octaves of CV
     float kbdTrackCvVolts   = 0.0f;   // kbd_track x (note - ref) CV, note-dependent
+    // mw101.vcf.lfo_mod (task 162e) — the VCF module's OWN LFO->cutoff amount (octaves of CV
+    // at full LFO swing), DISTINCT from the LFO panel's lfo.depth_cutoff (lfoCutoffDepthOct,
+    // which routes only when lfo.dest == Filter). The VCF panel routes the per-voice LFO to the
+    // cutoff REGARDLESS of the dest switch; applyControls SUMS lfoEff * vcfLfoModDepthOct into
+    // the cutoff CV ALONGSIDE the existing lfo.depth_cutoff term. 0 == no VCF-panel LFO mod.
+    // [docs/design/02 §1.2; docs/design/05 §3.1; docs/design/06 §3.0; ADR-028]
+    float vcfLfoModDepthOct = 0.0f;   // VCF-panel LFO->cutoff swing (octaves) at full LFO
 
     // --- Envelope (task 161) — mw101.env.{attack,decay,sustain,release} -> env_.setParams
     // each control tick (calibrated times). A/D/R are seconds; sustain is a [0,1] level. ---
