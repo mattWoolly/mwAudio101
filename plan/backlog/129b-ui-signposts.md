@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 129b
 title: UI signposts: 440-vs-442 tuning-duality banner + 'running unblessed at this host rate' banner
-status: in-review
+status: done
 depends-on: [129, 112, 115]
 component: ui
 estimated-size: S
