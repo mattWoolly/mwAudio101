@@ -170,6 +170,19 @@ private:
     // voice's resolved note) is filled in applyParamSnapshot. Pure arithmetic; noexcept.
     [[nodiscard]] VoiceControls decodeShared(const ParamSnapshot& snap) const noexcept;
 
+    // -----------------------------------------------------------------------------------
+    // THE FX-PARAM DISPATCH (task 163; ADR-028 item 5). Decode the FX range of the
+    // snapshot (fx.bypass + drive/chorus/delay enables+params + out.mono) into a single
+    // decoded fx::FxParams and publish it via fx_.setParams() ONCE per block, at the §4.1
+    // FX site in renderChunk — a SEPARATE site from the per-voice applyParamSnapshot (the
+    // FX run once on the mono voice sum, not per voice). hostBpm comes from the block's
+    // transport so the Delay tempo-sync conversion tracks the host. Pure POD read +
+    // arithmetic; the std::pow log-maps (delay ms / chorus Hz) run at this per-block
+    // control rate only, never on the per-sample audio path. noexcept, alloc-free,
+    // lock-free [ADR-028 item 5; docs/design/07 §3.1/§7].
+    [[nodiscard]] fx::FxParams decodeFxParams(const ParamSnapshot& snap,
+                                              double hostBpm) const noexcept;
+
     // Stage the decoded (note-independent) ADSR onto EVERY pool voice BEFORE the control tick
     // fires any note-on this chunk (task 161). The envelope latches its active-stage one-pole
     // coefficient at the trigger edge, so the A/D/S/R must be in place before the tick triggers
@@ -252,6 +265,31 @@ private:
         int modBendRangeVcf = -1;  // 0..1200 cents
         int velEnable      = -1;   // bool -> velocity sensing on/off
         int velDepth       = -1;   // 0..1 -> velocity depth
+
+        // --- FX param dispatch (task 163; ADR-028 item 5) — decoded into FxParams and
+        // applied via fx_.setParams() at the §4.1 FX site, a SEPARATE site from the
+        // per-voice applyParamSnapshot. ---
+        int fxBypass        = -1;  // bool -> FxParams.masterBypass
+        int fxDriveEnable   = -1;  // bool -> drive.on
+        int fxDriveAmount   = -1;  // 0..1 -> drive.amount
+        int fxDriveTone     = -1;  // 0..1 -> drive.tone
+        int fxDriveOutput   = -1;  // 0..1 -> drive.output
+        int fxChorusEnable  = -1;  // bool -> (with mode) chorus on/off
+        int fxChorusMode    = -1;  // choice 0..3 -> chorus.mode (Off/I/II/I+II)
+        int fxChorusRate    = -1;  // 0..1 -> chorus.rate Hz override (log)
+        int fxChorusDepth   = -1;  // 0..1 -> chorus.depth
+        int fxChorusWidth   = -1;  // 0..1 -> chorus.width
+        int fxChorusMix     = -1;  // 0..1 -> chorus.mix
+        int fxDelayEnable   = -1;  // bool -> delay.on
+        int fxDelaySync     = -1;  // bool -> delay.sync
+        int fxDelayDivision = -1;  // choice 0..5 -> delay.division
+        int fxDelayTime     = -1;  // 0..1 (skew) -> delay.timeMs (free ms, log)
+        int fxDelayFeedback = -1;  // 0..0.95 -> delay.feedback
+        int fxDelayDamp     = -1;  // 0..1 -> delay.damp
+        int fxDelayWidth    = -1;  // 0..1 -> delay.width
+        int fxDelayMix      = -1;  // 0..1 -> delay.mix
+        int fxDelayPingpong = -1;  // bool -> delay.pingpong
+        int outMono         = -1;  // bool -> FxParams.monoOutput
     } slots_{};
 
     double sampleRate_      = 0.0;
