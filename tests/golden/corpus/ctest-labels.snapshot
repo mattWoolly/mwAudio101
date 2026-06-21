@@ -17,6 +17,7 @@
 [cpu]
 [crossformat_exact]
 [dispatch_character]
+[dispatch_complete]
 [dispatch_fx]
 [dispatch_lfo]
 [dispatch_vcf]
