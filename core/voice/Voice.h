@@ -58,6 +58,43 @@
 
 namespace mw {
 
+// ---------------------------------------------------------------------------
+// VoiceControls — the per-voice control-apply payload of the ADR-028 dispatch seam
+// (task 160). The Engine decodes the immutable mw::ParamSnapshot once per control tick
+// into this POD and hands it to Voice::applyControls, which drives the per-voice DSP
+// setters. This is the SEAM the rest of the cluster extends WITHOUT re-architecting:
+// task 160 fills the VCO + source-mixer fields below; task 161 (VCF/Env/VCA) and task
+// 162 (LFO/modulation) ADD their own fields + apply them in applyControls behind the
+// same once-per-tick call. RT-safe: a flat POD of floats/enums, no heap, no JUCE.
+//
+// VCO PITCH AUTHORITY (ADR-005 / ADR-028 item 3): targetPitchCvVolts is the count-domain
+// CV (assemblePitchCounts -> blendedPitchVolts), anchored into the VCO converter's CV
+// frame (ControlDispatchConstants.h), for the KeyAssigner-resolved active note. The Voice
+// SLEWS toward it through its single Glide (the count-domain glide reconciliation, below),
+// then feeds the slewed CV to the oscillator — so different notes render different
+// pitches at 1 V/octave and portamento is applied EXACTLY ONCE.
+struct VoiceControls {
+    // --- VCO (task 160) ---
+    float                          targetPitchCvVolts = mw::cal::vco::kPitchRefVolts;
+    mw101::dsp::Footage            footage   = mw101::dsp::Footage::Eight;
+    float                          pwmCvNorm = 0.0f;   // 0..1 pulse-width CV (0 => square)
+    mw101::dsp::SubShape           subShape  = mw101::dsp::SubShape::OctDownSquare;
+
+    // --- source mixer (§4.1; task 160) ---  saw+pulse+sub+noise summed by these levels.
+    float sawLevel   = 0.0f;
+    float pulseLevel = 0.0f;
+    float subLevel   = 0.0f;
+    float noiseLevel = 0.0f;
+
+    // --- glide / portamento (§5.5; task 160 reconciliation) — the single per-voice Glide
+    // owns the count-domain pitch slew; these come from mw101.glide.{mode,time}. ---
+    GlideMode glideMode    = GlideMode::Off;
+    float     glideSeconds = 0.0f;
+
+    // 161/162 extend here (VCF cutoff/res, env A/D/S/R, VCA level/mode, LFO rate/shape/
+    // depth/dest, modulation routing) behind the same applyControls call.
+};
+
 // Inline per-voice drift state [ADR-006 §Decision item 1; docs/design/04 §4.2/§4.4].
 // This file owns ONLY the seed derivation and where the state lives; the drift DSP law
 // (walk coefficients, depth scaling, vintage.age) is ADR-009's (DriftConstants.h).
@@ -86,6 +123,25 @@ public:
     void noteOn(int midiNote, float velocity, bool retrigger) noexcept;
     void noteOff() noexcept;                          // gate de-assert -> release
     void setGlideTarget(float targetPitchHz) noexcept; // glide handled per-voice (§5.5)
+
+    // Apply one control-tick's decoded controls to this voice's DSP (the ADR-028 dispatch
+    // seam, task 160). Sets the glide TARGET to the count-domain pitch CV (volts) and
+    // ADVANCES the single per-voice Glide by `advanceSamples` (the samples elapsed since the
+    // last dispatch, i.e. this chunk's length) so the portamento slews at the correct
+    // PER-SAMPLE rate even though the oscillator pitch CV is pushed once per chunk — the
+    // count-domain glide reconciliation: glide is applied EXACTLY ONCE here (the discarded
+    // per-sample glide_.nextValue() in render() is removed). The slewed CV + footage + PWM +
+    // sub-shape go to the oscillator section via osc_.setControls; the source-mixer levels
+    // are cached for render(). Per CHUNK (not per sample): a bounded advanceSamples-step
+    // glide loop + one osc_.setControls re-derive, pure arithmetic. noexcept, alloc-free,
+    // lock-free [ADR-028 items 1-2; ADR-005; ADR-001 §9]. quality is structural/off-thread,
+    // so the AA tier is carried separately via setQualityAaMode().
+    void applyControls(const VoiceControls& c, int advanceSamples) noexcept;
+
+    // Structural AA tier (mw101.quality), set off the audio thread / at a block boundary —
+    // NOT per control tick [ADR-018 Q5; ADR-028 item 4 structural params off-thread]. The
+    // dispatch caches it; applyControls folds it into the section Controls.aaMode.
+    void setQualityAaMode(mw101::dsp::OscAaMode m) noexcept { qualityAaMode_ = m; }
 
     // Unison voices are configured once per note via these (§5.3).
     void setDetuneCents(float cents) noexcept;
@@ -139,6 +195,25 @@ private:
     float         detuneCents_ = 0.0f;
     float         panGainL_    = 1.0f;  // equal-power pan gains (precomputed on setPan)
     float         panGainR_    = 1.0f;
+
+    // --- source-mixer levels (§4.1; task 160) — cached from the dispatch, summed in
+    // render(): out = saw*sawLevel + pulse*pulseLevel + sub*subLevel + noise*noiseLevel.
+    // Default: the saw-only INIT mix (saw at its registry default 0.8, others 0), so an
+    // engine that never dispatches still sounds the historical fixed saw. ---
+    float sawLevel_   = 0.8f;
+    float pulseLevel_ = 0.0f;
+    float subLevel_   = 0.0f;
+    float noiseLevel_ = 0.0f;
+
+    // Structural AA tier (mw101.quality), set off the audio thread; folded into the
+    // oscillator-section Controls each applyControls [ADR-018 Q5].
+    mw101::dsp::OscAaMode qualityAaMode_ = mw101::dsp::OscAaMode::PolyBlep;
+
+    // Glide-domain note-on bookkeeping (task 160): the pitch CV glide lives in the volts
+    // domain in applyControls, so noteOn records the legato flag for the first post-keypress
+    // tick (snap-vs-slew) instead of seeding the old Hz glide. freshNoteOn_ is consumed once.
+    bool pendingNoteOnLegato_ = false;
+    bool freshNoteOn_         = false;
 };
 
 } // namespace mw
