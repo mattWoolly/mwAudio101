@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 126
 title: SequencerGrid (100-step pattern editor view)
-status: todo
+status: in-review
 depends-on: [020, 111, 087, 006, 109, 107, 125, 111c, 118c, 118d]
 component: ui
 estimated-size: M
