@@ -14,9 +14,11 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <span>
 
 #include "calibration/EngineConstants.h"
 #include "calibration/OversampledZoneConstants.h"
+#include "calibration/SequencerRoutingConstants.h"
 
 namespace mw {
 
@@ -130,6 +132,16 @@ void Engine::prepare(double sampleRate, int maxBlockSize, int maxVoices) noexcep
     mixR_.assign(n, 0.0f);
     mono_.assign(n, 0.0f);
 
+    // Pre-size the sequencer-handoff event scratch (task 118c; §9 RT6). A chunk's worst
+    // case is one note event per frame (KeyEvent in) and the SequencerEngine can emit at
+    // most one ControlEvent per frame (one edge or one passthrough key per sample), so
+    // capping each at the worst-case host block is sufficient — the renderChunk that
+    // fills them is <= maxBlockSize_ frames, and processBlock clamps to out.size().
+    // A 1-frame floor keeps the spans non-empty so .data() is valid even at maxBlock 0.
+    const auto evCap = static_cast<std::size_t>(std::max(maxBlockSize_, 1));
+    keyScratch_.assign(evCap, control::KeyEvent{});
+    ctrlScratch_.assign(evCap, control::ControlEvent{});
+
     // Prepare the consumed modules. A fixed instance seed keeps per-voice drift PRNG
     // state byte-stable across runs (§9.2; ADR-001 Decision); the plugin overrides it
     // per instance off the audio thread (out of scope here).
@@ -137,6 +149,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize, int maxVoices) noexcep
     // doc 04 §5.1/§9) — the engine owns no second KeyAssigner (task 118b reconcile).
     voices_.prepare(sampleRate_, oversampleFactor_, kInstanceSeed);
     control_.prepare(sampleRate_);
+    sequencer_.prepare(sampleRate_, std::max(maxBlockSize_, 1));   // arp/seq/clock (task 118c)
     fx_.prepare(sampleRate_, maxBlockSize_);
 
     prepared_ = true;
@@ -175,8 +188,19 @@ void Engine::reset() noexcept {
     //     (task 134b; the macro pole + jitter toggle are preserved — a reset is not a
     //     parameter change).
     //   - fx_.reset() : clear the FX delay/modulation state.
+    //   - sequencer_.reset() : clear the arp/seq/clock/RANDOM play state to the known
+    //     start (arp cursor, seq playhead, clock phase, RANDOM counter) WITHOUT touching
+    //     the published snapshot, so a loaded pattern + configured arp/clock mode survive
+    //     a transport reset (task 118c; doc 05 §9.2 — only the play state is wiped). This
+    //     re-derives the control-side fixed point so two divergent play histories +
+    //     reset() converge on the seq/arp output too.
     voices_.prepare(sampleRate_, oversampleFactor_, kInstanceSeed);
     control_.reset();
+    sequencer_.reset();
+    seqHeldNote_    = -1;
+    currentSeqStep_ = -1;
+    seqPlayMirror_  = 0;
+    seqWasPlaying_  = false;
     fx_.reset();
     std::fill(mixL_.begin(), mixL_.end(), 0.0f);
     std::fill(mixR_.begin(), mixR_.end(), 0.0f);
@@ -191,14 +215,103 @@ void Engine::renderChunk(const BlockContext& ctx, int n0, int len) noexcept {
     //    events land at chunk heads; the control tick below resolves that same authority.
     //    Non-note events are not voice-routed by this assembly (task 118b reconcile: the
     //    engine no longer owns a duplicate KeyAssigner).
+    //
+    //    Task 118c routing seam: WHILE THE TRANSPORT IS RUNNING the note ingress is owned
+    //    by the SequencerEngine (the arp/seq/clock/RANDOM state machine, doc 05 §2.1). The
+    //    chunk's MIDI notes become KeyEvents fed to the SequencerEngine; its emitted
+    //    ControlEvents (the step-sequencer / arpeggiator selected note + gate + trig, or a
+    //    passthrough of the held key when neither is active) are translated back into
+    //    NoteEvents and driven into the SAME single MONO/UNISON voice path as a keyboard
+    //    key (doc 04 §9: "the arp/seq emit NoteEvents like a keyboard"; ADR-006 C12). When
+    //    the transport is STOPPED the unchanged direct keyboard path runs (no regression to
+    //    the task-118 voice path); POLY arp/seq routing is out of scope (SH-101 is mono).
     const MidiEventView& midi = ctx.midi;
-    for (int i = 0; i < midi.numEvents; ++i) {
-        const MidiEvent& e = midi.events[i];
-        if (e.sampleOffset < n0 || e.sampleOffset >= n0 + len) continue;
-        NoteEvent ne{};
-        if (toNoteEvent(e, n0, ne)) {
-            voices_.handleNoteEvent(ne);
+    const bool transportRunning = ctx.transport.isPlaying;
+
+    // The sequencer OWNS note ingress this chunk only when it is actually driving notes:
+    // the step sequencer is playing, OR the arpeggiator is explicitly ENABLED. The
+    // as-built ControlSnapshot (task 087) has no arp on/off field — arpMode is Up/UandD/
+    // Down with no "off", and Arpeggiator::isEngaged() latches on any >=2-key hold — so a
+    // bare held chord would otherwise auto-arpeggiate and silently break plain keyboard
+    // play (the engine_s7 KeyAssigner-priority contract, ADR-006 C12). The one unambiguous
+    // "arp is on" signal the as-built snapshot CAN express is the HOLD latch (arpHold);
+    // doc 05 §5.1 names `mw101.arp.mode` as the on/off + direction, so the proper fix is a
+    // doc-06/task-087 arp-enable in the snapshot (recorded as a routing-seam addendum in
+    // the PR). Until then we gate arp routing on arpHold so a plain chord stays keyboard
+    // play and only a latched arp (or a playing seq) hands ingress to the SequencerEngine.
+    const mw::control::ControlSnapshot* snap = sequencer_.liveSnapshot();
+    const bool seqPlaying = (snap != nullptr) && sequencer_.seq().isPlaying()
+                            && (sequencer_.seq().count() > 0);
+    const bool arpEnabled = (snap != nullptr) && snap->arpHold;   // the expressible arp-on
+    const bool sequencerOwnsIngress = transportRunning && (seqPlaying || arpEnabled);
+
+    if (!sequencerOwnsIngress) {
+        // STOPPED, or RUNNING with no seq/arp active: the unchanged task-118 direct
+        // keyboard ingress (plain keyboard play resolves via the sole KeyAssigner).
+        for (int i = 0; i < midi.numEvents; ++i) {
+            const MidiEvent& e = midi.events[i];
+            if (e.sampleOffset < n0 || e.sampleOffset >= n0 + len) continue;
+            NoteEvent ne{};
+            if (toNoteEvent(e, n0, ne)) {
+                voices_.handleNoteEvent(ne);
+            }
         }
+        // While not running the sequencer, keep the live step "no step" so telemetry does
+        // not show a stale playhead (and the seam's held-note shadow stays clear).
+        if (!transportRunning) {
+            currentSeqStep_ = -1;
+            seqHeldNote_    = -1;
+            seqWasPlaying_  = false;
+        }
+    } else {
+        // RUNNING: route note ingress through the SequencerEngine. Collect this chunk's
+        // MIDI notes as KeyEvents, folding the MIDI note into the arp/trigger 0..31 key
+        // space (subtract the seam base) so the SequencerEngine's 32-key arp bitmap and
+        // the TriggerSource accept them; the same base maps an emitted pitch back to a
+        // MIDI note in routeControlEvents (so an arp step recovers the exact note played).
+        int keyCount = 0;
+        const int keyCap = static_cast<int>(keyScratch_.size());
+        for (int i = 0; i < midi.numEvents && keyCount < keyCap; ++i) {
+            const MidiEvent& e = midi.events[i];
+            if (e.sampleOffset < n0 || e.sampleOffset >= n0 + len) continue;
+            NoteEvent ne{};
+            if (!toNoteEvent(e, n0, ne)) continue;
+
+            control::KeyEvent ke{};
+            ke.pitch        = static_cast<int>(ne.note) - cal::seqroute::kSeqVoiceBaseMidi;
+            ke.gate         = (ne.type == NoteEvent::Type::NoteOn);
+            ke.trig         = ke.gate;
+            ke.porta        = false;
+            ke.mod          = ne.velocity;
+            ke.sampleOffset = ne.sampleOffset;   // already rebased to the chunk
+            keyScratch_[static_cast<std::size_t>(keyCount++)] = ke;
+        }
+
+        // Advance the arp/seq/clock state machine over this chunk: one H->L clock edge
+        // advances arp + seq + RANDOM together (doc 05 §2.1 C17). The transport carries
+        // the chunk-relative PPQ so host-sync edges land sample-accurately within [0,len).
+        TransportInfo chunkT = ctx.transport;
+        if (chunkT.sampleRate <= 0.0) chunkT.sampleRate = sampleRate_;
+        // Advance the block-start PPQ to this chunk's head so a multi-chunk block keeps
+        // host-sync edges continuous (PPQ advances by the chunk's frame count).
+        if (chunkT.sampleRate > 0.0) {
+            const double ppqPerSample = (chunkT.bpm / 60.0) / chunkT.sampleRate;
+            chunkT.ppqPosition += ppqPerSample * static_cast<double>(n0);
+        }
+
+        int eventCount = 0;
+        sequencer_.processBlock(
+            chunkT,
+            std::span<const control::KeyEvent>{keyScratch_.data(),
+                                               static_cast<std::size_t>(keyCount)},
+            std::span<const int>{},   // Ext-clock pulse offsets: none in this core seam
+            std::span<control::ControlEvent>{ctrlScratch_.data(), ctrlScratch_.size()},
+            len,
+            eventCount);
+
+        // Drive the emitted ControlEvents into the single voice path (sets seqHeldNote_
+        // transitions + latches the live current step for telemetry).
+        routeControlEvents(eventCount);
     }
 
     // 2. Advance the control core over this chunk; it fires the control tick(s) at the
@@ -240,6 +353,124 @@ void Engine::renderChunk(const BlockContext& ctx, int n0, int len) noexcept {
     outChans[0] = out0 + n0;
     outChans[1] = out1 + n0;
     fx_.process(m, outChans, len);
+}
+
+void Engine::routeControlEvents(int eventCount) noexcept {
+    // Translate the SequencerEngine's emitted ControlEvents (this chunk) into the
+    // VoiceManager's single note ingress, exactly as a keyboard would (doc 04 §9; ADR-006
+    // C12). The ControlEvent.pitch is in the control-core pitch space (seq 6-bit / arp key
+    // index, or — when neither seq nor arp drives — the engine-folded keyboard key); add
+    // the seam base to recover the MIDI note the sole KeyAssigner is keyed on.
+    //
+    // TWO distinct routing modes (the SequencerEngine chose which by what it emitted):
+    //
+    //  - MANUAL PASSTHROUGH (transport running, NO seq playing, NO arp engaged): the
+    //    SequencerEngine emits one ControlEvent per inbound keyboard KeyEvent, carrying its
+    //    exact gate on/off. We route each straight to the KeyAssigner as NoteOn/NoteOff so
+    //    genuine multi-key held state is preserved and the S7 lowest-/last-note priority is
+    //    resolved by the single authority (no monophonic collapse) — this keeps running
+    //    keyboard play identical to the stopped path's KeyAssigner semantics (ADR-006 C12).
+    //
+    //  - MONOPHONIC STEP SOURCE (seq playing OR arp engaged): the source emits exactly one
+    //    note per clock edge. The KeyAssigner is a HELD-key model, so a momentary step is
+    //    expressed as held-state transitions on a SINGLE engine-held note: a gate-on note
+    //    step releases the previously-held step note and presses the new one (a fresh key ->
+    //    retrigger under GateTrig); a TIE step (porta) sustains without re-pressing (legato,
+    //    no re-gate, doc 05 §6.4); a gate-off step (REST) releases the held note.
+    //
+    // The subsequent control_.advance() in renderChunk resolves this single KeyAssigner
+    // once per control tick and drives the voice(s).
+    const bool seqPlaying  = sequencer_.seq().isPlaying() && (sequencer_.seq().count() > 0);
+    const bool arpEngaged  = sequencer_.arp().isEngaged();
+    const bool stepSource  = seqPlaying || arpEngaged;
+
+    // Re-sync the playhead mirror on a not-playing -> playing transition: the StepSequencer
+    // rewinds playPos to 0 there (loadBuffer / a fresh PLAY), so the next slot is 0.
+    if (seqPlaying && !seqWasPlaying_) {
+        seqPlayMirror_ = 0;
+    }
+    seqWasPlaying_ = seqPlaying;
+
+    const int seqCount = sequencer_.seq().count();
+
+    for (int i = 0; i < eventCount; ++i) {
+        const control::ControlEvent& ev = ctrlScratch_[static_cast<std::size_t>(i)];
+        const int midiNote =
+            std::clamp(ev.pitch + cal::seqroute::kSeqVoiceBaseMidi, 0, 127);
+        const float vel = std::clamp(ev.mod > 0.0f ? ev.mod : 1.0f, 0.0f, 1.0f);
+
+        if (!stepSource) {
+            // MANUAL PASSTHROUGH: route the keyboard event verbatim to the KeyAssigner so
+            // multi-key held state + S7 priority match the stopped path exactly.
+            NoteEvent ne{};
+            ne.type         = ev.gate ? NoteEvent::Type::NoteOn : NoteEvent::Type::NoteOff;
+            ne.note         = static_cast<std::uint8_t>(midiNote);
+            ne.velocity     = ev.gate ? vel : 0.0f;
+            ne.sampleOffset = ev.sampleOffset;
+            voices_.handleNoteEvent(ne);
+            continue;
+        }
+
+        // MONOPHONIC STEP SOURCE -------------------------------------------------------
+        // Latch the REAL live playhead slot when a seq step plays this edge (a seq edge
+        // emits exactly one ControlEvent — note OR rest — so each emitted event while seq
+        // is playing corresponds to one playhead advance), then mirror the StepSequencer's
+        // deterministic (playPos+1)%count advance (closes 111c). Arp-only edges leave the
+        // seq playhead alone.
+        if (seqPlaying) {
+            currentSeqStep_ = seqPlayMirror_;
+            if (seqCount > 0) {
+                seqPlayMirror_ = (seqPlayMirror_ + 1) % seqCount;
+            }
+        }
+
+        if (ev.gate) {
+            if (ev.porta) {
+                // TIE / legato: sustain without re-pressing. If the note changed, press
+                // the new one WITHOUT releasing the prior (the KeyAssigner resolves the
+                // legato, no re-gate); if it is the same note, nothing to do.
+                if (midiNote != seqHeldNote_) {
+                    NoteEvent on{};
+                    on.type         = NoteEvent::Type::NoteOn;
+                    on.note         = static_cast<std::uint8_t>(midiNote);
+                    on.velocity     = vel;
+                    on.sampleOffset = ev.sampleOffset;
+                    voices_.handleNoteEvent(on);
+                    seqHeldNote_ = midiNote;
+                }
+            } else {
+                // Gate-on note step: release the previous step note, press the new one so
+                // the KeyAssigner sees a fresh key (retrigger under GateTrig). Releasing
+                // first keeps the held set to exactly the one current step note.
+                if (seqHeldNote_ >= 0 && seqHeldNote_ != midiNote) {
+                    NoteEvent off{};
+                    off.type         = NoteEvent::Type::NoteOff;
+                    off.note         = static_cast<std::uint8_t>(seqHeldNote_);
+                    off.velocity     = 0.0f;
+                    off.sampleOffset = ev.sampleOffset;
+                    voices_.handleNoteEvent(off);
+                }
+                NoteEvent on{};
+                on.type         = NoteEvent::Type::NoteOn;
+                on.note         = static_cast<std::uint8_t>(midiNote);
+                on.velocity     = vel;
+                on.sampleOffset = ev.sampleOffset;
+                voices_.handleNoteEvent(on);
+                seqHeldNote_ = midiNote;
+            }
+        } else {
+            // Gate-off step (REST or all keys up): release the held step note.
+            if (seqHeldNote_ >= 0) {
+                NoteEvent off{};
+                off.type         = NoteEvent::Type::NoteOff;
+                off.note         = static_cast<std::uint8_t>(seqHeldNote_);
+                off.velocity     = 0.0f;
+                off.sampleOffset = ev.sampleOffset;
+                voices_.handleNoteEvent(off);
+                seqHeldNote_ = -1;
+            }
+        }
+    }
 }
 
 void Engine::process(const BlockContext& ctx) noexcept {

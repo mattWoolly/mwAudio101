@@ -12,12 +12,26 @@
 // primitive), and the §9 global RT invariants [ADR-001 C2-C6, C11; ADR-019 VT-01/VT-02/
 // VT-03; ADR-017 §Decision (post-voice FX once on the mono sum)].
 //
-// WHAT THIS OWNS (task 118 scope; task 118b reconcile): the Engine seam class itself —
-// it consumes the already-built VoiceManager (task 074), ControlCore (task 071), and
-// FxChain (task 094) and assembles them behind the seam. prepare() is the ONLY
-// allocation site; process() chunks the host block, walks active voices in fixed index
-// order summing into a mono mix, then runs the shared FX once on that mono sum; reset()
-// clears to a known start.
+// WHAT THIS OWNS (task 118 scope; task 118b reconcile; task 118c sequencer wiring): the
+// Engine seam class itself — it consumes the already-built VoiceManager (task 074),
+// ControlCore (task 071), SequencerEngine (task 087), and FxChain (task 094) and
+// assembles them behind the seam. prepare() is the ONLY allocation site; process()
+// chunks the host block, walks active voices in fixed index order summing into a mono
+// mix, then runs the shared FX once on that mono sum; reset() clears to a known start.
+//
+// SEQUENCER / ARP ROUTING (task 118c; doc 05 §2.1/§2.3, doc 04 §9, ADR-006/ADR-007):
+// the SequencerEngine hosts the arp/seq/clock/RANDOM fixed-order state machine. The
+// Engine routes note ingress through it ONLY while the transport is RUNNING
+// (ctx.transport.isPlaying): MIDI notes become KeyEvents fed to the SequencerEngine, and
+// its emitted ControlEvents (the selected note + gate + trig from the step sequencer or
+// arpeggiator) are translated back into NoteEvents and driven into the SAME single
+// MONO/UNISON voice path as a keyboard key — through VoiceManager::handleNoteEvent into
+// the SOLE KeyAssigner (doc 04 §9: "the arp/seq, when driving notes, emit NoteEvents like
+// a keyboard"; ADR-006 C12). One H->L clock edge advances arp + seq + RANDOM together
+// (§2.1 C17), inside the SequencerEngine. When the transport is STOPPED, note ingress
+// takes the unchanged direct keyboard path (no regression to the task-118 voice path).
+// POLY arp/seq note routing is OUT OF SCOPE (the SH-101 is mono; ADR-006 C12 bypasses the
+// KeyAssigner for POLY).
 //
 // NOTE-PRIORITY OWNERSHIP (task 118b): the engine routes note events through
 // VoiceManager::handleNoteEvent into the VoiceManager's SOLE KeyAssigner — the
@@ -37,12 +51,15 @@
 
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 #include "BlockContext.h"
 
 #include "voice/VoiceManager.h"   // owns the SOLE KeyAssigner (doc 04 §5.1/§9); GateTrigMode via VoiceTypes
 #include "control/ControlCore.h"
+#include "control/ControlTypes.h"     // KeyEvent / ControlEvent PODs (doc 05 §2.3)
+#include "control/SequencerEngine.h"  // arp/seq/clock fixed-order state machine (task 087)
 #include "dsp/fx/FxChain.h"
 
 namespace mw {
@@ -85,6 +102,16 @@ public:
     [[nodiscard]] int    oversampleFactor() const noexcept { return oversampleFactor_; }
     [[nodiscard]] const VoiceManager& voiceManager() const noexcept { return voices_; }
     [[nodiscard]] const ControlCore&  controlCore()  const noexcept { return control_; }
+    [[nodiscard]] const seq::SequencerEngine& sequencer() const noexcept { return sequencer_; }
+
+    // The LIVE current sequencer step the playhead last advanced to (the slot the most
+    // recent clock H->L edge played), for telemetry. -1 == no step has played since
+    // prepare()/reset() or the sequencer is not playing. This is the REAL playhead slot,
+    // NOT a monotonic display counter — it closes the 111c QA MEDIUM where the published
+    // Snapshot.seqStep was a display counter rather than the live step (the processor's
+    // 1-line publish update to read this is the out-of-scope follow-up 118d). A plain
+    // read of a member written only on the single-threaded audio path; safe for tests.
+    [[nodiscard]] int currentSeqStep() const noexcept { return currentSeqStep_; }
 
     // Expose the FX latency the FX chain reports (the constant FX group delay). The
     // plugin sums this with the per-voice zone delay for setLatencySamples (out of
@@ -109,13 +136,42 @@ private:
     // finding).
     VoiceManager voices_{};
     ControlCore  control_{};
+    seq::SequencerEngine sequencer_{};   // arp/seq/clock fixed-order state machine (task 087)
     fx::FxChain  fx_{};
+
+    // Translate the SequencerEngine's emitted ControlEvents for this chunk into the
+    // VoiceManager's single note ingress (handleNoteEvent into the sole KeyAssigner),
+    // updating the engine-held seq note so each gate-on step releases the previous note
+    // and presses the new one (a fresh trigger), a REST/gate-off releases it, and a TIE
+    // sustains it (doc 04 §9; ADR-006 C12; doc 05 §6.4). Also latches currentSeqStep_ for
+    // telemetry. noexcept, alloc-free, lock-free.
+    void routeControlEvents(int eventCount) noexcept;
 
     // Preallocated scratch (sized to maxBlockSize_ in prepare): the per-voice stereo
     // accumulation buffers and the mono voice-sum the FX chain consumes [§9 RT6].
     std::vector<float> mixL_{};
     std::vector<float> mixR_{};
     std::vector<float> mono_{};
+
+    // Preallocated control-event scratch for the sequencer handoff (sized in prepare;
+    // never grown on the hot path) [§9 RT6; doc 05 §10]. keyScratch_ collects the
+    // chunk's MIDI notes as KeyEvents fed to the SequencerEngine; ctrlScratch_ receives
+    // its emitted step/gate ControlEvents. Both are bounded by the worst-case event count.
+    std::vector<control::KeyEvent>     keyScratch_{};
+    std::vector<control::ControlEvent> ctrlScratch_{};
+
+    // The MIDI note the sequencer/arp is currently sounding through the KeyAssigner
+    // (-1 == none), so a step transition issues the right NoteOff(prev)/NoteOn(new). Set
+    // on the single-threaded audio path only.
+    int seqHeldNote_   = -1;
+    // The live current sequencer step (the slot the last edge played), -1 if none.
+    int currentSeqStep_ = -1;
+    // The next slot the StepSequencer will play, mirrored from its deterministic
+    // (playPos+1)%count advance so currentSeqStep_ is the REAL playhead slot, not a free
+    // display counter (closes 111c). Re-synced to 0 on prepare/reset and on a
+    // not-playing -> playing transition (the StepSequencer rewinds playPos to 0 there).
+    int seqPlayMirror_ = 0;
+    bool seqWasPlaying_ = false;
 
     double sampleRate_      = 0.0;
     int    maxBlockSize_    = 0;
