@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 073b
 title: Wire the pitch CV to the VCO so different notes actually play different pitches (CRITICAL)
-status: todo
+status: superseded
 depends-on: [070, 071, 073, 074, 118, 118c]
 component: core
 estimated-size: L
@@ -15,6 +15,12 @@ tag: voice_pitch
 ---
 
 ## Objective
+
+> **SUPERSEDED by task 160 (2026-06-20):** the audit found the gap is SYSTEMIC (the Engine never
+> reads ctx.params at all — ~78 params unwired, not just pitch). The pitch wiring is now the headline
+> of task 160 (control-dispatch seam: VCO + source mixer), which establishes the dispatch pattern the
+> rest of the cluster (161/162/163/164) extends. See ADR-028. This file is kept for traceability.
+
 
 CRITICAL DSP GAP (found by audit): the played note's pitch is COMPUTED but NEVER reaches the
 oscillator frequency, so distinct MIDI notes render bit-identically — the synth cannot play pitch.
