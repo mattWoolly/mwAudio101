@@ -8,6 +8,7 @@
 [calibration]
 [capabilities]
 [capability_matrix]
+[cc_ingress]
 [class-exact]
 [class-fp]
 [clock]

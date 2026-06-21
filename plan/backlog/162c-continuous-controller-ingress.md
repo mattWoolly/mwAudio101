@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 162c
 title: Carry pitch-bend + mod-wheel through the seam so bend->VCO/VCF and mod-wheel->LFO work
-status: in-review
+status: done
 depends-on: [162, 118, 101, 104]
 component: core
 estimated-size: M
