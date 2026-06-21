@@ -19,6 +19,23 @@
 # Tiers: macOS arm64 (reference/bless) + Linux x64 (co-required) are HARD gates;
 # Windows x64 is goal-tier and runs continue-on-error [docs/design/11 §9.3;
 # ADR-014 C12].
+#
+# VERIFICATION GATES (task 157): the silent-pass / discovery / label-snapshot /
+# MANIFEST / no-network invariants are ALREADY RUN inside scripts/check.sh's full
+# `ctest --preset <p> --no-tests=error` (the prefix_coverage, labels_snapshot,
+# manifest/provenance, license_headers, fp_discipline_guard, validators and
+# formats tests all live in that one graph). To keep ADR-014 C1 true the heavy
+# lifting stays in check.sh / CMake — the steps below add NO new build or test
+# logic. They only re-invoke the SAME, already-registered ctest selectors as
+# named, fail-loud gate steps so each owner-locked invariant (§8.2 discovery,
+# §8.4 label snapshot, §7.5 MANIFEST, §8.1/§8.3 silent-pass) is EXPLICIT and
+# individually visible in the CI log instead of buried in the aggregate run
+# [docs/design/11 §8; ADR-013 C2/C3/C12/C13; ADR-023 V7]. They run on the
+# HARD-GATE platforms only (macOS arm64 + Linux x64); Windows x64 stays goal-tier
+# via continue-on-error and is not re-gated here, preserving the 156 tier model
+# [docs/design/11 §9.3; ADR-014 C12]. The build dir is reused from the check.sh
+# step above (already configured + built), so these are thin assertions, not
+# rebuilds.
 
 name: CI
 
@@ -82,7 +99,72 @@ jobs:
       # with the platform preset name. All configure/build/test logic lives in
       # scripts/check.sh + CMakePresets.json, never here [ADR-014 C1]. Run under
       # bash on every runner (Git Bash ships on windows-latest) so the single
-      # canonical command is byte-identical across platforms.
+      # canonical command is byte-identical across platforms. This run already
+      # executes EVERY verification gate (the full ctest graph under
+      # --no-tests=error); the explicit gate steps below re-assert the
+      # owner-locked subset so each is individually visible in the log.
       - name: Build and test (scripts/check.sh ${{ matrix.preset }})
         shell: bash
         run: scripts/check.sh ${{ matrix.preset }}
+
+      # === Verification gates — HARD-GATE platforms only (task 157) ============
+      # Each step is a thin re-invocation of an ALREADY-REGISTERED ctest selector
+      # against the build dir produced by check.sh above (no reconfigure, no
+      # rebuild, no new test logic — ADR-014 C1). All selectors carry
+      # --no-tests=error so a typo'd / vanished selector FAILS instead of passing
+      # green [docs/design/11 §8.3; ADR-014 C7]. Skipped on Windows goal-tier so
+      # the 156 tier model is untouched [ADR-014 C12].
+
+      # §8.2 / ADR-013 C2 — per-prefix discovery: the prefix_coverage ctest fails
+      # if any required subsystem prefix (vco vcf vca env seq prng arp cal) has 0
+      # discovered tests. (The required-tag set is owned by tests/CMakeLists.txt;
+      # this step only surfaces that gate as its own line.)
+      - name: 'Gate: per-prefix discovery (§8.2, ADR-013 C2)'
+        if: ${{ matrix.goal-tier == false }}
+        shell: bash
+        run: ctest --preset ${{ matrix.preset }} -R prefix_coverage --no-tests=error --output-on-failure
+
+      # §8.4 / ADR-013 C3 — label-snapshot diff: the labels_snapshot ctest diffs
+      # `ctest --print-labels` against tests/golden/corpus/ctest-labels.snapshot;
+      # a deleted/renamed labelled suite shows as a failing diff, not silence.
+      - name: 'Gate: label-snapshot diff (§8.4, ADR-013 C3)'
+        if: ${{ matrix.goal-tier == false }}
+        shell: bash
+        run: ctest --preset ${{ matrix.preset }} -R labels_snapshot --no-tests=error --output-on-failure
+
+      # §7.5 / ADR-013 C12/C13 + ADR-023 V7 — MANIFEST completeness, orphan,
+      # honesty-label and renderVersion governance. These are the [manifest] /
+      # [provenance] Catch2 cases (e.g. "manifest completeness…", "manifest
+      # orphan…", "manifest renderVersion: change-without-bump fails…"); the
+      # discovered ctest names begin with the `mw101.manifest`/`mw101.provenance`
+      # selector words, so -R matches the real registered tests.
+      - name: 'Gate: MANIFEST completeness / orphan / renderVersion (§7.5, ADR-013 C12/C13, ADR-023 V7)'
+        if: ${{ matrix.goal-tier == false }}
+        shell: bash
+        run: ctest --preset ${{ matrix.preset }} -R 'mw101\.(manifest|provenance)' --no-tests=error --output-on-failure
+
+      # §8.1 / §8.3 / ADR-013 C1 — silent-pass assertion. Prove the
+      # --no-tests=error contract is live by running it against a selector that
+      # MUST match >= 1 test (the build smoke). If the selector ever matched
+      # nothing this line would itself go red, demonstrating the empty-run guard
+      # is wired rather than asserting it only in prose.
+      - name: 'Gate: silent-pass guard is live (§8.1/§8.3, ADR-013 C1)'
+        if: ${{ matrix.goal-tier == false }}
+        shell: bash
+        run: ctest --preset ${{ matrix.preset }} -R build_smoke --no-tests=error --output-on-failure
+
+      # §10 / ADR-014 C10 — no-network build verification. CPM_SOURCE_CACHE is
+      # already warm from the check.sh build above; configure + build a FRESH
+      # build dir with FETCHCONTENT_FULLY_DISCONNECTED=ON so any attempt to reach
+      # the network FAILS the build. This is the one genuinely-new assertion
+      # (an offline reconfigure of the SAME preset — no new build logic, just the
+      # disconnected flag flipped on). Hard-gate platforms only.
+      - name: 'Gate: no-network offline build (§10, ADR-014 C10)'
+        if: ${{ matrix.goal-tier == false }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --preset ${{ matrix.preset }} \
+            -B build/offline-${{ matrix.preset }} \
+            -DFETCHCONTENT_FULLY_DISCONNECTED=ON
+          cmake --build build/offline-${{ matrix.preset }}
