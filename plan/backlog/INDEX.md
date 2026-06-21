@@ -153,7 +153,7 @@ mod-arp-seq, fx, vintage, calibration, params, plugin, ui, golden, presets, inte
 | 14 | 113 | Single juce_add_plugin target over the shared processor (plugin/CMakeLists.txt) | infra | S | 001, 096, 111 | done |
 | 14 | 114 | MwAudioEditor root: AffineTransform scaling, constrainer, resize/DPI | ui | M | 111, 020, 006, 106, 108 | done |
 | 14 | 117 | ModuleBase + ModulatorModule (LFO/S&H + mod depth) with APVTS attachments | ui | M | 020, 111, 006, 106, 108, 109 | done |
-| 14 | 151 | Bank coverage manifest + full-bank CI validation (~64 presets) | qa | S | 118, 025, 145, 146, 147, 148, 149, 150 | todo |
+| 14 | 151 | Bank coverage manifest + full-bank CI validation (~64 presets) | qa | S | 118, 025, 145, 146, 147, 148, 149, 150 | done |
 | 15 | 115 | Coalescing telemetry Timer + reduce-motion toggle in editor | ui | S | 020, 006, 107, 114 | done |
 | 15 | 116 | BackgroundLayer cached static chrome + patch lines + labels | ui | M | 006, 106, 114 | done |
 | 15 | 120 | VcoModule (range, waveform mix, PWM, pitch, sub, noise) | ui | M | 020, 111, 006, 109, 117 | done |
