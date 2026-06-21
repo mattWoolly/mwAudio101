@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 161
 title: Control-dispatch — VCF (cutoff/res + env_mod/kbd_track) + Envelope (ADSR) + VCA (level/mode) respond
-status: todo
+status: in-review
 depends-on: [160]
 component: core
 estimated-size: M

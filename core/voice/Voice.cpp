@@ -101,8 +101,11 @@ void Voice::prepare(double sampleRate, int oversampleFactor,
     pulseLevel_ = 0.0f;
     subLevel_   = 0.0f;
     noiseLevel_ = 0.0f;
+    vcaLevel_   = 0.8f;        // VCA output level back to the registry default (task 161)
     pendingNoteOnLegato_ = false;
     freshNoteOn_         = false;
+    pendingEnv_    = mw101::dsp::EnvParams{};   // INIT ADSR until the seam dispatches (task 161)
+    hasPendingEnv_ = false;
     setStereoPan(0.0f);
     env_.reset();
     lfo_.reset();
@@ -124,6 +127,12 @@ void Voice::noteOn(int midiNote, float velocity, bool retrigger) noexcept {
     const bool legato = (state_ != VoiceState::Idle);
     pendingNoteOnLegato_ = legato;
     freshNoteOn_         = true;
+
+    // Apply the latest dispatched ADSR BEFORE firing the attack (task 161): startAttack()
+    // latches the live attack coefficient at this edge, so the times must be in place first.
+    // Until the seam has dispatched once we keep the env's INIT defaults (hasPendingEnv_).
+    if (hasPendingEnv_)
+        env_.setParams(pendingEnv_);
 
     // Fire the ADSR from its trigger state when the decision says so (retrigger).
     env_.noteOn(/*legato=*/legato && !retrigger);
@@ -202,6 +211,59 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
     pulseLevel_ = c.pulseLevel;
     subLevel_   = c.subLevel;
     noiseLevel_ = c.noiseLevel;
+
+    // --- VCF (task 161): the SUMMED cutoff CV + resonance (§1.2) ------------------------
+    // The cutoff CV handed to the filter is the SUM of the base cutoff (param->volts) plus
+    // the routed modulators (ADR-028 item 3): the ENV opens the filter (env_mod x the LIVE
+    // ADSR contour, scaled to octaves) and keyboard tracking raises it with note pitch
+    // (kbd_track x note-delta CV, precomputed by the Engine). env_.level() is THIS voice's
+    // current envelope contour at this control tick, so the cutoff follows the envelope
+    // over time as the dispatch fires each chunk (a control-rate envelope-follow — the
+    // filter cutoff is a control-rate setter, not a per-sample one). Pure arithmetic +
+    // one table-backed setter; noexcept, alloc-free [docs/design/02 §5.2; ADR-003 F-08].
+    const float envLevel = env_.level();
+    const float cutoffCv = c.cutoffBaseCvVolts
+                         + c.envModOctaves * envLevel
+                         + c.kbdTrackCvVolts;
+    vcf_.setCutoffCv(cutoffCv);
+    vcf_.setResonance(c.resonance01);
+
+    // --- Envelope (task 161): push the calibrated A/D/S/R each control tick ------------
+    // setParams recomputes the per-stage one-pole coefficients from the calibrated times
+    // (the only transcendental site; off the per-sample path). The trig mode stays the
+    // S7-driven default the lifecycle set; this leg supplies only the A/D/S/R values.
+    // ALSO cache the params so the NEXT note-on can apply them BEFORE firing the attack:
+    // the env latches its active-stage coefficient at the trigger edge (startAttack copies
+    // aCoeff_ into the live coeff_), so a note that triggers before its A/D/S/R are pushed
+    // would run the Attack at the stale prepared default — caching + applying in noteOn
+    // fixes the attack-time-has-no-effect ordering without re-architecting the env.
+    mw101::dsp::EnvParams ep{};
+    ep.attackSec  = c.envAttackSec;
+    ep.decaySec   = c.envDecaySec;
+    ep.sustain    = c.envSustain;
+    ep.releaseSec = c.envReleaseSec;
+    env_.setParams(ep);
+    pendingEnv_    = ep;
+    hasPendingEnv_ = true;
+
+    // --- VCA (task 161): ENV vs GATE amplitude source + the output level scale ---------
+    // vca.mode picks whether the click-safe gate fade follows the ADSR contour (ENV) or a
+    // flat full level (GATE, organ-style); the level is a clean linear post-VCA amplitude
+    // scale applied in render() (the channel fader), NOT folded into the OTA taper input
+    // (which would distort the contour shape) [docs/design/03 §4.4].
+    vcaGate_.setMode(c.vcaMode);
+    vcaLevel_ = c.vcaLevel;
+}
+
+void Voice::stageEnvParams(const mw101::dsp::EnvParams& ep) noexcept {
+    // Cache the dispatched ADSR for the next note-on AND apply it live to env_ (task 161).
+    // Applying live keeps an already-sounding voice's segment coefficients current (a changed
+    // release/decay takes effect before the next stage transition); caching ensures the NEXT
+    // trigger latches these times at its edge (the env snapshots its stage coeff at the
+    // trigger). Does NOT fire the envelope — only setParams. noexcept, alloc-free.
+    pendingEnv_    = ep;
+    hasPendingEnv_ = true;
+    env_.setParams(ep);
 }
 
 void Voice::setDetuneCents(float cents) noexcept {
@@ -254,9 +316,12 @@ void Voice::render(float* outL, float* outR, int numSamples) noexcept {
         // filter once per sample as the base-rate proxy for the assembled chain.
         s = vcf_.processSample(s);
 
-        // Click-safe amplitude control (anti-thump fade), then the OTA taper.
+        // Click-safe amplitude control (anti-thump fade) for the selected ENV/GATE source,
+        // then the OTA taper, then the VCA output level (§4.1; task 161) — the clean linear
+        // channel-fader scale (mw101.vca.level), applied after the taper so it does not
+        // reshape the OTA contour.
         const float ctrl = vcaGate_.tickControl(envLevel);
-        s = vca_.process(s, ctrl);
+        s = vca_.process(s, ctrl) * vcaLevel_;
 
         // --- steal fade (§6.4): ramp stealGain_ 1 -> 0, then self-transition Idle ---
         if (state_ == VoiceState::Stealing) {

@@ -124,6 +124,15 @@ public:
     [[nodiscard]] int          activeCount() const noexcept { return activeCount_; }
     [[nodiscard]] const Voice& voice(int i) const noexcept { return pool_[static_cast<std::size_t>(i)]; }
 
+    // Non-const access to a pool voice for the control-dispatch seam (ADR-028; task 160/161):
+    // the Engine's per-control-tick applyParamSnapshot drives each ACTIVE voice's DSP setters
+    // (Voice::applyControls). The pool is a genuinely non-const member of this manager, so a
+    // typed mutable accessor is the clean surface for that write path — it replaces the
+    // const_cast<Voice&>(voice(i)) the seam used at first (legal, since Voice is non-const,
+    // but a smell flagged by the 160 QA pass). A plain reference into the preallocated pool;
+    // no allocation, noexcept — safe from the single-threaded audio path.
+    [[nodiscard]] Voice& voiceMutable(int i) noexcept { return pool_[static_cast<std::size_t>(i)]; }
+
     // Read-only access to the active-voice index list (dense prefix of size
     // activeCount()). Exposed so tests can assert fixed voice-index order (§8 RT2).
     [[nodiscard]] std::uint8_t activeIndex(int k) const noexcept {
