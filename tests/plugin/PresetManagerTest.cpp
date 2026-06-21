@@ -5,10 +5,10 @@
 // + per-slot INIT fallback (task 119). Asserts every acceptance criterion of
 // plan/backlog/119 against docs/design/06 §10.1, §10.2, §10.3, §8.3 L9 and ADR-021.
 //
-//   1. The default constructor builds a bank gracefully over an EMPTY/absent embedded
-//      BinaryData bank: getNumPresets() == 0 is valid and construction never crashes
-//      (there is NO embedded BinaryData at this stage — authoring the 64 files + the
-//      embedding are later tasks 131/144-150, explicitly OUT OF SCOPE here) [§10.2].
+//   1. The default constructor builds the embedded BinaryData bank gracefully:
+//      construction never crashes and a far out-of-range query is a safe no-op. (Task 131
+//      wired the embedded bank; the presets/ <-> BinaryData 1:1 mirror + the real
+//      ~64-preset load are asserted in tests/plugin/FactoryPresetCorpusTest.cpp.) [§10.2].
 //   2. The bank loads a set of in-memory presets (injected as JSON fixtures): each slot
 //      decodes via the task-025 loadPresetJson and exposes name/category/index queries
 //      [§10.1; §10.2].
@@ -135,24 +135,26 @@ float apvtsModeledValue(const PresetMgrHostProcessor& host, const char* id)
 
 } // namespace
 
-// --- (1) graceful construction over the EMPTY/absent embedded bank -------------------
+// --- (1) graceful construction of the embedded bank ----------------------------------
 
-TEST_CASE("presetmgr default constructor builds gracefully over an empty embedded bank",
+TEST_CASE("presetmgr default constructor builds the embedded bank gracefully",
           "[presetmgr]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
-    // No embedded BinaryData exists yet (tasks 131/144-150 are out of scope), so the
-    // default bank is empty. getNumPresets()==0 is VALID and construction never aborts
-    // or crashes [§10.2; §8.3 L9].
+    // Task 131 wired the default ctor to enumerate + decode the embedded BinaryData
+    // factory bank (the presets/ <-> BinaryData mirror lives in FactoryPresetCorpusTest).
+    // Construction must never abort or crash regardless of the embedded set; the loaded
+    // count is >= 0 and a far out-of-range query is always a safe no-op [§10.2; §8.3 L9].
     REQUIRE_NOTHROW([] { PresetManager pm; }());
 
     PresetManager pm;
-    CHECK(pm.getNumPresets() == 0);
-    // Out-of-range queries are safe no-ops, never a crash/abort.
-    CHECK(pm.getName(0).isEmpty());
-    CHECK(pm.getCategory(0).isEmpty());
-    CHECK(pm.indicesForCategory("Lead").isEmpty());
+    CHECK(pm.getNumPresets() >= 0);
+    // Out-of-range queries are safe no-ops, never a crash/abort (use an index far past
+    // any plausible bank size so this holds whether or not the bank is populated).
+    CHECK(pm.getName(100000).isEmpty());
+    CHECK(pm.getCategory(100000).isEmpty());
+    CHECK(pm.indicesForCategory("NotACategory").isEmpty());
 }
 
 // --- (2) the bank loads injected JSON fixtures + name/category/index queries ----------

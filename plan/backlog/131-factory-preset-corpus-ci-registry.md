@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 131
 title: Factory preset corpus + CI registry/mirror validator
-status: todo
+status: in-review
 depends-on: [001, 006, 025, 119]
 component: core
 estimated-size: M

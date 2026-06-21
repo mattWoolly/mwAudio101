@@ -105,6 +105,50 @@ file(GLOB_RECURSE MW_PLUGIN_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 target_sources(mwAudio101 PRIVATE ${MW_PLUGIN_SOURCES})
 
+# --- Factory-preset corpus embedded into JUCE BinaryData (task 131) --------------
+# The shipped plugin MUST carry the factory preset bank: without an embedded resource
+# the DAW sees zero programs (getNumPresets()==0, MIDI ProgramChange a no-op). We embed
+# EVERY presets/**/*.mw101preset (incl. presets/INIT.mw101preset) into a JUCE BinaryData
+# static library and link it into the plugin so PresetManager's default ctor can
+# enumerate + decode the bank at construction [docs/design/06 §6.4, §10.2].
+#
+# CONFIGURE_DEPENDS so adding/removing a preset re-runs the glob on the next build; the
+# factorypresets 1:1 mirror test (tests/plugin/FactoryPresetCorpusTest.cpp) is the loud
+# guard that the embedded set and the on-disk tree never silently diverge.
+file(GLOB_RECURSE MW_PRESET_FILES CONFIGURE_DEPENDS
+  "${CMAKE_SOURCE_DIR}/presets/*.mw101preset")
+
+if(NOT MW_PRESET_FILES)
+  message(FATAL_ERROR
+    "plugin/: no presets/**/*.mw101preset found to embed — the factory bank would ship "
+    "EMPTY (getNumPresets()==0). Check the presets/ tree [docs/design/06 §10.2].")
+endif()
+
+# A STATIC BinaryData library (NAMESPACE BinaryData, header BinaryData.h). juce_add_binary_data
+# propagates the generated header's include dir through its INTERFACE, so any consumer that
+# links it can #include "BinaryData.h" and read BinaryData::namedResourceList.
+juce_add_binary_data(mwAudio101_PresetData
+  NAMESPACE   BinaryData
+  HEADER_NAME BinaryData.h
+  SOURCES     ${MW_PRESET_FILES})
+
+target_link_libraries(mwAudio101 PRIVATE mwAudio101_PresetData)
+
+# The JUCE-linked test binary (mw101_plugin_tests) globs the SAME plugin/*.cpp sources,
+# so it compiles PresetManager.cpp — which #includes "BinaryData.h". It is defined later
+# in tests/ (add_subdirectory(tests) runs AFTER add_subdirectory(plugin)), so the target
+# does not exist yet here. We DEFER the link to the end of the TOP-LEVEL directory's
+# processing (which runs after every add_subdirectory), where mw101_plugin_tests exists,
+# linking the same BinaryData lib so the test sees the identical embedded bank. This keeps
+# the embedding wiring entirely in plugin/CMakeLists.txt (no tests/CMakeLists.txt edit).
+function(mw_link_preset_data_to_tests)
+  if(TARGET mw101_plugin_tests)
+    target_link_libraries(mw101_plugin_tests PRIVATE mwAudio101_PresetData)
+  endif()
+endfunction()
+cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}"
+  CALL mw_link_preset_data_to_tests)
+
 target_include_directories(mwAudio101 PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}")
 

@@ -21,6 +21,8 @@
 #include "state/StateTree.h"                // mwcore (JUCE-free): canonical key constants
 #include "state/Extras.h"                   // mwcore (JUCE-free): kMaxSeqSteps
 
+#include "BinaryData.h"                     // the embedded factory preset bank (task 131)
+
 namespace mw::plugin::preset {
 
 namespace {
@@ -93,15 +95,62 @@ void bindExtrasToPod(const juce::ValueTree& canonical, mw::state::Extras& extras
     }
 }
 
+// The slot's display name for an embedded preset: prefer the decoded `meta.name` (the
+// authored §6.2 name shown in the browser / reported as a DAW program), falling back to
+// the BinaryData original filename (sans extension) if the JSON cannot be parsed for a
+// name — that fallback slot is then resolved to INIT by decodeSlot's §8.3-L9 rung anyway.
+// This is a cheap setup-time parse on the message thread; no audio-thread work [§10.2].
+juce::String displayNameFor(const juce::String& jsonText, const juce::String& originalFilename)
+{
+    const juce::var parsed = juce::JSON::parse(jsonText);
+    if (auto* obj = parsed.getDynamicObject())
+    {
+        const juce::var meta = obj->getProperty("meta");
+        if (auto* metaObj = meta.getDynamicObject())
+        {
+            const juce::String name = metaObj->getProperty("name").toString();
+            if (name.isNotEmpty())
+                return name;
+        }
+    }
+    // Fall back to the on-disk filename stem (e.g. "AcidSquelch.mw101preset" -> "AcidSquelch").
+    return juce::File::createFileWithoutCheckingPath(originalFilename)
+        .getFileNameWithoutExtension();
+}
+
 } // namespace
 
 PresetManager::PresetManager()
 {
-    // At this development stage there is NO embedded preset BinaryData (the 64 files and
-    // the BinaryData embedding are later tasks 131/144-150, out of scope here), so the
-    // default bank is empty. getNumPresets()==0 is valid and this never aborts/crashes
-    // [§10.2; §8.3 L9]. The embedded-bank wiring (gathering BinaryData into SlotSources)
-    // is a later task; it reuses decodeSlot() so the L9 per-slot fallback is identical.
+    // Load the embedded factory bank (message thread). EVERY embedded BinaryData entry
+    // is a presets/**/*.mw101preset (incl. INIT) compiled in by plugin/CMakeLists.txt's
+    // juce_add_binary_data target (task 131). We enumerate the resource list, decode each
+    // through the SAME decodeSlot()/loadPresetJson path the injection ctor uses — so the
+    // §8.3-L9 per-slot "undecodable -> INIT, warn naming it, never empty the bank" rung
+    // is IDENTICAL for the shipped bank [§6.4; §10.2; §8.3 L9].
+    //
+    // After this, getNumPresets() returns the real factory count (~64) and the §6.5
+    // category index is populated in the shipped plugin (a DAW sees the full program list;
+    // MIDI ProgramChange resolves). If the embedded set is somehow empty the bank is empty
+    // and construction still never aborts/crashes — getNumPresets()==0 stays valid [§10.2].
+    slots_.reserve(static_cast<std::size_t>(BinaryData::namedResourceListSize));
+
+    for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
+    {
+        const char* resourceName = BinaryData::namedResourceList[i];
+
+        int dataSize = 0;
+        const char* data = BinaryData::getNamedResource(resourceName, dataSize);
+        if (data == nullptr || dataSize <= 0)
+            continue;   // a defensive skip; decodeSlot would resolve an empty slot to INIT
+
+        const juce::String json{ juce::CharPointer_UTF8{ data },
+                                 static_cast<std::size_t>(dataSize) };
+        const juce::String originalFilename{
+            juce::CharPointer_UTF8{ BinaryData::getNamedResourceOriginalFilename(resourceName) } };
+
+        decodeSlot({ displayNameFor(json, originalFilename), json });
+    }
 }
 
 PresetManager::PresetManager(const std::vector<SlotSource>& sources)
