@@ -30,10 +30,10 @@
 //   (2) PresetManager()'s DEFAULT (embedded) bank loads ~64 presets across the 6 §6.5
 //       categories + INIT, all valid (no preset silently dropped, category index
 //       populated, no per-slot INIT fallback storm) [§10.1; §10.2].
-//   (3) A 'hardware-accurate' preset with tune.a4 == 442 exists in the bank (§10.3). All
-//       64 authored presets currently use a4 == 440 (no 442 preset exists yet); authoring
-//       is OUT OF SCOPE here (tasks 144-150 are DONE), so this is asserted as a LOUD,
-//       non-fatal WARN documenting the content gap rather than a build break.
+//   (3) A 'hardware-accurate' preset with tune.a4 == 442 exists in the bank (§10.3). Task
+//       131b authored that preset (presets/SubBass/VR-7 Reference Sub.mw101preset), so the
+//       former content-gap WARN is now a HARD assertion: a 442 reference preset MUST be
+//       present and decode cleanly through loadPresetJson [ADR-012 C21-C22].
 //
 // Test-case display names begin with the `factorypresets` tag and avoid the '[' character
 // so `ctest -R factorypresets` selects exactly these and the silent-pass /
@@ -204,7 +204,7 @@ TEST_CASE("factorypresets default PresetManager loads the embedded factory bank 
     CHECK(pm.constructionReport().notes.isEmpty());
 }
 
-// --- (3) §10.3 'hardware-accurate' tune.a4 == 442 preset presence (content-gap WARN) --
+// --- (3) §10.3 'hardware-accurate' tune.a4 == 442 preset presence (HARD assertion) ----
 
 TEST_CASE("factorypresets bank carries a hardware-accurate 442 Hz reference preset",
           "[factorypresets]")
@@ -212,9 +212,10 @@ TEST_CASE("factorypresets bank carries a hardware-accurate 442 Hz reference pres
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
     // Scan every embedded preset's decoded canonical <PARAMS> for mw101.tune.a4 == 442.
-    // Authoring is OUT OF SCOPE for task 131 (the 64 presets are owned by 144-150, DONE),
-    // so an absent 442 preset is a CONTENT GAP we surface loudly via WARN rather than
-    // failing the build or authoring a preset here [§10.3; task 131 guidance].
+    // Task 131b authored the §10.3 'hardware-accurate' reference preset, so an ABSENT 442
+    // preset is now a BUILD-BREAKING failure (the former content-gap WARN was flipped to a
+    // hard assertion): a 442 reference preset MUST exist and decode cleanly through the
+    // same §6.4 loadPresetJson path [§10.3; ADR-012 C21-C22; task 131b].
     bool found442 = false;
     juce::String foundIn;
 
@@ -250,19 +251,10 @@ TEST_CASE("factorypresets bank carries a hardware-accurate 442 Hz reference pres
         }
     }
 
-    if (found442)
-    {
-        SUCCEED("hardware-accurate 442 Hz reference preset present: " << foundIn);
-    }
-    else
-    {
-        // Loud, non-fatal: documents the §10.3 content gap without authoring a preset
-        // (out of scope) or breaking the green build. The 1:1 mirror (case 1) remains
-        // the hard registry guard for this task.
-        WARN("CONTENT GAP (NOTE for content owners 144-150): no embedded preset sets "
-             "mw101.tune.a4 == 442 — every authored preset uses a4 == 440. A "
-             "'hardware-accurate' 442 Hz reference preset (docs/design/06 §10.3) should "
-             "be authored into an existing category. Authoring is OUT OF SCOPE for task "
-             "131; flagged here so the bank cannot silently lack the 442 reference.");
-    }
+    // HARD assertion (task 131b): the §10.3 'hardware-accurate' 442 Hz reference preset
+    // MUST exist in the embedded bank and decode cleanly. 442 is never the engine default
+    // (440); it is surfaced in exactly this preset [ADR-012 C21-C22; docs/design/06 §10.3].
+    INFO("hardware-accurate 442 Hz reference preset resolved to: " << foundIn);
+    REQUIRE(found442);
+    CHECK(foundIn.isNotEmpty());
 }

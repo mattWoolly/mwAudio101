@@ -189,7 +189,7 @@ struct CategoryManifest { const char* name; int total; int soundExt; };
 // bank without over-claiming.
 constexpr std::array<CategoryManifest, 6> kManifest = {{
     { "AcidBassLead", 14, 3 },
-    { "SubBass",      11, 3 },
+    { "SubBass",      12, 3 },   // +1: task 131b 'VR-7 Reference Sub' (a4=442, sound_ext=false)
     { "Lead",         10, 2 },
     { "PWMStrings",    8, 0 },
     { "BlipsFX",       8, 2 },
@@ -266,7 +266,7 @@ TEST_CASE("presets_bank the coverage manifest matches the authored bank exactly"
     // The manifest's category folders sum to the authored bank total (excludes INIT, which
     // lives at the root), and the bank carries a real, non-trivial software-extension
     // footprint without every preset claiming it (honesty: ADR-008 C15).
-    CHECK(manifestTotal == 63);
+    CHECK(manifestTotal == 64);
     CHECK(manifestSoundExt == 12);
     CHECK(manifestSoundExt > 0);
     CHECK(manifestSoundExt < manifestTotal);

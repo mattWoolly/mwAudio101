@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 131b
 title: Add a 'hardware-accurate' tune.a4=442 reference preset (closes the 131 §10.3 content gap)
-status: todo
+status: in-review
 depends-on: [131, 144, 025]
 component: docs
 estimated-size: S
