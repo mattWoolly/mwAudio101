@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Matt Woolly
+#
+# Force LF for all text on every platform. The Windows CI runner's autocrlf would
+# otherwise CRLF-convert files on checkout, which breaks two byte-sensitive contracts:
+#   1. the SHA-256 integrity check of the vendored cmake/CPM.cmake bootstrap
+#      (cmake/Dependencies.cmake; ADR-014 C2) — a CRLF checkout fails the gate at
+#      configure time (observed: windows-x64 CI fail ~19s; macOS/Linux LF-only fine).
+#   2. the checked-in golden snapshots / preset JSON whose bytes/hashes must match
+#      across the bless (macOS) / Linux / Windows boxes.
+# No binary assets are tracked today (the only ui/assets are .svg text); revisit if
+# any real binary (png/wav/ttf/...) is added — mark it `binary` here.
+
+* text=auto eol=lf
+
+# Belt-and-suspenders for the integrity-checked vendored bootstrap + byte-sensitive corpora.
+cmake/CPM.cmake            text eol=lf
+tests/golden/corpus/**     text eol=lf
+presets/**                 text eol=lf
+*.mw101preset              text eol=lf
