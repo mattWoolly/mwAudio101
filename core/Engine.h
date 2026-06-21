@@ -340,6 +340,19 @@ private:
         int mpePressureDest  = -1;  // choice 0..2 -> {VCF,VCA,PW} pressure destination
     } slots_{};
 
+    // --- live continuous-controller state (task 162c; ADR-028 control-dispatch repair).
+    // The 162 dispatch WIRED pitch-bend->{VCO,VCF} and mod-wheel->LFO-depth, but the live
+    // controller POSITION never reached the engine: BlockContext carried no continuous-
+    // controller field and renderChunk's note translator DROPPED PitchBend/ControlChange
+    // MidiEvents. This running state carries the latest bend + mod-wheel position the engine
+    // CONSUMES from the per-sub-block PitchBend + CC1 MidiEvent stream (and seeds from
+    // BlockContext::controllers at block entry); applyParamSnapshot reads it each control tick
+    // so the 162 bend/wheel legs ACTIVATE. Neutral defaults (centered bend / wheel down) are
+    // the no-controller identity. Written only on the single-threaded audio path; no alloc,
+    // no lock — a plain pair of floats. ---
+    float pitchBend_ = 0.0f;   // [-1,+1]; 0 == centered (neutral)
+    float modWheel_  = 0.0f;   // [0,1];   0 == wheel down (neutral)
+
     double sampleRate_      = 0.0;
     int    maxBlockSize_    = 0;
     int    maxVoices_       = 0;

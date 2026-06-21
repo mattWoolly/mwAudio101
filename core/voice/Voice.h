@@ -126,8 +126,8 @@ struct VoiceControls {
     //   dest=Filter -> + lfoOut * lfoCutoffDepthOct     into the cutoff CV (wobble)
     //   dest=Pwm    -> + lfoOut * lfoPwmDepthNorm       into the PWM CV (PWM sweep)
     // lfoDelaySec fades the depth in over time from the keypress; the effective depths
-    // already fold in the mod.lfo_mod_wheel routing param (the live wheel POSITION is not
-    // in the core seam — see Engine.cpp). ---
+    // already fold in the mod.lfo_mod_wheel routing param scaled by the LIVE mod-wheel
+    // position (consumed from CC1 MidiEvents / BlockContext::controllers by task 162c). ---
     float                lfoRateHz       = 5.0f;
     mw101::dsp::LfoShape lfoShape        = mw101::dsp::LfoShape::SmoothTri;
     int                  lfoDest         = 0;     // 0 Pitch / 1 Filter / 2 PWM (decoded enum)
@@ -144,12 +144,12 @@ struct VoiceControls {
     float                velVcaDepth    = 0.0f;   // 0 => velocity does not scale the VCA
     float                velCutoffVolts = 0.0f;   // per-voice velocity->cutoff CV (volts)
 
-    // --- pitch-bend routing (task 162) — mw101.mod.{bend_dest,bend_range_vco,bend_range_vcf}.
-    // The bend RANGE (cents) per destination, decoded from the params; the live bend WHEEL
-    // value is not present in the core seam (BlockContext carries no continuous-controller
-    // state — see Engine.cpp), so these carry the decoded range and the resolved bend offset
-    // is bendWheel x range. With no wheel the offsets are zero (no audible bend) but the
-    // routing math + range decode are in place for when the controller seam lands. ---
+    // --- pitch-bend routing (task 162 leg, ACTIVATED by task 162c) — mw101.mod.{bend_dest,
+    // bend_range_vco,bend_range_vcf}. The Engine resolves bendWheel x (range cents -> volts) per
+    // mod.bend_dest, where bendWheel is the LIVE [-1,+1] pitch-bend position the engine consumes
+    // from PitchBend MidiEvents / BlockContext::controllers (task 162c closes the ingress gap the
+    // 162 leg flagged). A centered wheel yields zero (the neutral identity); a full bend at a
+    // 1200-cent range is +-1 octave at exactly 1 V/oct. These carry the resolved per-dest offset. ---
     float                bendVcoVolts   = 0.0f;   // resolved pitch-bend -> VCO CV (volts)
     float                bendVcfVolts   = 0.0f;   // resolved pitch-bend -> VCF cutoff CV (volts)
 
