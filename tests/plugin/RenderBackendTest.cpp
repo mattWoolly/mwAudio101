@@ -15,7 +15,10 @@
 //       (setOpenGlEnabled(false) -> isAttached()==false; no crash) (§11).
 //   [3] The opt-in PERSISTS: it round-trips through the processor state I/O
 //       (getStateInformation -> a NEW processor -> setStateInformation), exactly like
-//       the 114/115 <extras> UI-preference pattern (the 115 QA verified this works).
+//       the 114/115 <extras> UI-preference pattern (the 115 QA verified this works). It
+//       persists via its OWN dedicated key (kExtrasOpenGlOptIn, plugin/ui/EditorPrefsKeys.h)
+//       and NEVER touches the core §9 sticky AUDIO renderVersion opt-in (kExtrasRenderOptIn)
+//       — the two are distinct contracts, so there is no key collision (§5.4/§9; ADR-023).
 //   [4] The default is OFF for a key-less blob — a processor that never saw a stored
 //       opt-in restores false (animation/software path), so pre-130 blobs stay
 //       byte-compatible.
@@ -30,8 +33,11 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-#include "PluginProcessor.h"          // mw::plugin::MwAudioProcessor
-#include "../../ui/MwAudioEditor.h"   // mw::ui::MwAudioEditor + the render-backend hatch
+#include "PluginProcessor.h"            // mw::plugin::MwAudioProcessor
+#include "../../ui/MwAudioEditor.h"     // mw::ui::MwAudioEditor + the render-backend hatch
+#include "state/StateSerializer.h"      // readFromBlob — introspect the persisted <extras>
+#include "state/StateTree.h"            // kExtrasId, kExtrasRenderOptIn (the §9 audio key)
+#include "ui/EditorPrefsKeys.h"         // kExtrasOpenGlOptIn (the dedicated UI-pref key)
 
 using mw::plugin::MwAudioProcessor;
 using mw::ui::MwAudioEditor;
@@ -134,12 +140,53 @@ TEST_CASE("ui_opengl the opt-in persists and restores across a state round-trip"
     REQUIRE(restoredEditor->renderBackendAttachedForTest());
 }
 
+TEST_CASE("ui_opengl persists via the dedicated openGlOptIn key and never touches "
+          "the core renderOptIn audio key (no key collision)",
+          "[ui_opengl]")
+{
+    const juce::ScopedJuceInitialiser_GUI juceInit;
+
+    // Toggle the OpenGL opt-in ON and snapshot the processor state, then introspect the
+    // persisted canonical <extras> node directly. The OpenGL opt-in is a UI preference and
+    // MUST land on its OWN dedicated key (kExtrasOpenGlOptIn), never on the core §9 sticky
+    // AUDIO renderVersion opt-in (kExtrasRenderOptIn) — they are distinct contracts, and
+    // reusing the audio key would be a latent collision [docs/design/10-ui.md §11;
+    // docs/design/06 §5.4/§9; ADR-015 C9; ADR-023].
+    juce::MemoryBlock blob;
+    {
+        MwAudioProcessor processor;
+        auto editor = std::make_unique<MwAudioEditor>(processor);
+        editor->setOpenGlEnabled(true);
+        REQUIRE(processor.getStoredOpenGl());
+        processor.getStateInformation(blob);
+    }
+    REQUIRE(blob.getSize() > 0);
+
+    const auto canonical =
+        mw::plugin::state::readFromBlob(blob.getData(), static_cast<int>(blob.getSize()));
+    REQUIRE(canonical.has_value());
+
+    const auto extras =
+        canonical->getChildWithName(juce::Identifier{ mw::state::kExtrasId });
+    REQUIRE(extras.isValid());
+
+    // The dedicated UI key is written and TRUE.
+    REQUIRE(static_cast<bool>(extras.getProperty(
+        juce::Identifier{ mw::plugin::ui::prefs::kExtrasOpenGlOptIn }, false)));
+
+    // The core §9 sticky AUDIO renderVersion opt-in key is NOT written by the OpenGL
+    // toggle — the collision is gone. (No editor ever accepted a renderVersion migration,
+    // so the audio key must be entirely absent on this node.)
+    REQUIRE_FALSE(extras.hasProperty(
+        juce::Identifier{ mw::state::kExtrasRenderOptIn }));
+}
+
 TEST_CASE("ui_opengl a key-less blob restores the default OFF (pre-130 byte-compat)",
           "[ui_opengl]")
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
-    // A processor that never toggled the opt-in writes a blob WITHOUT the renderOptIn key
+    // A processor that never toggled the opt-in writes a blob WITHOUT the openGlOptIn key
     // (it is only written when ON), so it stays byte-compatible with pre-130 sessions.
     juce::MemoryBlock blob;
     {

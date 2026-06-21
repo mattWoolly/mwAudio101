@@ -23,4 +23,10 @@ namespace mw::plugin::ui::prefs {
 // bool: reduce-motion / low-CPU toggle state, persisted in <extras> [§10; ADR-015 C8].
 inline constexpr const char* kExtrasReduceMotion = "reduceMotion";
 
+// bool: OpenGL render-backend opt-in (advanced escape hatch), persisted in <extras>
+// [§11; ADR-015 C9]. A DEDICATED UI-preference key, deliberately distinct from the
+// core/state/StateTree.h §9 sticky AUDIO renderVersion opt-in (kExtrasRenderOptIn) so the
+// UI render-backend toggle can never collide with the renderVersion-migration opt-in.
+inline constexpr const char* kExtrasOpenGlOptIn = "openGlOptIn";
+
 } // namespace mw::plugin::ui::prefs
