@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 137
 title: Per-platform format resolution + configure-time validator gate (Formats.cmake)
-status: todo
+status: in-review
 depends-on: [001, 113]
 component: infra
 estimated-size: M
