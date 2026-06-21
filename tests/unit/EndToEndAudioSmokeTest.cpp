@@ -56,7 +56,7 @@ mw::MidiEvent noteOn(int note, float vel, int offset) noexcept {
     e.type         = mw::NormalizedType::NoteOn;
     e.channel      = 0;
     e.noteId       = static_cast<std::int16_t>(note);
-    e.data0        = 0.0f;
+    e.data0        = static_cast<float>(note);   // task 118e: note number = pitch
     e.value        = vel;
     e.sampleOffset = offset;
     return e;
@@ -67,6 +67,7 @@ mw::MidiEvent noteOff(int note, int offset) noexcept {
     e.type         = mw::NormalizedType::NoteOff;
     e.channel      = 0;
     e.noteId       = static_cast<std::int16_t>(note);
+    e.data0        = static_cast<float>(note);   // task 118e: note number = pitch
     e.value        = 0.0f;
     e.sampleOffset = offset;
     return e;

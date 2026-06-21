@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 162e
 title: Wire the two audit-found unwired params — vco.pwm_depth (manual PWM) + vcf.lfo_mod (VCF LFO amount)
-status: todo
+status: done
 depends-on: [160, 161, 162, 165]
 component: core
 estimated-size: S

@@ -24,6 +24,7 @@
 #include "calibration/ControlDispatchConstants.h"   // pitch-CV anchor + vco.range mapping (ADR-028)
 #include "calibration/ControlDispatchVcfConstants.h" // cutoff-CV / env-mod / kbd-track law (task 161)
 #include "calibration/ControlDispatchLfoConstants.h" // LFO/vel/bend routing depths (task 162)
+#include "calibration/ControlDispatchPwmVcfModConstants.h" // manual-PWM + VCF LFO-mod depths (task 162e)
 #include "calibration/ControlDispatchCcIngressConstants.h" // CC1/bend ingress + wheel-boost law (task 162c)
 #include "calibration/FxDispatchConstants.h"          // FX free-ms / chorus-Hz decode (task 163)
 #include "calibration/PitchAssemblyConstants.h"      // kVoltsPerCount (count->volt anchor)
@@ -112,7 +113,17 @@ private:
         default:
             return false; // not voice-routed by this assembly
     }
-    out.note         = static_cast<std::uint8_t>(std::clamp<int>(e.noteId, 0, 127));
+    // The played NOTE NUMBER is `data0` — NOT `noteId` (task 118e; the ADR-028 ingress fix).
+    // Per docs/design/09 §3.3 + BlockContext.h: `data0` is the note number (widened to float;
+    // the §3.3 HostEvent->MidiEvent translation puts the note number here), while `noteId` is
+    // the CLAP note-id, which is -1 for a MIDI-derived event and exists ONLY for note-expression
+    // VOICE matching — it is NOT the pitch. The pre-fix `out.note = clamp(e.noteId,...)` made a
+    // real DAW MIDI note (noteId == -1) resolve to note 0, so the synth played the WRONG note for
+    // its primary input (and the seq/arp path that reads ne.note inherited the same wrong note).
+    // Truncate the float note number toward zero and clamp into the standard MIDI 0..127 range;
+    // the velocity / NoteOn-Off type / noteId (note-expression) handling above is unchanged.
+    out.note         = static_cast<std::uint8_t>(
+        std::clamp<int>(static_cast<int>(e.data0), 0, 127));
     out.velocity     = std::clamp(e.value, 0.0f, 1.0f);
     out.sampleOffset = e.sampleOffset - chunkOffset;
     return true;
@@ -689,6 +700,7 @@ void Engine::cacheParamSlots() noexcept {
     slots_.vcoTune    = find(kVcoTune);
     slots_.vcoFine    = find(kVcoFine);
     slots_.vcoPw      = find(kVcoPw);
+    slots_.vcoPwmDepth = find(kVcoPwmDepth);   // manual PWM depth (task 162e)
     slots_.vcoRange   = find(kVcoRange);
     slots_.subMode    = find(kSubMode);
     slots_.sawLevel   = find(kSawLevel);
@@ -702,6 +714,7 @@ void Engine::cacheParamSlots() noexcept {
     slots_.vcfCutoff    = find(kVcfCutoff);
     slots_.vcfResonance = find(kVcfResonance);
     slots_.vcfEnvMod    = find(kVcfEnvMod);
+    slots_.vcfLfoMod    = find(kVcfLfoMod);   // VCF-panel LFO->cutoff amount (task 162e)
     slots_.vcfKbdTrack  = find(kVcfKbdTrack);
     slots_.envAttack    = find(kEnvAttack);
     slots_.envDecay     = find(kEnvDecay);
@@ -779,6 +792,12 @@ VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
         cal::dispatch::rangeMappingFor(choiceIndex(snap, slots_.vcoRange));
     vc.footage   = rng.footage;
     vc.pwmCvNorm = contValue(snap, slots_.vcoPw);          // 0..1 (0 => square)
+    // mw101.vco.pwm_depth (task 162e): the MANUAL static PWM depth (linear 0..1), DISTINCT from
+    // the LFO->PWM amount (lfoPwmDepthNorm below). Scaled by the (PI) full-depth span so it biases
+    // the duty LFO-independently; summed into the pwmCvNorm CV (clamped) in applyControls per the
+    // CEM3340 manual-PW model [docs/design/01 §4.6; docs/design/05 §3.1; ADR-028].
+    vc.manualPwmDepthNorm = contValue(snap, slots_.vcoPwmDepth)
+                          * cal::dispatch::kManualPwmDepthNorm;
     vc.subShape  = subShapeFor(choiceIndex(snap, slots_.subMode));
 
     // Source mixer (§4.1).
@@ -802,6 +821,13 @@ VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
     vc.resonance01   = contValue(snap, slots_.vcfResonance);                 // linear 0..1
     vc.envModOctaves = contValue(snap, slots_.vcfEnvMod)                     // env_mod (linear)
                      * cal::dispatch::kEnvModOctaves;                        // -> octaves of CV
+    // mw101.vcf.lfo_mod (task 162e): the VCF module's OWN LFO->cutoff amount (linear 0..1),
+    // DISTINCT from the LFO panel's lfo.depth_cutoff (already wired as lfoCutoffDepthOct, which
+    // routes only when lfo.dest == Filter). Scaled to octaves of CV; applyControls sums
+    // lfoEff * this ALONGSIDE the lfo.depth_cutoff term into the cutoff CV, REGARDLESS of the LFO
+    // dest switch (the VCF panel has its own mod path) [docs/design/02 §1.2; docs/design/05 §3.1].
+    vc.vcfLfoModDepthOct = contValue(snap, slots_.vcfLfoMod)
+                         * cal::dispatch::kVcfLfoModDepthOctaves;
 
     // --- Envelope (task 161): A/D/R are kEnvTime-skewed seconds (denormalize against their
     // own skew); sustain is a linear level. setParams runs per control tick in the voice. ---

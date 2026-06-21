@@ -255,6 +255,14 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
         default: lfoPitchVolts = lfoEff * c.lfoPitchDepthVolts; break;  // Pitch
     }
 
+    // VCF-panel LFO->cutoff (mw101.vcf.lfo_mod, task 162e): the VCF module's OWN LFO mod amount,
+    // DISTINCT from the LFO panel's lfo.depth_cutoff (lfoCutoffOct above, gated by the single MOD
+    // dest switch). The VCF panel routes the per-voice LFO to the cutoff REGARDLESS of the dest
+    // switch, so this term is computed UNCONDITIONALLY (not inside the dest switch) and SUMMED
+    // ALONGSIDE lfoCutoffOct into the cutoff CV below. Same bipolar lfoEff, scaled to octaves by
+    // the Engine. Zero when vcf.lfo_mod == 0 [docs/design/02 §1.2; docs/design/05 §3.1; ADR-028].
+    const float vcfLfoModCutoffOct = lfoEff * c.vcfLfoModDepthOct;
+
     // --- assemble the oscillator-section control block (§7.2) ---------------------------
     // The pitch CV summed into the oscillator is the glided base note CV + the LFO vibrato
     // term + the resolved pitch-bend term (bendVcoVolts; LIVE wheel via task 162c) + the
@@ -263,12 +271,17 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
     // and the resolved MPE per-note bend (mpeBendVolts; zero with no live position ingress).
     // All character terms are ZERO when vintage is off, so the default pitch is unchanged.
     // Vibrato + drift ride on TOP of the slewed base pitch (not glided). The PWM CV is the base
-    // width + the LFO PWM-sweep term + the var.pw drift (pwDriftNorm), clamped to [0,1] duty.
+    // width (mw101.vco.pw) + the MANUAL static PWM depth (manualPwmDepthNorm, mw101.vco.pwm_depth,
+    // task 162e — an LFO-INDEPENDENT duty bias, DISTINCT from the LFO->PWM sweep lfoPwmNorm below)
+    // + the LFO PWM-sweep term (lfoPwmNorm, mw101.lfo.depth_pwm, fires only at dest==PWM) + the
+    // var.pw drift (pwDriftNorm), clamped to [0,1] duty [docs/design/01 §4.6; docs/design/05 §3.1].
     mw101::dsp::OscillatorSection::Controls oc{};
     oc.vco.pitchCvVolts = pitchCv + lfoPitchVolts + c.bendVcoVolts
                         + c.pitchRefVolts + c.pitchDriftVolts + c.mpeBendVolts;
     oc.vco.footage      = c.footage;
-    oc.vco.pwmCvNorm    = std::clamp(c.pwmCvNorm + lfoPwmNorm + c.pwDriftNorm, 0.0f, 1.0f);
+    oc.vco.pwmCvNorm    = std::clamp(c.pwmCvNorm + c.manualPwmDepthNorm + lfoPwmNorm
+                                         + c.pwDriftNorm,
+                                     0.0f, 1.0f);
     oc.vco.aaMode       = qualityAaMode_;     // tier; section forces it onto all sources
     oc.subShape         = c.subShape;
     oc.aaMode           = qualityAaMode_;
@@ -299,6 +312,7 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
                          + c.envModOctaves * envLevel
                          + c.kbdTrackCvVolts
                          + lfoCutoffOct
+                         + vcfLfoModCutoffOct   // VCF-panel LFO->cutoff (task 162e; distinct from lfo.depth_cutoff)
                          + c.velCutoffVolts
                          + c.bendVcfVolts
                          + c.cutoffDriftVolts;   // analog character (task 164): cal+drift+var.cutoff
