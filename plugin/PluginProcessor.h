@@ -318,10 +318,6 @@ private:
     // attached to the Buffer in prepareToPlay (off the audio thread) [§8.3; ADR-015 C5].
     mw::ui::Telemetry::Buffer   telemetryBuffer_{};
     mw::ui::Telemetry::Producer telemetryProducer_{};
-    // Monotonic display step the producer carries in Snapshot.seqStep. Advanced once per
-    // published block on the audio thread (a plain counter; display-only — the canonical
-    // step authority is the control core, surfaced here for the §8.4 indicator) [§8.4].
-    std::uint64_t telemetrySeqStep_ = 0;
 
     // --- <extras> seq-pattern handoff (111c) ---------------------------------------
     // The message-thread canonical copy of the editable 100-step pattern (read by the

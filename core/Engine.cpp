@@ -239,8 +239,10 @@ void Engine::reset() noexcept {
     sequencer_.reset();
     seqHeldNote_    = -1;
     currentSeqStep_ = -1;
-    seqPlayMirror_  = 0;
-    seqWasPlaying_  = false;
+    // Telemetry display latches back to the known start (task 118d): no cutoff dispatched
+    // yet, LFO phase at 0. A plain member write on the single-threaded audio path.
+    cutoffDisplay_  = 0.0f;
+    lfoPhase_       = 0;
     fx_.reset();
     // Re-derive the drift engine's known start (re-draw Tier-1 from the seed, clear the
     // thermal/smoother state) so reset() is a deterministic fixed point for the character
@@ -345,7 +347,6 @@ void Engine::renderChunk(const BlockContext& ctx, int n0, int len) noexcept {
         if (!transportRunning) {
             currentSeqStep_ = -1;
             seqHeldNote_    = -1;
-            seqWasPlaying_  = false;
         }
     } else {
         // RUNNING: route note ingress through the SequencerEngine. Collect this chunk's
@@ -508,15 +509,6 @@ void Engine::routeControlEvents(int eventCount) noexcept {
     const bool arpEngaged  = sequencer_.arp().isEngaged();
     const bool stepSource  = seqPlaying || arpEngaged;
 
-    // Re-sync the playhead mirror on a not-playing -> playing transition: the StepSequencer
-    // rewinds playPos to 0 there (loadBuffer / a fresh PLAY), so the next slot is 0.
-    if (seqPlaying && !seqWasPlaying_) {
-        seqPlayMirror_ = 0;
-    }
-    seqWasPlaying_ = seqPlaying;
-
-    const int seqCount = sequencer_.seq().count();
-
     for (int i = 0; i < eventCount; ++i) {
         const control::ControlEvent& ev = ctrlScratch_[static_cast<std::size_t>(i)];
         const int midiNote =
@@ -536,16 +528,16 @@ void Engine::routeControlEvents(int eventCount) noexcept {
         }
 
         // MONOPHONIC STEP SOURCE -------------------------------------------------------
-        // Latch the REAL live playhead slot when a seq step plays this edge (a seq edge
-        // emits exactly one ControlEvent — note OR rest — so each emitted event while seq
-        // is playing corresponds to one playhead advance), then mirror the StepSequencer's
-        // deterministic (playPos+1)%count advance (closes 111c). Arp-only edges leave the
-        // seq playhead alone.
+        // Publish the REAL live playhead slot read straight from the StepSequencer: the slot
+        // its most-recent advanceOnEdge() actually played (task 118d). This REPLACES the 118c
+        // reconstructed (playPos+1)%count mirror, which DIVERGED from the real playhead when a
+        // clock-reset-on-keypress (LFO-trig / arp mode + clockResetOnKeypress) rewound the
+        // sequencer to slot 0 inside SequencerEngine::processBlock — a rewind the engine-side
+        // mirror never observed. currentSlot() is the authoritative playhead, so it tracks
+        // that rewind exactly (closes the 111c/118c QA MEDIUM) [docs/design/05 §6.3]. Arp-only
+        // edges leave the seq playhead alone (currentSlot stays at the last seq step).
         if (seqPlaying) {
-            currentSeqStep_ = seqPlayMirror_;
-            if (seqCount > 0) {
-                seqPlayMirror_ = (seqPlayMirror_ + 1) % seqCount;
-            }
+            currentSeqStep_ = sequencer_.seq().currentSlot();
         }
 
         if (ev.gate) {
@@ -1009,6 +1001,32 @@ void Engine::stageEnvParams(const ParamSnapshot& snap) noexcept {
 void Engine::applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noexcept {
     // Shared (note-independent) controls decoded once.
     VoiceControls shared = decodeShared(snap);
+
+    // --- audio->GUI telemetry latches (task 118d) ----------------------------------------
+    // Latch the dispatched/modulated cutoff + advance the LFO display phase from the SAME
+    // decoded values the per-voice dispatch uses, so the processor can publish a LIVE scope
+    // cutoff indicator + a moving LFO phase (127's ScopeMeterOverlay) instead of the zero
+    // fields it left before. Pure arithmetic on the single-threaded audio path; no alloc,
+    // no lock [docs/design/10-ui.md §8.4; ADR-015 C5].
+    //
+    // cutoffDisplay_ : the mw101.vcf.cutoff pot position decoded skew-aware to 0..1 (the same
+    //   cutoff01 decodeShared maps to the cutoff CV) — the modulated base cutoff the §1.2 filter
+    //   tracks. Clamped to [0,1] (the display domain Snapshot.vcfCutoffDisplay declares).
+    cutoffDisplay_ = std::clamp(contValueSkewed(snap, slots_.vcfCutoff), 0.0f, 1.0f);
+    // lfoPhase_ : a deterministic fixed-point [0,2^32) phase accumulator advanced once per
+    //   chunk by the dispatched LFO rate (lfoRateHz over chunkSamples at the engine sample
+    //   rate). It ADVANCES whenever the LFO has a non-zero rate, giving the UI a continuously
+    //   moving mod-source indicator; it wraps naturally on uint32 overflow (a free phase wrap).
+    //   Display-only — the per-voice audio LFO is unchanged (it owns its own phase).
+    if (sampleRate_ > 0.0 && chunkSamples > 0) {
+        const double cyclesPerSample =
+            static_cast<double>(shared.lfoRateHz) / sampleRate_;
+        const double advanceTurns = cyclesPerSample * static_cast<double>(chunkSamples);
+        // Fraction of a full uint32 turn this chunk advances (wrap-around is intentional).
+        const double inc = advanceTurns * 4294967296.0;   // 2^32 counts per LFO cycle
+        lfoPhase_ += static_cast<std::uint32_t>(
+            static_cast<std::uint64_t>(inc) & 0xFFFFFFFFull);
+    }
 
     // The tune (coarse semitones) + fine (sub-semitone) sum into the pitch, in DAC-count
     // units (1 count == 1 semitone). vco.range's software-ext positions (32'/64') add whole
