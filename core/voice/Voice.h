@@ -91,8 +91,33 @@ struct VoiceControls {
     GlideMode glideMode    = GlideMode::Off;
     float     glideSeconds = 0.0f;
 
-    // 161/162 extend here (VCF cutoff/res, env A/D/S/R, VCA level/mode, LFO rate/shape/
-    // depth/dest, modulation routing) behind the same applyControls call.
+    // --- VCF (task 161) — the filter responds to its params + the env/keyboard modulation
+    // of cutoff. cutoffBaseCvVolts is the base cutoff CV (mw101.vcf.cutoff mapped to volts,
+    // ControlDispatchVcfConstants.h); the SUMMED cutoff CV applied to the filter is
+    //   cutoffBaseCvVolts + envModOctaves * envLevel + kbdTrackCvVolts
+    // assembled inside applyControls from THIS voice's live env level + resolved note (§1.2
+    // "CUTOFF knob + keyboard x KeyFollow + ENV x EnvDepth"). resonance01 -> setResonance
+    // (self-oscillates at 1); envModOctaves is env_mod x kEnvModOctaves; kbdTrackCvVolts is
+    // the precomputed kbd_track x note-delta CV (note-dependent, filled by the Engine). ---
+    float cutoffBaseCvVolts = 0.0f;
+    float resonance01       = 0.0f;
+    float envModOctaves     = 0.0f;   // env_mod depth already scaled to octaves of CV
+    float kbdTrackCvVolts   = 0.0f;   // kbd_track x (note - ref) CV, note-dependent
+
+    // --- Envelope (task 161) — mw101.env.{attack,decay,sustain,release} -> env_.setParams
+    // each control tick (calibrated times). A/D/R are seconds; sustain is a [0,1] level. ---
+    float envAttackSec  = 0.003f;
+    float envDecaySec   = 0.060f;
+    float envSustain    = 0.7f;
+    float envReleaseSec = 0.100f;
+
+    // --- VCA (task 161) — mw101.vca.{level,mode}. vcaLevel scales the voice output
+    // amplitude; vcaMode selects the ENV-shaped vs flat-GATE amplitude source (§4.4). ---
+    float                vcaLevel = 0.8f;
+    mw101::dsp::VcaMode  vcaMode  = mw101::dsp::VcaMode::Env;
+
+    // 162 extends here (LFO rate/shape/depth/dest, full modulation routing) behind the
+    // same applyControls call.
 };
 
 // Inline per-voice drift state [ADR-006 §Decision item 1; docs/design/04 §4.2/§4.4].
@@ -137,6 +162,15 @@ public:
     // lock-free [ADR-028 items 1-2; ADR-005; ADR-001 §9]. quality is structural/off-thread,
     // so the AA tier is carried separately via setQualityAaMode().
     void applyControls(const VoiceControls& c, int advanceSamples) noexcept;
+
+    // Stage the dispatched ADSR for the NEXT note-on (task 161). Called by the Engine BEFORE
+    // the control tick fires any trigger, so a voice triggered this chunk latches the correct
+    // attack coefficient at its edge (the env copies its active-stage coefficient at the
+    // trigger; pushing the times only after would leave the Attack at the prepared default).
+    // For an ALREADY-sounding voice this also applies the times live (e.g. a changed release
+    // is in effect before the next gate-off). A plain POD copy + one setParams; noexcept,
+    // alloc-free, lock-free [ADR-028; docs/design/03 §2.5].
+    void stageEnvParams(const mw101::dsp::EnvParams& ep) noexcept;
 
     // Structural AA tier (mw101.quality), set off the audio thread / at a block boundary —
     // NOT per control tick [ADR-018 Q5; ADR-028 item 4 structural params off-thread]. The
@@ -205,6 +239,12 @@ private:
     float subLevel_   = 0.0f;
     float noiseLevel_ = 0.0f;
 
+    // --- VCA output level (§4.1; task 161) — mw101.vca.level, cached from the dispatch and
+    // applied as a clean linear post-VCA amplitude scale in render() (the channel fader; the
+    // OTA taper inside Vca::process is driven by the ENV/GATE amplitude SOURCE, not the
+    // level, so the contour shape stays intact). Default: the registry default 0.8. ---
+    float vcaLevel_   = 0.8f;
+
     // Structural AA tier (mw101.quality), set off the audio thread; folded into the
     // oscillator-section Controls each applyControls [ADR-018 Q5].
     mw101::dsp::OscAaMode qualityAaMode_ = mw101::dsp::OscAaMode::PolyBlep;
@@ -214,6 +254,15 @@ private:
     // tick (snap-vs-slew) instead of seeding the old Hz glide. freshNoteOn_ is consumed once.
     bool pendingNoteOnLegato_ = false;
     bool freshNoteOn_         = false;
+
+    // Latest dispatched ADSR (task 161). applyControls caches the decoded EnvParams here each
+    // control tick; noteOn applies them to env_ BEFORE firing the attack so startAttack()
+    // latches the CURRENT attack coefficient (the env's live stage coeff is set at the trigger
+    // edge — pushing setParams only AFTER the trigger would leave the Attack running the stale
+    // prepared default). hasPendingEnv_ guards the pre-first-dispatch note (keeps the INIT
+    // defaults until the seam supplies params). A plain POD copy; noexcept, alloc-free.
+    mw101::dsp::EnvParams pendingEnv_{};
+    bool                  hasPendingEnv_ = false;
 };
 
 } // namespace mw

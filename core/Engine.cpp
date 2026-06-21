@@ -13,6 +13,7 @@
 #include "Engine.h"
 
 #include <algorithm>
+#include <cmath>       // std::pow — control-rate skew inverse only, never the audio hot path
 #include <cstdint>
 #include <span>
 
@@ -20,6 +21,7 @@
 #include "calibration/OversampledZoneConstants.h"
 #include "calibration/SequencerRoutingConstants.h"
 #include "calibration/ControlDispatchConstants.h"   // pitch-CV anchor + vco.range mapping (ADR-028)
+#include "calibration/ControlDispatchVcfConstants.h" // cutoff-CV / env-mod / kbd-track law (task 161)
 #include "calibration/PitchAssemblyConstants.h"      // kVoltsPerCount (count->volt anchor)
 
 #include "params/ParamDefs.h"   // kParamDefs registry order (slot lookup, off-thread only)
@@ -324,6 +326,18 @@ void Engine::renderChunk(const BlockContext& ctx, int n0, int len) noexcept {
         routeControlEvents(eventCount);
     }
 
+    // 2pre. STAGE the dispatched ADSR onto the voice pool BEFORE the control tick fires any
+    //       note-on (task 161). The envelope latches its active-stage one-pole coefficient at
+    //       the trigger EDGE (startAttack copies the attack coefficient into the live coeff),
+    //       so a note triggered by the tick below must already have its A/D/S/R times in hand
+    //       — otherwise the Attack runs at the prepared default and the attack-time knob has
+    //       no effect. The A/D/S/R are NOTE-INDEPENDENT (one shared ADSR per voice), so this
+    //       stages the same decoded EnvParams to every pool voice; the per-voice pitch/cutoff
+    //       (note-dependent) still apply AFTER the tick in applyParamSnapshot. Bounded
+    //       O(kMaxVoices), pure POD copy; noexcept, alloc-free [ADR-028; docs/design/03 §2.5].
+    if (ctx.params != nullptr)
+        stageEnvParams(*ctx.params);
+
     // 2. Advance the control core over this chunk; it fires the control tick(s) at the
     //    (PI) sub-block cadence. Each fired tick calls VoiceManager::controlTick(), which
     //    resolves the VoiceManager's OWN KeyAssigner (the single authority) and applies
@@ -518,6 +532,27 @@ namespace {
     return d.minValue + s.normalized(slot) * span;
 }
 
+// Denormalize a CONTINUOUS slot that carries a NON-LINEAR (log-ish) skew to its
+// engineering value. The bridge stores the JUCE NormalisableRange's
+// convertTo0to1(value) == ((value-min)/span)^skew (non-symmetric skew; ParameterLayout
+// builds the range straight from kParamDefs.skew). The exact inverse the dispatch needs
+// is therefore value = min + span * norm^(1/skew). For skew == 1 (linear) this collapses
+// to contValue's min + norm*span, so the seam's task-161 cutoff (kCutoff) and env A/D/R
+// (kEnvTime) slots denormalize against their OWN skew here — closing the "non-linear-skew
+// params are owned by 161/162" note left on contValue. std::pow runs at control rate only
+// (decode, off the per-sample path); a slot with skew==1 returns the linear value without
+// the pow. Returns 0 for an unresolved slot. noexcept, pure arithmetic.
+[[nodiscard]] float contValueSkewed(const mw::ParamSnapshot& s, int slot) noexcept {
+    if (slot < 0) return 0.0f;
+    const auto& d = mw::params::kParamDefs[static_cast<std::size_t>(slot)];
+    const float span = d.maxValue - d.minValue;
+    const float norm = s.normalized(slot);
+    const float skew = d.skew;
+    const float deskewed = (skew == 1.0f) ? norm
+                                          : std::pow(norm, 1.0f / skew);
+    return d.minValue + deskewed * span;
+}
+
 // The typed option index for a CHOICE/BOOL slot (the bridge stored it in indexValues).
 [[nodiscard]] int choiceIndex(const mw::ParamSnapshot& s, int slot) noexcept {
     return slot < 0 ? 0 : s.index(slot);
@@ -540,6 +575,12 @@ namespace {
         case 2:  return mw101::dsp::SubShape::TwoOctDown25Pulse;
         default: return mw101::dsp::SubShape::OctDownSquare;
     }
+}
+
+// mw101.vca.mode choice {ENV=0, GATE=1} (ParamDefs detail::kVcaMode) -> VcaMode. The VCA
+// gate fade follows the ADSR contour (ENV) or holds a flat full level (GATE). Default ENV.
+[[nodiscard]] mw101::dsp::VcaMode vcaModeFor(int idx) noexcept {
+    return idx == 1 ? mw101::dsp::VcaMode::Gate : mw101::dsp::VcaMode::Env;
 }
 
 } // namespace
@@ -570,6 +611,18 @@ void Engine::cacheParamSlots() noexcept {
     slots_.noiseLevel = find(kNoiseLevel);
     slots_.glideTime  = find(kGlideTime);
     slots_.glideMode  = find(kGlideMode);
+
+    // --- VCF / Env / VCA (task 161) ---
+    slots_.vcfCutoff    = find(kVcfCutoff);
+    slots_.vcfResonance = find(kVcfResonance);
+    slots_.vcfEnvMod    = find(kVcfEnvMod);
+    slots_.vcfKbdTrack  = find(kVcfKbdTrack);
+    slots_.envAttack    = find(kEnvAttack);
+    slots_.envDecay     = find(kEnvDecay);
+    slots_.envSustain   = find(kEnvSustain);
+    slots_.envRelease   = find(kEnvRelease);
+    slots_.vcaLevel     = find(kVcaLevel);
+    slots_.vcaMode      = find(kVcaMode);
 }
 
 VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
@@ -595,7 +648,45 @@ VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
     vc.glideMode    = glideModeFor(choiceIndex(snap, slots_.glideMode));
     vc.glideSeconds = contValue(snap, slots_.glideTime);
 
+    // --- VCF (task 161): cutoff base CV + resonance + the env-mod depth (note-INDEPENDENT;
+    // the kbd-track CV is per-voice and filled by applyParamSnapshot). The cutoff pot is a
+    // log-ish-skewed 0..1 (kCutoff), so denormalize against its OWN skew, then map LINEARLY
+    // in the CV (octave) domain across the musical span [ControlDispatchVcfConstants.h]. ---
+    const float cutoff01 = contValueSkewed(snap, slots_.vcfCutoff);   // skew-aware 0..1
+    vc.cutoffBaseCvVolts = cal::dispatch::kCutoffCvAtZero
+                         + cutoff01 * (cal::dispatch::kCutoffCvAtOne
+                                       - cal::dispatch::kCutoffCvAtZero);
+    vc.resonance01   = contValue(snap, slots_.vcfResonance);                 // linear 0..1
+    vc.envModOctaves = contValue(snap, slots_.vcfEnvMod)                     // env_mod (linear)
+                     * cal::dispatch::kEnvModOctaves;                        // -> octaves of CV
+
+    // --- Envelope (task 161): A/D/R are kEnvTime-skewed seconds (denormalize against their
+    // own skew); sustain is a linear level. setParams runs per control tick in the voice. ---
+    vc.envAttackSec  = contValueSkewed(snap, slots_.envAttack);
+    vc.envDecaySec   = contValueSkewed(snap, slots_.envDecay);
+    vc.envSustain    = contValue(snap, slots_.envSustain);
+    vc.envReleaseSec = contValueSkewed(snap, slots_.envRelease);
+
+    // --- VCA (task 161): level (linear) + the ENV/GATE source select. ---
+    vc.vcaLevel = contValue(snap, slots_.vcaLevel);
+    vc.vcaMode  = vcaModeFor(choiceIndex(snap, slots_.vcaMode));
+
     return vc;
+}
+
+void Engine::stageEnvParams(const ParamSnapshot& snap) noexcept {
+    // Decode the note-independent ADSR (skew-aware times + linear sustain) and stage it onto
+    // EVERY pool voice so a voice the control tick triggers THIS chunk latches the correct
+    // attack coefficient at its edge (task 161). One shared ADSR per voice, so the same params
+    // go to all; staging is idle-voice-safe (it only updates the env's coefficients + the
+    // pending cache, never fires). The pool is the fixed kMaxVoices array (VoiceTypes.h).
+    mw101::dsp::EnvParams ep{};
+    ep.attackSec  = contValueSkewed(snap, slots_.envAttack);
+    ep.decaySec   = contValueSkewed(snap, slots_.envDecay);
+    ep.sustain    = contValue(snap, slots_.envSustain);
+    ep.releaseSec = contValueSkewed(snap, slots_.envRelease);
+    for (int vi = 0; vi < mw::kMaxVoices; ++vi)
+        voices_.voiceMutable(vi).stageEnvParams(ep);
 }
 
 void Engine::applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noexcept {
@@ -619,16 +710,21 @@ void Engine::applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noe
     const float anchorVolts =
         ControlCore::countsToVolts(cal::dispatch::kReferenceMidiNote);
 
-    // Apply to every ACTIVE voice (MONO drives exactly one; UNISON/POLY share the same VCO
-    // controls + per-voice pitch). The VoiceManager exposes a const Voice& only; voices_ is
-    // a genuinely non-const member of this Engine, so const_cast to the real (non-const)
-    // pool object is well-defined — no UB — and lets the dispatch call the per-voice setters
-    // without widening the VoiceManager surface (kept inside this task's edit waiver). The
-    // active scan is bounded O(activeCount) [§6.1; ADR-019 VT-02].
+    // The VCF keyboard-track depth (task 161): kbd_track in [0,1] (linear). At 1 the cutoff
+    // tracks the keyboard at exactly 1 V/oct; the per-voice CV is depth x (note - refNote)
+    // counts x kVoltsPerCount, centered on the SAME A4 anchor the pitch dispatch uses, so a
+    // note below the reference lowers the cutoff and above it raises it (§1.2 keyboard track).
+    const float kbdTrackDepth = contValue(snap, slots_.vcfKbdTrack);
+
+    // Apply to every ACTIVE voice (MONO drives exactly one; UNISON/POLY share the same VCO/
+    // VCF/Env/VCA controls + a per-voice pitch and keyboard-track CV). The non-const voice is
+    // taken through VoiceManager::voiceMutable (task 161 cleanup of the 160 const_cast smell);
+    // voices_ is a genuinely non-const Engine member, so this is the clean typed write surface
+    // for the dispatch. The active scan is bounded O(activeCount) [§6.1; ADR-019 VT-02].
     const int activeCount = voices_.activeCount();
     for (int k = 0; k < activeCount; ++k) {
         const int vi = static_cast<int>(voices_.activeIndex(k));
-        Voice& v = const_cast<Voice&>(voices_.voice(vi));
+        Voice& v = voices_.voiceMutable(vi);
 
         const int note = v.currentNote();
         VoiceControls vc = shared;
@@ -642,6 +738,15 @@ void Engine::applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noe
             const float countVolts = control_.blendedPitchVolts(counts);
             vc.targetPitchCvVolts = countVolts - anchorVolts
                                   + static_cast<float>(mw::cal::vco::kPitchRefVolts);
+
+            // Per-voice keyboard-track CV summed into the filter cutoff (task 161): the note
+            // delta from the A4 anchor in counts, scaled by 1 V/oct (kVoltsPerCount) and the
+            // tracking depth. Note 60 above/below the A4 ref simply yields a non-zero CV that
+            // raises/lowers cutoff with pitch; depth 0 leaves it zero (fixed cutoff).
+            const float noteDeltaCounts =
+                static_cast<float>(note - cal::dispatch::kReferenceMidiNote);
+            vc.kbdTrackCvVolts = kbdTrackDepth * noteDeltaCounts
+                               * static_cast<float>(cal::pitch::kVoltsPerCount);
         }
         v.applyControls(vc, chunkSamples);
     }

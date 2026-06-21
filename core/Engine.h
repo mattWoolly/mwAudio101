@@ -160,14 +160,24 @@ private:
     // frame; tune/fine sum into pitch; range->footage(+software-ext octaves); pw->PWM CV;
     // sub.mode->sub shape; the source mixer levels feed Voice's saw+pulse+sub+noise sum.
     // STRUCTURAL params (quality/voice.mode/voice.count/unison.count/control.vintage) are
-    // NOT read here — they are off-thread setters (ADR-028 item 4). Tasks 161 (VCF/Env/VCA)
-    // and 162 (LFO/mod) EXTEND VoiceControls + this decode behind the same per-tick call.
+    // NOT read here — they are off-thread setters (ADR-028 item 4). Task 161 EXTENDED this
+    // (the VCF cutoff CV + resonance, the env A/D/S/R, the VCA level/mode) behind the same
+    // per-tick call; task 162 (LFO/mod) extends it further the same way.
     void applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noexcept;
 
     // Decode the snapshot into the shared VCO/mixer/glide VoiceControls fields (the parts
     // that are the SAME for every active voice). Per-voice pitch (which depends on each
     // voice's resolved note) is filled in applyParamSnapshot. Pure arithmetic; noexcept.
     [[nodiscard]] VoiceControls decodeShared(const ParamSnapshot& snap) const noexcept;
+
+    // Stage the decoded (note-independent) ADSR onto EVERY pool voice BEFORE the control tick
+    // fires any note-on this chunk (task 161). The envelope latches its active-stage one-pole
+    // coefficient at the trigger edge, so the A/D/S/R must be in place before the tick triggers
+    // a voice — otherwise the Attack runs the prepared default (the attack-time knob would have
+    // no effect). One shared ADSR per voice (note-independent), so the same EnvParams stages to
+    // all; the per-voice pitch/cutoff still apply after the tick. Bounded O(kMaxVoices), pure
+    // POD copy; noexcept, alloc-free, lock-free [ADR-028; docs/design/03 §2.5].
+    void stageEnvParams(const ParamSnapshot& snap) noexcept;
 
     // Resolve the registry slot index for every dispatch-consumed parameter ID ONCE, off
     // the audio thread (prepare), so applyParamSnapshot never scans the 91-row registry on
@@ -215,6 +225,18 @@ private:
         int noiseLevel = -1;
         int glideTime  = -1;
         int glideMode  = -1;   // choice 0..2 -> GlideMode {Off,Auto,On}
+
+        // --- VCF / Env / VCA (task 161) ---
+        int vcfCutoff    = -1;   // 0..1 -> cutoff CV volts (skew kCutoff)
+        int vcfResonance = -1;   // 0..1 -> setResonance (self-osc at 1)
+        int vcfEnvMod    = -1;   // 0..1 -> ENV->cutoff depth (octaves)
+        int vcfKbdTrack  = -1;   // 0..1 -> keyboard-track depth (1 V/oct at 1)
+        int envAttack    = -1;   // 0..1 -> seconds (skew kEnvTime)
+        int envDecay     = -1;   // 0..1 -> seconds (skew kEnvTime)
+        int envSustain   = -1;   // 0..1 -> sustain level (linear)
+        int envRelease   = -1;   // 0..1 -> seconds (skew kEnvTime)
+        int vcaLevel     = -1;   // 0..1 -> output level (linear)
+        int vcaMode      = -1;   // choice 0..1 -> VcaMode {Env,Gate}
     } slots_{};
 
     double sampleRate_      = 0.0;
