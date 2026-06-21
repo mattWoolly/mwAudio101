@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 138
 title: Locate/declare validator targets (Validators.cmake)
-status: in-review
+status: done
 depends-on: [001, 113]
 component: infra
 estimated-size: M
