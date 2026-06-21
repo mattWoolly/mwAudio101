@@ -257,7 +257,7 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
 
     // --- assemble the oscillator-section control block (§7.2) ---------------------------
     // The pitch CV summed into the oscillator is the glided base note CV + the LFO vibrato
-    // term + the resolved pitch-bend term (bendVcoVolts; zero with no live wheel) + the
+    // term + the resolved pitch-bend term (bendVcoVolts; LIVE wheel via task 162c) + the
     // analog-character terms (task 164): the tune.a4 reference offset (pitchRefVolts, a global
     // bias), the drift/cal/slop perturbation (pitchDriftVolts, cents->volts from the DriftModel),
     // and the resolved MPE per-note bend (mpeBendVolts; zero with no live position ingress).
@@ -292,7 +292,7 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
     // The summed cutoff CV adds the task-162 modulators on top of the 161 terms: the LFO
     // wobble (lfoCutoffOct, octaves of CV, when dest=Filter), the velocity->cutoff term
     // (velCutoffVolts, a hard key opens the filter when vel.enable), and the resolved
-    // pitch-bend->VCF term (bendVcfVolts; zero with no live wheel). All are volts in the same
+    // pitch-bend->VCF term (bendVcfVolts; LIVE wheel via task 162c). All are volts in the same
     // 1 V/oct CV frame the filter consumes [docs/design/02 §1.2; ADR-028 item 3].
     const float envLevel = env_.level();
     const float cutoffCv = c.cutoffBaseCvVolts

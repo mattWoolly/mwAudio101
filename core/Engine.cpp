@@ -24,6 +24,7 @@
 #include "calibration/ControlDispatchConstants.h"   // pitch-CV anchor + vco.range mapping (ADR-028)
 #include "calibration/ControlDispatchVcfConstants.h" // cutoff-CV / env-mod / kbd-track law (task 161)
 #include "calibration/ControlDispatchLfoConstants.h" // LFO/vel/bend routing depths (task 162)
+#include "calibration/ControlDispatchCcIngressConstants.h" // CC1/bend ingress + wheel-boost law (task 162c)
 #include "calibration/FxDispatchConstants.h"          // FX free-ms / chorus-Hz decode (task 163)
 #include "calibration/PitchAssemblyConstants.h"      // kVoltsPerCount (count->volt anchor)
 #include "calibration/ControlDispatchCharacterConstants.h" // a4 ref / cents->volts / expression (task 164)
@@ -238,6 +239,12 @@ void Engine::reset() noexcept {
     drift_.reset();
     std::fill(lastDriftSerial_.begin(), lastDriftSerial_.end(),
               std::numeric_limits<std::uint64_t>::max());
+    // Continuous-controller state back to the neutral no-controller identity (task 162c) so
+    // reset() is a deterministic fixed point for the bend/wheel too — a divergent controller
+    // history + reset() + the same block renders bit-identically to a fresh engine. process()
+    // re-seeds these from ctx.controllers at the next block entry.
+    pitchBend_ = 0.0f;
+    modWheel_  = 0.0f;
     std::fill(mixL_.begin(), mixL_.end(), 0.0f);
     std::fill(mixR_.begin(), mixR_.end(), 0.0f);
     std::fill(mono_.begin(), mono_.end(), 0.0f);
@@ -263,6 +270,33 @@ void Engine::renderChunk(const BlockContext& ctx, int n0, int len) noexcept {
     //    the task-118 voice path); POLY arp/seq routing is out of scope (SH-101 is mono).
     const MidiEventView& midi = ctx.midi;
     const bool transportRunning = ctx.transport.isPlaying;
+
+    // 0. CONTINUOUS-CONTROLLER INGRESS (task 162c; ADR-028 control-dispatch repair). The 162
+    //    dispatch wired pitch-bend->{VCO,VCF} and mod-wheel->LFO-depth, but the live controller
+    //    POSITION never reached the engine — BlockContext carried no controller field and this
+    //    translator DROPPED PitchBend/ControlChange MidiEvents (toNoteEvent returns false for
+    //    them). Consume the PitchBend + CC1 (mod-wheel) events that fall within THIS chunk into
+    //    the engine's running controller state so the latest position is applied at the control
+    //    tick below; the 162 bend/wheel legs then activate. Independent of the note path (it
+    //    runs whether the keyboard or the sequencer owns note ingress) and order-preserving:
+    //    events are sampleOffset-ascending so the last in-window value wins for this chunk.
+    //    A PitchBend value is the centered signed unit [-1,+1] (the controller position, doc 09
+    //    §4.4); a CC1 value is the raw 7-bit 0..127 normalized to [0,1]. Other CC numbers are
+    //    NOT consumed here — they reach the engine as ParamValue events via the plugin's
+    //    CcLearnMap (a separate path; docs/design/09 §6.2). Pure POD read + arithmetic; noexcept,
+    //    alloc-free, lock-free [ADR-001 §9].
+    for (int i = 0; i < midi.numEvents; ++i) {
+        const MidiEvent& e = midi.events[i];
+        if (e.sampleOffset < n0 || e.sampleOffset >= n0 + len) continue;
+        if (e.type == NormalizedType::PitchBend) {
+            pitchBend_ = std::clamp(e.value, cal::ccingress::kPitchBendMin,
+                                    cal::ccingress::kPitchBendMax);
+        } else if (e.type == NormalizedType::ControlChange
+                   && static_cast<int>(e.data0) == cal::ccingress::kModWheelCcNumber) {
+            modWheel_ = std::clamp(e.value / cal::ccingress::kSevenBitMax,
+                                   cal::ccingress::kModWheelMin, cal::ccingress::kModWheelMax);
+        }
+    }
 
     // The sequencer OWNS note ingress this chunk only when it is actually driving notes:
     // the step sequencer is playing, OR the arpeggiator is explicitly ENABLED. The
@@ -780,20 +814,25 @@ VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
     vc.vcaLevel = contValue(snap, slots_.vcaLevel);
     vc.vcaMode  = vcaModeFor(choiceIndex(snap, slots_.vcaMode));
 
-    // --- LFO (task 162): rate (skewed Hz), shape, dest, delay (skewed seconds), and the
-    // per-dest depths (linear 0..1) scaled to their CV units. The mod-wheel->LFO routing param
-    // (mod.lfo_mod_wheel) BOOSTS the LFO depths: with no live wheel POSITION in the core seam
-    // (BlockContext carries no continuous-controller state — see below), we treat the routing
-    // param as an additive depth offset so a patch that routes the wheel still gets a deeper
-    // LFO. The depth multiplier is (1 + modWheelRouting), clamped, applied to all three depths
-    // — the routing is in place; the live wheel sweep awaits the controller seam. ---
+    // --- LFO (task 162 leg, mod-wheel boost ACTIVATED by 162c): rate (skewed Hz), shape, dest,
+    // delay (skewed seconds), and the per-dest depths (linear 0..1) scaled to their CV units. The
+    // mod-wheel->LFO routing param (mod.lfo_mod_wheel) scales the LFO depths by the LIVE wheel:
+    //   effectiveBoost = kModWheelBoostBase + modWheelRouting x liveWheel x kModWheelBoostSpan
+    // With the wheel DOWN (modWheel_ == 0) the boost is exactly the base (== 1, identity) for ANY
+    // routing — a routed patch with the wheel down is identical to no routing (the wheel, not the
+    // routing knob alone, opens the modulation). As the wheel rises the boost deepens the vibrato/
+    // wobble/PWM-sweep up to (base + routing x span). This closes the 162 ingress gap: the live
+    // wheel position (modWheel_) is consumed from CC1 MidiEvents / BlockContext::controllers by
+    // task 162c [ControlDispatchCcIngressConstants.h; ADR-028 item 3]. ---
     vc.lfoRateHz  = contValueSkewed(snap, slots_.lfoRate);
     vc.lfoShape   = lfoShapeFor(choiceIndex(snap, slots_.lfoShape));
     vc.lfoDest    = static_cast<int>(cal::dispatch::lfoDestFor(choiceIndex(snap, slots_.lfoDest)));
     vc.lfoDelaySec = contValueSkewed(snap, slots_.lfoDelay) * cal::dispatch::kLfoDelayMaxSec;
 
     const float modWheelRouting = contValue(snap, slots_.modLfoModWheel);   // 0..1 routing depth
-    const float depthBoost = 1.0f + modWheelRouting;                        // (PI) additive boost
+    const float depthBoost = cal::ccingress::kModWheelBoostBase
+                           + modWheelRouting * modWheel_
+                             * cal::ccingress::kModWheelBoostSpan;           // live wheel boost
     vc.lfoPitchDepthVolts = contValue(snap, slots_.lfoDepthPitch) * depthBoost
                           * cal::dispatch::kLfoPitchDepthVolts;
     vc.lfoCutoffDepthOct  = contValue(snap, slots_.lfoDepthCutoff) * depthBoost
@@ -973,23 +1012,24 @@ void Engine::applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noe
     const bool  velOn    = choiceIndex(snap, slots_.velEnable) != 0;   // bool index 0/1
     const float velDepth = velOn ? contValue(snap, slots_.velDepth) : 0.0f;
 
-    // --- pitch-bend routing (task 162): mw101.mod.{bend_dest,bend_range_*}. The bend RANGE
-    // (cents) per destination is decoded here; the live bend WHEEL value is NOT plumbed into
-    // the core seam (BlockContext has no continuous-controller state — PitchBend MidiEvents are
-    // dropped by toNoteEvent, and the MPE/MidiFrontEnd bend decode is plugin-side, a different
-    // task). With no live wheel the resolved bend offset (wheel x range) is ZERO, so bend
-    // produces no audible shift today; the dest/range decode + the routing arithmetic are in
-    // place so a future controller-seam task only supplies the live wheel value. -------------
+    // --- pitch-bend routing (task 162 leg, ACTIVATED by 162c): mw101.mod.{bend_dest,bend_range_*}.
+    // The bend RANGE (cents) per destination is decoded here; the live bend WHEEL position is the
+    // engine's running pitchBend_ (the [-1,+1] centered unit consumed from PitchBend MidiEvents /
+    // seeded from BlockContext::controllers — task 162c closes the ingress gap the 162 leg flagged).
+    // The resolved bend offset is wheel x (rangeCents/100 semitones) x kVoltsPerCount, summed into
+    // the pitch CV (dest VCO) and/or the cutoff CV (dest VCF); Both routes to both. A centered wheel
+    // (pitchBend_ == 0) yields a zero offset — the neutral identity. Full bend (+-1) at a 1200-cent
+    // range is +-1 octave at exactly 1 V/oct [ControlDispatchConstants.h; ADR-005; ADR-028 item 3].
     const int   bendDest      = choiceIndex(snap, slots_.modBendDest);   // 0 VCO / 1 VCF / 2 Both
     const float bendRangeVcoCents = contValue(snap, slots_.modBendRangeVco);
     const float bendRangeVcfCents = contValue(snap, slots_.modBendRangeVcf);
-    constexpr float kBendWheel = 0.0f;   // no live wheel in the core seam (see above)
+    const float bendWheel = pitchBend_;   // live centered [-1,+1] bend position (task 162c)
     const float bendVcoVolts = (bendDest == 0 || bendDest == 2)
-        ? kBendWheel * (bendRangeVcoCents / 100.0f)
+        ? bendWheel * (bendRangeVcoCents / 100.0f)
           * static_cast<float>(cal::pitch::kVoltsPerCount)
         : 0.0f;
     const float bendVcfVolts = (bendDest == 1 || bendDest == 2)
-        ? kBendWheel * (bendRangeVcfCents / 100.0f)
+        ? bendWheel * (bendRangeVcfCents / 100.0f)
           * static_cast<float>(cal::pitch::kVoltsPerCount)
         : 0.0f;
 
@@ -1141,6 +1181,18 @@ void Engine::process(const BlockContext& ctx) noexcept {
     const int numFrames = ctx.audio.numFrames;
     if (numFrames <= 0 || ctx.audio.channels == nullptr || ctx.audio.numChannels <= 0)
         return;
+
+    // Seed the running continuous-controller state from the block's controller snapshot
+    // (task 162c). A host that decodes bend/wheel into BlockContext::controllers once per block
+    // sets the position here; a host that streams PitchBend/CC1 MidiEvents leaves the neutral
+    // default and renderChunk's ingress loop fills the running state from the events. The two
+    // paths compose: the snapshot is the block-entry value, per-chunk events then update it
+    // sample-accurately. Clamped to the valid controller domain so a stray value never inverts
+    // the bend sign or runs the LFO boost negative.
+    pitchBend_ = std::clamp(ctx.controllers.pitchBend, cal::ccingress::kPitchBendMin,
+                            cal::ccingress::kPitchBendMax);
+    modWheel_  = std::clamp(ctx.controllers.modWheel, cal::ccingress::kModWheelMin,
+                            cal::ccingress::kModWheelMax);
 
     // §4.4: split the host block at MIDI/event sample-offsets, then render each segment
     // in fixed-size internal chunks capped at kRenderBlock. We walk the block boundary
