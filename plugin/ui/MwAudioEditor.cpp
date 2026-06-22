@@ -121,14 +121,23 @@ MwAudioEditor::MwAudioEditor(mw::plugin::MwAudioProcessor& processor)
     // behavior each drives; the bar only reports the affordance state.
     //   onScalePresetSelected -> the editor's scale-preset snap (114, applyScalePreset).
     //   onReduceMotionChanged -> the telemetry Timer suppression (115, setReduceMotion).
-    //   onRunStateChanged     -> the transport/arp run state. NOTE (flagged in the PR): the
-    //       processor exposes NO run-state seam today, so we wire what EXISTS — the editor
-    //       keeps the reported run state for display and does not invent a processor seam
-    //       (per the 114c "wire what exists, flag the gap" rule). When a transport run-state
-    //       hook is minted on the processor, this callback forwards to it.
+    //   onRunStateChanged     -> the transport/arp run state. The processor now exposes the
+    //       transient Run/Hold transport seam (task 182; ADR-030 part 2), so this forwards the
+    //       reported run state to processor_.setTransportRunning — a message-thread RELEASE
+    //       store the audio thread loads each block into BlockContext::transport.runHeld, where
+    //       the engine free-runs the INTERNAL clock at RATE while RUN is held (ADR-022 Free-run
+    //       rung; closes ADR-030 break Q4, the 114c dead end). The local lastTransportRunning_
+    //       mirror is kept for the transportRunningForTest() introspection accessor. NOTE: this
+    //       seam is the TRANSPORT (run/hold), NOT the persisted seq.mode play/record state —
+    //       those stay APVTS-driven through the engine's seq.mode dispatch (task 181); the two
+    //       must not fight (ADR-030 RECONCILIATION).
     transport_.onScalePresetSelected = [this](int presetIndex) { applyScalePreset(presetIndex); };
     transport_.onReduceMotionChanged = [this](bool reduce)     { setReduceMotion(reduce); };
-    transport_.onRunStateChanged     = [this](bool running)    { lastTransportRunning_ = running; };
+    transport_.onRunStateChanged     = [this](bool running)
+    {
+        lastTransportRunning_ = running;            // local mirror for transportRunningForTest()
+        processor_.setTransportRunning(running);    // the real transport seam (task 182)
+    };
 
     // --- Wire the PresetBrowser load sink to the message-thread recall path (§9.3) -
     // The browser invokes this with the chosen ABSOLUTE bank index; setCurrentProgram routes

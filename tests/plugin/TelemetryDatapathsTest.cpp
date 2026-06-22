@@ -109,6 +109,13 @@ struct Block {
         c.audio.numFrames   = n;
         c.params            = nullptr;
         c.transport         = { 120.0, 0.0, playing, kSr };
+        // Task 182 (ADR-030 part 2): these cases drive the INTERNAL clock (the pattern()
+        // helper publishes ClockSource::Internal). The engine's clock/ingress gate now
+        // free-runs the Internal clock on the TRANSIENT Run/Hold transport (runHeld), NOT the
+        // host's isPlaying (ADR-022 Free-run rung), so mirror the "transport running" arg into
+        // runHeld for the seq to advance under the Internal clock (migrated like 181/182
+        // migrated the host-gate term; the composed gate reaches the same end state).
+        c.transport.runHeld = playing;
         c.midi.events       = events.empty() ? nullptr : events.data();
         c.midi.numEvents    = static_cast<int>(events.size());
         return c;

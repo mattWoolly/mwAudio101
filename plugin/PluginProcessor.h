@@ -207,6 +207,28 @@ public:
         seqPatternHandoff_.publish(pattern);   // RT-safe publish to the audio thread
     }
 
+    // --- Run/Hold transport seam (task 182; ADR-030 part 2; ADR-022) ----------------
+    // The front panel's RUN/HOLD button is a DELIBERATELY NON-APVTS, TRANSIENT transport
+    // (docs/design/10 §5.3): pressing RUN free-runs the INTERNAL clock at the RATE knob even
+    // with no host transport (Standalone / stopped host), per ADR-022 Contract C7. The editor's
+    // TransportModeBar reports the affordance through onRunStateChanged -> setTransportRunning;
+    // processBlock loads it (ACQUIRE) and fills BlockContext::transport.runHeld each block, and
+    // the engine composes it with the resolved clock source in its clock/ingress gate. This is
+    // the SOLE writer of the transient transport — it does NOT touch StepSequencer::setSeqPlay
+    // (that PERSISTED play/record state is owned solely by the engine's seq.mode dispatch, task
+    // 181; the two must NOT fight, ADR-030 RECONCILIATION). Message-thread RELEASE store; the
+    // audio thread does ONE ACQUIRE load. Run-state is TRANSIENT — it is NOT persisted in
+    // get/setStateInformation (it must not survive a session reload). noexcept, lock-free.
+    void setTransportRunning(bool running) noexcept
+    {
+        transportRunning_.store(running, std::memory_order_release);
+    }
+    // The last value set (a relaxed read; for test introspection only — no audio-thread mutation).
+    [[nodiscard]] bool transportRunningForTest() const noexcept
+    {
+        return transportRunning_.load(std::memory_order_relaxed);
+    }
+
     // --- Test introspection (NO audio-thread mutation; for tests/plugin only) -----
     [[nodiscard]] const mw::Engine& engineForTest() const noexcept { return engine_; }
     [[nodiscard]] int  processCallCountForTest() const noexcept { return processCalls_; }
@@ -299,6 +321,14 @@ private:
     // thread NEVER calls into PresetManager / APVTS replaceState.
     std::atomic<int> pendingProgramChange_{ -1 };
     int currentProgram_ = 0;
+
+    // --- Run/Hold transport state (message thread -> audio thread; task 182) ----------
+    // The editor's onRunStateChanged writes this through setTransportRunning (RELEASE);
+    // processBlock loads it ONCE per block (ACQUIRE) into BlockContext::transport.runHeld so
+    // the engine's clock/ingress gate can free-run the INTERNAL clock when RUN is held (ADR-022
+    // Free-run rung). TRANSIENT: NOT persisted in get/setStateInformation (default false ==
+    // stopped, the no-transport identity). RT-safe: one atomic, no lock [ADR-030 part 2].
+    std::atomic<bool> transportRunning_{ false };
 
     // --- Editor size persistence (message thread only; task 114) ------------------
     // The last editor window size in PIXELS, read by MwAudioEditor on construction and

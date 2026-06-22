@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 182
 title: Sequencer run-state seam + free-run gate + editor run/hold wiring (ADR-030 part 2)
-status: todo
+status: in-review
 depends-on: [181, 114c, 125, 022]
 component: app
 estimated-size: M

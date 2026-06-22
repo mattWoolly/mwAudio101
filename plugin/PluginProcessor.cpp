@@ -229,7 +229,27 @@ void MwAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
             transport.isPlaying = pos->getIsPlaying();
         }
     }
-    juce::ignoreUnused(caps);
+
+    // 6b. RUN/HOLD TRANSPORT (task 182; ADR-030 part 2; ADR-022 Free-run rung). Load the
+    //     message-thread-published run-state ONCE (ACQUIRE — pairs with setTransportRunning's
+    //     RELEASE store from the editor's onRunStateChanged) and carry it through the seam as
+    //     the transient Run/Hold transport. The engine composes it with the resolved clock
+    //     source: under the INTERNAL clock RUN free-runs the modeled CLK at RATE even with no
+    //     host transport (Standalone / stopped host — ADR-022 C7; the case the pre-182
+    //     isPlaying-only gate wrongly blocked, ADR-030 break Q3); under HOST-SYNC the engine
+    //     still follows transport.isPlaying (docs/design/05 §7.4). This is the SOLE writer of
+    //     the transient transport — it never touches StepSequencer::setSeqPlay (that PERSISTED
+    //     play state is owned solely by the seq.mode dispatch, task 181; ADR-030 RECONCILIATION).
+    //     RT-safe: one atomic ACQUIRE load. Run-state is TRANSIENT — NOT persisted (§ getState).
+    transport.runHeld = transportRunning_.load(std::memory_order_acquire);
+
+    // 6c. PUBLISH the per-block rechecked transport rung to the UI (ADR-022 C12: the active
+    //     rung — Free-run / Block-quantized / Sample-accurate — must be user-visible, not a
+    //     silent surprise). recheckPerBlock() (step 1) is the branch-free transport-presence
+    //     tracker whose result was previously DISCARDED (the ignoreUnused(caps) dead end, ADR-
+    //     030 break Q3 context). Publishing it each block is a single lock-free atomic-pointer
+    //     swap (the §6.3 double-buffer) — no alloc, no lock [docs/design/09 §7.4; ADR-022 C12].
+    capabilityShim_.publishToUi(caps);
 
     // 7. Build the borrowed AudioBlockView over the host channel pointers (§5.3) and
     //    assemble the BlockContext. params points at the stable member snapshot.
