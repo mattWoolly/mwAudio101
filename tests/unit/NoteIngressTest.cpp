@@ -164,6 +164,12 @@ struct Block {
         c.audio.channels = ch; c.audio.numChannels = 2; c.audio.numFrames = n;
         c.params = p;
         c.transport = mw::TransportInfo{ 120.0, 0.0, playing, kSr };
+        // Task 182 (ADR-030 part 2): the running-arp case drives the INTERNAL clock
+        // (arp.tempo_sync = Off). The engine's clock/ingress gate now free-runs the Internal
+        // clock on the TRANSIENT Run/Hold transport (runHeld), not the host's isPlaying (ADR-
+        // 022 Free-run rung), so mirror the "transport running" arg into runHeld for the arp
+        // to own ingress under the Internal clock.
+        c.transport.runHeld = playing;
         c.midi.events = ev.empty() ? nullptr : ev.data();
         c.midi.numEvents = static_cast<int>(ev.size());
         return c;

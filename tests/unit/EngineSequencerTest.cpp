@@ -95,6 +95,14 @@ struct Block {
         c.audio.numFrames   = n;
         c.params            = nullptr;
         c.transport         = { bpm, ppq, playing, kSr };
+        // Task 182 (ADR-030 part 2): these cases drive the INTERNAL clock (the pattern()
+        // helper publishes ClockSource::Internal). The engine's clock/ingress gate now
+        // free-runs the Internal clock on the TRANSIENT Run/Hold transport (runHeld), NOT on
+        // the host's isPlaying (ADR-022 Free-run rung). The `playing` arg here means "the
+        // transport is running", which under the Internal clock IS run/hold — so mirror it
+        // into runHeld (migrated like 181 migrated the host-gate term; the gate composes the
+        // same end state). The stopped cases (playing=false) leave runHeld false -> no advance.
+        c.transport.runHeld = playing;
         c.midi.events       = events.empty() ? nullptr : events.data();
         c.midi.numEvents    = static_cast<int>(events.size());
         return c;

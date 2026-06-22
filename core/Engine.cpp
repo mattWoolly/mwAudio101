@@ -282,8 +282,13 @@ void Engine::renderChunk(const BlockContext& ctx, int n0, int len) noexcept {
     //    key (doc 04 §9: "the arp/seq emit NoteEvents like a keyboard"; ADR-006 C12). When
     //    the transport is STOPPED the unchanged direct keyboard path runs (no regression to
     //    the task-118 voice path); POLY arp/seq routing is out of scope (SH-101 is mono).
+    //
+    //    Task 182 (ADR-030 part 2; ADR-022): `transportRunning` — the clock/ingress gate
+    //    term — is NO LONGER ctx.transport.isPlaying alone. It now COMPOSES the front panel's
+    //    transient Run/Hold transport (ctx.transport.runHeld) with the resolved clock source,
+    //    and is therefore computed BELOW, AFTER dispatchSeqArp has resolved that clock source
+    //    from this block's seq/arp params (the 181 dispatch is the authority). See the gate.
     const MidiEventView& midi = ctx.midi;
-    const bool transportRunning = ctx.transport.isPlaying;
 
     // 0. CONTINUOUS-CONTROLLER INGRESS (task 162c; ADR-028 control-dispatch repair; bend
     //    authority reconciled in task 162d). The 162 dispatch wired pitch-bend->{VCO,VCF} and
@@ -325,6 +330,32 @@ void Engine::renderChunk(const BlockContext& ctx, int n0, int len) noexcept {
     //     behavior). RT-safe: a POD decode + lock-free setters; no heap, no lock.
     if (ctx.params != nullptr)
         dispatchSeqArp(*ctx.params);
+
+    // THE RUN/HOLD TRANSPORT + FREE-RUN GATE (task 182; ADR-030 part 2; ADR-022 §Decision /
+    // Contract C7-C8; docs/design/05 §7.3/§7.4). `transportRunning` — the clock/ingress gate
+    // term — composes the front panel's transient Run/Hold transport (ctx.transport.runHeld,
+    // filled by the processor from a message-thread atomic the editor's onRunStateChanged
+    // writes) with the RESOLVED clock source. The clock source is read straight from the
+    // hosted Clock, which dispatchSeqArp() (the 181 SOLE seq/arp param authority) has ALREADY
+    // set for this block from seq/arp tempo_sync — so this is the dispatched snapshot's clock
+    // source, exactly as ADR-030 prescribes. The two transports differ per the transport
+    // ladder:
+    //   * INTERNAL clock — the modeled LFO/CLK FREE-RUNS at the RATE knob whenever RUN is held,
+    //     with NO host transport required (ADR-022 C7 the Free-run rung; docs/design/05 §7.3:
+    //     Internal runs the CLK set by RATE). This is the Standalone / stopped-host case the
+    //     pre-182 isPlaying-only gate wrongly blocked (ADR-030 break Q3). So under Internal the
+    //     gate is run/hold alone — ctx.transport.isPlaying is NOT required.
+    //   * HOST-SYNC clock — follows the host transport: no host edges are generated when the
+    //     host is stopped (docs/design/05 §7.4). Run/Hold is the INTERNAL-clock transport and
+    //     does NOT additionally gate HostSync, so under HostSync the term stays
+    //     ctx.transport.isPlaying (pre-182 behavior preserved, no regression).
+    //   * EXT — treated as host-driven here (the core seam injects no Ext pulses; ADR-007),
+    //     so it follows ctx.transport.isPlaying like HostSync.
+    // RT-safe: a plain enum read + a boolean select; no heap, no lock.
+    const bool clockIsInternal =
+        (sequencer_.clock().source() == mw::control::ClockSource::Internal);
+    const bool transportRunning =
+        clockIsInternal ? ctx.transport.runHeld : ctx.transport.isPlaying;
 
     // The sequencer OWNS note ingress this chunk only when it is actually driving notes:
     // the step sequencer is playing, OR the arpeggiator is explicitly ENABLED. The

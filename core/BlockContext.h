@@ -33,6 +33,22 @@ struct TransportInfo {
     double ppqPosition;
     bool   isPlaying;
     double sampleRate;
+    // The TRANSIENT Run/Hold transport state of the front panel (task 182; ADR-030 part 2,
+    // break Q1/Q4). Run/Hold is the front panel's deliberately NON-APVTS, non-persisted
+    // transport (docs/design/10 §5.3): pressing RUN should make the INTERNAL clock free-run
+    // at the RATE knob even with no host transport (Standalone / stopped host), per ADR-022
+    // §Decision item 2 + Contract C7 (the Free-run rung) and docs/design/05 §7.3 (Internal
+    // runs the modeled CLK regardless of host PLAY). The processor fills this each block from
+    // a message-thread-published atomic the editor's onRunStateChanged writes; the engine
+    // composes it with the resolved clock source in the ingress/clock gate (Engine.cpp §284).
+    // It is the Internal-clock transport ONLY: under HostSync the engine still follows
+    // ctx.transport.isPlaying (docs/design/05 §7.4: no host edges when stopped), so RUN does
+    // NOT additionally gate a host-synced clock. The neutral default (false == RUN not held)
+    // is the no-transport identity: a block that leaves it default keeps the pre-182 behavior
+    // for HostSync and stays stopped for Internal. Appended LAST so existing positional
+    // TransportInfo aggregate initializers ({bpm, ppq, isPlaying, sampleRate}) stay valid and
+    // leave runHeld at its default. POD; no JUCE [ADR-001 C1/C14; ADR-022; ADR-030 part 2].
+    bool   runHeld = false;
 };
 
 // Event kind (note/CC/MPE). The full enumeration is owned by docs/design/09; this
