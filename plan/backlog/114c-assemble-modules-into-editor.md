@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 114c
 title: Assemble all modules + components into MwAudioEditor (the UI integration that makes the panel real)
-status: in-review
+status: done
 depends-on: [114, 116, 117, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129]
 component: ui
 estimated-size: M
