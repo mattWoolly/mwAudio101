@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 186
 title: Give the dispatch_complete audit cases a generous ctest TIMEOUT (linux-x64 CI green)
-status: in-review
+status: done
 depends-on: [184, 165]
 component: build
 stream: ci

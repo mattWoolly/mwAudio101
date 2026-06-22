@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 184b
 title: Fix SerialTests.cmake IN_LIST/CMP0057 portability — list(FIND) (184 linux-x64 CI hotfix)
-status: in-review
+status: done
 depends-on: [184]
 component: build
 stream: ci
