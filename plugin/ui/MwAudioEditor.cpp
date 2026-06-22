@@ -19,6 +19,7 @@
 
 #include "../../core/calibration/UiConstants.h"   // (PI) design extent / aspect / scale presets
 #include "../../core/calibration/TimerConstants.h" // (PI) Timer rate band + scope region (115)
+#include "../../core/calibration/EditorLayoutConstants.h" // (PI) §5.1 design-unit placement map (114c)
 
 #include "../PluginProcessor.h"   // mw::plugin::MwAudioProcessor (apvts + stored editor size)
 
@@ -26,6 +27,7 @@ namespace mw::ui {
 
 namespace cal  = mw::cal::editor;
 namespace tcal = mw::cal::timer;
+namespace lay  = mw::cal::editor::layout;
 
 // ---------------------------------------------------------------------------
 // Static design-space accessors (forward the (PI) constants; never inlined).
@@ -54,8 +56,88 @@ MwAudioEditor::MwAudioEditor(mw::plugin::MwAudioProcessor& processor)
     , apvts_(processor.apvts())
     , lookAndFeel_(DesignTokens::defaultTheme())
     , tokens_(DesignTokens::defaultTheme())
+    // --- The 12 assembled panel members (task 114c) -------------------------------
+    // Each is constructed with exactly the accessor it needs: apvts() for the APVTS-
+    // attached signal-flow modules; the processor itself for the SequencerGrid (its
+    // <extras> seq-pattern handoff); the PresetManager for the browser; the design
+    // tokens for the token-painted overlay / banner. Declaration order == init order;
+    // it mirrors the §5.1 Z-order so addAndMakeVisible below stacks them correctly.
+    , background_()
+    , modulator_(apvts_)
+    , vco_(apvts_)
+    , mixer_(apvts_)
+    , vcf_(apvts_)
+    , vca_(apvts_)
+    , controller_(apvts_)
+    , transport_(apvts_)
+    , sequencer_(processor)
+    , presetBrowser_(processor.presetManager())
+    , banner_(tokens_)
+    , scope_(tokens_)
 {
     setLookAndFeel(&lookAndFeel_);
+
+    // --- Assemble the panel: addAndMakeVisible in Z-ORDER (§5.1) ------------------
+    // BackgroundLayer is the BOTTOM cached layer; the functional modules sit above it;
+    // PresetBrowser + StatusBanner per §9; ScopeMeterOverlay is the TOP overlay. JUCE
+    // stacks children in addAndMakeVisible order (first == back), so this sequence is the
+    // documented Z-order. Each child carries a stable component ID so the editor / tests
+    // can find it by name (findChildWithID).
+    auto add = [this](juce::Component& c, const char* id)
+    {
+        c.setComponentID(id);
+        addAndMakeVisible(c);
+    };
+
+    add(background_,   "BackgroundLayer");   // bottom underlay
+    add(modulator_,    "ModulatorModule");
+    add(vco_,          "VcoModule");
+    add(mixer_,        "SourceMixerModule");
+    add(vcf_,          "VcfModule");
+    add(vca_,          "VcaModule");
+    add(controller_,   "ControllerStrip");
+    add(transport_,    "TransportModeBar");
+    add(sequencer_,    "SequencerGrid");
+    add(presetBrowser_,"PresetBrowser");
+    add(banner_,       "StatusBanner");
+    add(scope_,        "ScopeMeterOverlay"); // top overlay
+
+    // Broadcast the single design-token table to every token-painted child so a future
+    // reskin (a token-table swap) restyles the whole panel with no layout/binding change
+    // [§6.1; ADR-015 C10]. (BackgroundLayer takes its tokens at regenerate() time.)
+    modulator_.setTokens(tokens_);
+    vco_.setTokens(tokens_);
+    vca_.setTokens(tokens_);
+    controller_.setTokens(tokens_);
+    transport_.setTokens(tokens_);
+    sequencer_.setTokens(tokens_);
+    presetBrowser_.setTokens(tokens_);
+    scope_.setTokens(tokens_);
+    banner_.setTokens(tokens_);
+    // The overlay must reflect the persisted reduce-motion preference (restored below).
+
+    // --- Wire the TransportModeBar NON-APVTS seams to the editor (§4.4, §5.3, §10) -
+    // These are the bar's narrow callback seams (NOT host parameters). The editor owns the
+    // behavior each drives; the bar only reports the affordance state.
+    //   onScalePresetSelected -> the editor's scale-preset snap (114, applyScalePreset).
+    //   onReduceMotionChanged -> the telemetry Timer suppression (115, setReduceMotion).
+    //   onRunStateChanged     -> the transport/arp run state. NOTE (flagged in the PR): the
+    //       processor exposes NO run-state seam today, so we wire what EXISTS — the editor
+    //       keeps the reported run state for display and does not invent a processor seam
+    //       (per the 114c "wire what exists, flag the gap" rule). When a transport run-state
+    //       hook is minted on the processor, this callback forwards to it.
+    transport_.onScalePresetSelected = [this](int presetIndex) { applyScalePreset(presetIndex); };
+    transport_.onReduceMotionChanged = [this](bool reduce)     { setReduceMotion(reduce); };
+    transport_.onRunStateChanged     = [this](bool running)    { lastTransportRunning_ = running; };
+
+    // --- Wire the PresetBrowser load sink to the message-thread recall path (§9.3) -
+    // The browser invokes this with the chosen ABSOLUTE bank index; setCurrentProgram routes
+    // to PresetManager::loadPreset on the message thread (no tree pointer crosses to audio)
+    // [§9.3; ADR-015 C6]. This is the same recall path Program Change uses.
+    presetBrowser_.onLoadRequested = [this](int absoluteIndex)
+    {
+        processor_.setCurrentProgram(absoluteIndex);
+    };
 
     // Aspect-locked resizable window: the constrainer holds the FROZEN aspect ratio
     // across every resize, and clamps the logical scale to [kMinScale, kMaxScale]
@@ -96,6 +178,7 @@ MwAudioEditor::MwAudioEditor(mw::plugin::MwAudioProcessor& processor)
     telemetry_ = processor_.telemetryConsumer();
     reduceMotion_ = processor_.getStoredReduceMotion();
     scopeIdle_    = reduceMotion_;
+    scope_.setReduceMotion(reduceMotion_);   // the overlay idles in lock-step with the editor (§10)
     startTimerAtHz(reduceMotion_ ? tcal::kReduceMotionTimerHz : tcal::kDefaultTimerHz);
 
     // --- OpenGL opt-in escape hatch (task 130) ------------------------------------
@@ -141,7 +224,77 @@ void MwAudioEditor::resized()
 {
     recomputeTransform();
     recomputeScopeRegion();   // keep the Timer's dirty-rect in sync with the new transform
+
+    // Regenerate the cached static chrome at the new pixel size, drawn in design space and
+    // mapped through the single design->pixels transform (regenerate runs ONLY on resize —
+    // never on the telemetry Timer) [§7.1; ADR-015 C7]. The BackgroundLayer fills the whole
+    // editor and the layout below positions the functional modules over it.
+    background_.regenerate(getLocalBounds(), designToPixels_, tokens_);
+
+    // Position every assembled module / component in DESIGN units per the §5.1 map.
+    layoutChildren();
+
     persistSize();
+}
+
+// ---------------------------------------------------------------------------
+// Place every assembled module / component. Each placement RECT is a named design-unit
+// rectangle from core/calibration/EditorLayoutConstants.h (NO inlined magic numbers); it
+// is mapped through the single design->pixels AffineTransform to the pixel bounds the child
+// occupies. The modules that expose layoutDesignUnits() sub-divide their OWN local
+// rectangle (their resized() forwards getLocalBounds()), so the design-unit contract holds
+// end to end. The BackgroundLayer fills the whole editor (it draws chrome in design space
+// internally) and the ScopeMeterOverlay overlays the top-right scope region [§4, §5.1].
+// ---------------------------------------------------------------------------
+void MwAudioEditor::layoutChildren()
+{
+    // Map a design-unit rectangle to integer pixel bounds via the single transform [§4.2].
+    const auto toPixels = [this](float x, float y, float w, float h)
+    {
+        return juce::Rectangle<float>{ x, y, w, h }
+            .transformedBy(designToPixels_)
+            .getSmallestIntegerContainer();
+    };
+
+    // The cached chrome underlay fills the whole editor; it rasterizes its design-space art
+    // through the transform itself, so it is positioned in pixels, not design units.
+    background_.setBounds(getLocalBounds());
+
+    // The five signal-flow modules: one uniform row of cells aligned 1:1 with the chrome the
+    // BackgroundLayer strokes (same row origin / gap / width as the background constants).
+    modulator_.setBounds(toPixels(lay::moduleCellX(lay::kIdxModulator),   lay::kRowTop, lay::kModuleWidth, lay::kRowHeight));
+    vco_.setBounds      (toPixels(lay::moduleCellX(lay::kIdxVco),         lay::kRowTop, lay::kModuleWidth, lay::kRowHeight));
+    mixer_.setBounds    (toPixels(lay::moduleCellX(lay::kIdxSourceMixer), lay::kRowTop, lay::kModuleWidth, lay::kRowHeight));
+    vcf_.setBounds      (toPixels(lay::moduleCellX(lay::kIdxVcf),         lay::kRowTop, lay::kModuleWidth, lay::kRowHeight));
+    vca_.setBounds      (toPixels(lay::moduleCellX(lay::kIdxVca),         lay::kRowTop, lay::kModuleWidth, lay::kRowHeight));
+
+    // The controller strip / transport bar / sequencer grid / preset browser, in the band
+    // below the row (disjoint horizontal bands; grid + browser side by side).
+    controller_.setBounds   (toPixels(lay::kControllerX, lay::kControllerY, lay::kControllerW, lay::kControllerH));
+    transport_.setBounds    (toPixels(lay::kTransportX,  lay::kTransportY,  lay::kTransportW,  lay::kTransportH));
+    sequencer_.setBounds    (toPixels(lay::kSeqGridX,    lay::kSeqGridY,    lay::kSeqGridW,    lay::kSeqGridH));
+    presetBrowser_.setBounds(toPixels(lay::kPresetX,     lay::kPresetY,     lay::kPresetW,     lay::kPresetH));
+
+    // The status banner: a slim strip across the top-left [§9.4].
+    banner_.setBounds(toPixels(lay::kBannerX, lay::kBannerY, lay::kBannerW, lay::kBannerH));
+
+    // The scope/meter overlay: the TOP layer over the top-right scope region (the same
+    // design-unit region the Timer targets) — an INTENTIONAL overlay [§5.1, §8.4].
+    scope_.setBounds(toPixels(lay::kScopeX, lay::kScopeY, lay::kScopeW, lay::kScopeH));
+
+    // Make the design-unit sub-division contract EXPLICIT for the modules that expose it:
+    // forward each module's OWN local bounds into its layoutDesignUnits() so children are
+    // placed proportionally in design units (setBounds already triggered resized() which
+    // does the same; calling it here documents the seam and is idempotent) [§5.3].
+    modulator_.layoutDesignUnits(modulator_.getLocalBounds().toFloat());
+    vco_.layoutDesignUnits(vco_.getLocalBounds().toFloat());
+    mixer_.layoutDesignUnits(mixer_.getLocalBounds().toFloat());
+    vcf_.layoutDesignUnits(vcf_.getLocalBounds().toFloat());
+    vca_.layoutDesignUnits(vca_.getLocalBounds().toFloat());
+    controller_.layoutDesignUnits(controller_.getLocalBounds().toFloat());
+    transport_.layoutDesignUnits(transport_.getLocalBounds().toFloat());
+    sequencer_.layoutDesignUnits(sequencer_.getLocalBounds().toFloat());
+    presetBrowser_.layoutDesignUnits(presetBrowser_.getLocalBounds().toFloat());
 }
 
 void MwAudioEditor::recomputeTransform()
@@ -216,6 +369,14 @@ void MwAudioEditor::timerCallback()
 
     lastSnapshot_ = frame;           // coalesced to the newest frame (display cache)
 
+    // Feed the newest frame to the telemetry-driven children (DISPLAY-ONLY): the scope/
+    // meter overlay renders it, and the sequencer grid takes the current-step highlight
+    // from it. Each child requests a TARGETED repaint of its OWN bounds only — never the
+    // whole editor [§8.3/§8.4; ADR-015 C7]. While reduce-motion idles the scope the overlay
+    // caches the levels but does not animate (§10).
+    scope_.setSnapshot(frame);
+    sequencer_.setSnapshot(frame);
+
     if (scopeIdle_)
         return;                      // reduce-motion: scope paints a static/idle frame (§10)
 
@@ -239,6 +400,7 @@ void MwAudioEditor::setReduceMotion(bool reduceMotion)
 
     reduceMotion_ = reduceMotion;
     scopeIdle_    = reduceMotion;    // ON => the scope settles to a static/idle frame (§10)
+    scope_.setReduceMotion(reduceMotion_);   // the overlay idles/animates in lock-step (§10)
 
     // Persist the preference (message thread) so it round-trips on session reload. No
     // control attachment is involved — this is a <extras> UI preference only [ADR-008 C8].

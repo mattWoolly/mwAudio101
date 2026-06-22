@@ -132,6 +132,17 @@ public:
 
     juce::AudioProcessorValueTreeState& apvts() noexcept { return apvts_; }
 
+    // --- Preset bank accessor (the narrow §9.1 ownership seam, tasks 128 / 114c) ----
+    // The PresetManager lives in the PROCESSOR (§9.1); the editor's PresetBrowser (128) is
+    // a THIN VIEW that holds a reference to it and only lists/filters/loads. The editor
+    // assembly task (114c) needs this reference to CONSTRUCT the browser member — the
+    // browser ctor takes a PresetManager&, so unlike the optional TransportModeBar
+    // callback seams it cannot be deferred. The actual recall still routes through the
+    // message-thread setCurrentProgram()/loadPreset() path; this accessor only exposes the
+    // bank for the view's read/list surface, never an audio-thread handle
+    // [docs/design/10-ui.md §9.1, §9.2; ADR-015 C6]. Message-thread only.
+    [[nodiscard]] preset::PresetManager& presetManager() noexcept { return presetManager_; }
+
     // --- Editor size persistence (the narrow <extras>-UI seam, task 114) ----------
     // The editor root (MwAudioEditor) reads the stored size on construction and writes
     // the new size back on resize. The size genuinely PERSISTS: getStateInformation
