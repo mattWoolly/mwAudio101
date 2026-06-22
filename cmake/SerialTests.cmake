@@ -141,6 +141,7 @@ set(MW_SERIAL_TEST_NAMES
 # a no-op for the missing one. RUN_SERIAL is an EXECUTION property only — it never
 # changes a test's assertions, its label, or the ctest-labels.snapshot.
 set(_mw_serial_applied 0)
+set(_mw_timeout_applied 0)
 foreach(_var mw101_tests_TESTS mw101_plugin_tests_TESTS)
   foreach(_full IN LISTS ${_var})
     foreach(_prefix "mw101." "mw101_plugin.")
@@ -161,6 +162,19 @@ foreach(_var mw101_tests_TESTS mw101_plugin_tests_TESTS)
             set_tests_properties("${_full}" PROPERTIES RUN_SERIAL ON)
             math(EXPR _mw_serial_applied "${_mw_serial_applied} + 1")
           endif()
+          # The 165 completeness-audit cases (dispatch_complete:*) render minutes of audio
+          # per param battery — #188 (exempt-param audit) is ~570s and #185 (FX audit) ~461s
+          # even on fast macOS ARM, so on the ~2.6x-slower shared Linux runner #188 (~1480s)
+          # tips over ctest's 1500s DEFAULT timeout (it timed out at 1500.05s on linux-x64 CI).
+          # Give the whole dispatch_complete suite a generous per-test TIMEOUT so the slow
+          # runner passes; every OTHER test keeps the 1500s default so a genuine hang still
+          # fails fast. (The renders are intentionally exhaustive; trimming their length without
+          # weakening the all-91-params audit is tracked as a follow-up perf task.) [task 186]
+          string(FIND "${_bare}" "dispatch_complete:" _mw_dc_pos)
+          if(_mw_dc_pos EQUAL 0)
+            set_tests_properties("${_full}" PROPERTIES TIMEOUT 3000)
+            math(EXPR _mw_timeout_applied "${_mw_timeout_applied} + 1")
+          endif()
         endif()
       endif()
     endforeach()
@@ -168,4 +182,5 @@ foreach(_var mw101_tests_TESTS mw101_plugin_tests_TESTS)
 endforeach()
 
 message(STATUS
-  "mwAudio101: RUN_SERIAL applied to ${_mw_serial_applied} memory/timing-sensitive test(s) (task 184).")
+  "mwAudio101: RUN_SERIAL applied to ${_mw_serial_applied} memory/timing-sensitive test(s) (task 184); "
+  "TIMEOUT 3000s applied to ${_mw_timeout_applied} dispatch_complete audit case(s) (task 186).")
