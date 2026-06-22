@@ -150,7 +150,14 @@ foreach(_var mw101_tests_TESTS mw101_plugin_tests_TESTS)
         string(SUBSTRING "${_full}" 0 ${_plen} _head)
         if(_head STREQUAL "${_prefix}")
           string(SUBSTRING "${_full}" ${_plen} -1 _bare)
-          if("${_bare}" IN_LIST MW_SERIAL_TEST_NAMES)
+          # Use list(FIND) rather than the if(... IN_LIST ...) operator: this file is
+          # included via TEST_INCLUDE_FILES at ctest time (the CTestTestfile.cmake context),
+          # which does NOT inherit the project's policy stack, so CMP0057 defaults to OLD and
+          # IN_LIST errors as "Unknown arguments" on CMake configs that honor that default
+          # (it tripped linux-x64 CI while macOS happened to treat CMP0057 as NEW). list(FIND)
+          # is policy-independent and behaves identically everywhere (task 184b).
+          list(FIND MW_SERIAL_TEST_NAMES "${_bare}" _mw_serial_idx)
+          if(NOT _mw_serial_idx EQUAL -1)
             set_tests_properties("${_full}" PROPERTIES RUN_SERIAL ON)
             math(EXPR _mw_serial_applied "${_mw_serial_applied} + 1")
           endif()
