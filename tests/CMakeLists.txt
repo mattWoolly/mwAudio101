@@ -193,3 +193,19 @@ if(MW_BUILD_PLUGIN)
     TEST_PREFIX "mw101_plugin."
     PROPERTIES FAIL_REGULAR_EXPRESSION "No tests ran")
 endif()
+
+# --- RUN_SERIAL for the memory-/timing-sensitive subset (task 184) ---------------
+# The CI testPresets now run ctest with parallelism (CMakePresets.json execution.jobs)
+# so the long audio-rendering suite finishes on the slow shared Linux runner. A small
+# curated subset must NEVER run concurrently with the rest: the AudioThreadGuard
+# alloc/lock-sentinel cases (a parallel first-touch page fault would trip the no-malloc
+# guard), the cpu-budget wall-time golden (CPU contention inflates the measured median),
+# and the cross-run determinism / steady-state cases. catch_discover_tests registers
+# those at BUILD time, so their names do not exist at configure time; CMake's documented
+# mechanism for per-test properties on discovered tests is the directory
+# TEST_INCLUDE_FILES property + the populated <target>_TESTS variable. cmake/SerialTests.cmake
+# runs at ctest time and applies RUN_SERIAL (an EXECUTION property only — no assertion,
+# label, or ctest-labels.snapshot change) to that set [docs/design/11 §13.1/§13.5;
+# ADR-013 C19/C21; ADR-001 C3/C4].
+set_property(DIRECTORY APPEND PROPERTY
+  TEST_INCLUDE_FILES "${CMAKE_SOURCE_DIR}/cmake/SerialTests.cmake")
