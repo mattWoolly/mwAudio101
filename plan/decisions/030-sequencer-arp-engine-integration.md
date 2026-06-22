@@ -59,9 +59,11 @@ The existing gate `sequencerOwnsIngress = transportRunning && (seqPlaying || arp
   reads in the gate: plumb it via `BlockContext`/`TransportInfo` (a new POD field the processor fills
   each block) — consistent with the existing POD seam.
 - Replace `Engine.cpp:285` `transportRunning = ctx.transport.isPlaying` with
-  `transportRunning = runHeld && (clockSource==Internal ? true : ctx.transport.isPlaying)` (Internal
-  free-runs when RUN is held, per ADR-022; HostSync still requires the host to be playing). Get the
-  clock source from the dispatched snapshot (181) or the resolved `TransportRung` (stop discarding `caps`).
+  `transportRunning = (clockSource==Internal) ? runHeld : ctx.transport.isPlaying` — the Internal clock
+  free-runs when RUN is held (ADR-022); HostSync follows the host transport (run/hold is the Internal-
+  clock transport, so it does not additionally gate HostSync). Confirm the exact composition against
+  ADR-022 + design 05 §7.4/§7.5. Get the clock source from the 181-dispatched snapshot (preferred) or
+  the resolved `TransportRung` (stop discarding `caps`).
 - Processor: `std::atomic<bool> transportRunning_{false}` + `setTransportRunning(bool) noexcept`
   (message-thread RELEASE store); `processBlock` loads it (ACQUIRE) and fills `ctx`'s `runHeld` each
   block. RT-safe (one atomic read). Run-state is transient — NOT persisted in `<extras>`.
