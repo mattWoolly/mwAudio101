@@ -47,6 +47,22 @@
 #include "MwAudioLookAndFeel.h"  // sibling ui/: the custom vector LookAndFeel (task 108)
 #include "RenderBackend.h"       // sibling ui/: the §11 OpenGL opt-in escape hatch (task 130)
 
+// --- The 12 panel modules / components this root assembles (task 114c) -------------
+// Every module / component is a sibling ui/ header; the editor owns one of each by value
+// and lays each out in DESIGN units per the EditorLayoutConstants placement map (§5.1).
+#include "BackgroundLayer.h"            // §7.1 cached static-chrome underlay (116)
+#include "ScopeMeterOverlay.h"          // §8.4 telemetry-driven top overlay (127)
+#include "PresetBrowser.h"              // §9 thin view over the processor PresetManager (128)
+#include "StatusBanner.h"               // §9.4 non-modal load-failure / disclaimer surface (129)
+#include "modules/ModulatorModule.h"    // §5.3 MODULATOR (117)
+#include "modules/VcoModule.h"          // §5.3 VCO (120)
+#include "modules/SourceMixerModule.h"  // §5.3 SOURCE MIXER (121)
+#include "modules/VcfModule.h"          // §5.3 VCF (122)
+#include "modules/VcaModule.h"          // §5.3 VCA (123)
+#include "modules/ControllerStrip.h"    // §5.3 CONTROLLER strip (124)
+#include "modules/TransportModeBar.h"   // §5.3 transport / mode bar (125)
+#include "modules/SequencerGrid.h"      // §5.3 100-step sequencer grid (126)
+
 #include "ui/Telemetry.h"        // mwcore (JUCE-free): mw::ui::Telemetry::Consumer/Snapshot (107)
 
 namespace mw::plugin { class MwAudioProcessor; }
@@ -86,6 +102,11 @@ public:
     // accessor pair so it round-trips on reload [§10; ADR-008 §4/§5 C8].
     void setReduceMotion(bool reduceMotion);
     [[nodiscard]] bool reduceMotionEnabled() const noexcept { return reduceMotion_; }
+
+    // The run/hold state the TransportModeBar last reported through its onRunStateChanged
+    // seam (a UI affordance, not an APVTS param). Exposed so a test can prove the seam is
+    // wired end-to-end [§5.3].
+    [[nodiscard]] bool transportRunningForTest() const noexcept { return lastTransportRunning_; }
 
     // --- OpenGL opt-in escape hatch [§11; ADR-015 C9] -----------------------------
     // The software/CPU render path is PRIMARY and DEFAULT: the render-backend context is
@@ -141,6 +162,13 @@ public:
     void timerCallback() override;
 
 private:
+    // Position every assembled module / component in DESIGN units per the §5.1 placement
+    // map (core/calibration/EditorLayoutConstants.h), mapping each design-unit rectangle
+    // through the single design->pixels transform. Called from resized() AFTER the
+    // transform is recomputed. No magic numbers live here — every rect comes from the
+    // calibration header [§4, §5.1; ADR-015 C1].
+    void layoutChildren();
+
     // Restart the Timer at `hz`, recording the active rate. Idempotent.
     void startTimerAtHz(int hz);
 
@@ -182,6 +210,31 @@ private:
     bool          openGlEnabled_ = false;
     bool  scopeIdle_    = false;                   // scope paints a static/idle frame (§10)
     juce::Rectangle<int> scopeRegionPx_;          // the targeted scope/indicator dirty-rect
+
+    // --- The assembled panel: the 12 modules / components (task 114c) -------------
+    // Owned by value; constructed in the ctor with the accessors each needs (apvts() for
+    // the APVTS-attached modules; the processor for the SequencerGrid <extras> seam; the
+    // PresetManager for the browser; the load-failure/disclaimer surface for the banner),
+    // addAndMakeVisible'd in Z-order (BackgroundLayer bottom, functional modules above,
+    // ScopeMeterOverlay top), and positioned in DESIGN units in layoutChildren() [§5.1].
+    BackgroundLayer    background_;       // bottom: cached static chrome (§7.1)
+    ModulatorModule    modulator_;        // MODULATOR (§5.3)
+    VcoModule          vco_;              // VCO (§5.3)
+    SourceMixerModule  mixer_;            // SOURCE MIXER (§5.3)
+    VcfModule          vcf_;              // VCF (§5.3)
+    VcaModule          vca_;              // VCA (§5.3)
+    ControllerStrip    controller_;       // CONTROLLER strip (§5.3)
+    TransportModeBar   transport_;        // transport / mode bar (§5.3)
+    SequencerGrid      sequencer_;        // 100-step sequencer grid (§5.3)
+    PresetBrowser      presetBrowser_;    // thin preset view (§9)
+    StatusBanner       banner_;           // non-modal load-failure / disclaimer (§9.4)
+    ScopeMeterOverlay  scope_;            // top: telemetry-driven overlay (§8.4)
+
+    // The TransportModeBar run/hold affordance state the bar reports to the editor. The
+    // processor exposes no transport run-state seam yet (flagged in the 114c PR), so the
+    // editor holds the reported state for display until that hook is minted. NOT an APVTS
+    // parameter [§5.3].
+    bool lastTransportRunning_ = false;
 
     // Test-only counters (message-thread; no audio-domain state).
     bool lastPulled_   = false;
