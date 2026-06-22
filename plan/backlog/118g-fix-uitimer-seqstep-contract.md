@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 118g
 title: Fix MwAudioEditorTimerTest stale seqStep contract (118d fallout) — coalescing proof via a live-valid discriminator
-status: todo
+status: in-review
 depends-on: [118d, 115]
 component: app
 estimated-size: S
