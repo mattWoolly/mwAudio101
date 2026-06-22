@@ -21,6 +21,7 @@
 [dispatch_fx]
 [dispatch_gap]
 [dispatch_lfo]
+[dispatch_seqarp]
 [dispatch_vcf]
 [dispatch_vco]
 [e2e_determinism]
