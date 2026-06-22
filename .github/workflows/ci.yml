@@ -40,10 +40,36 @@
 name: CI
 
 on:
+  # Docs-only commits (a backlog/ADR/design/notes edit, or a root prose doc) do NOT
+  # spin the full cross-platform build+test matrix — that is hours of audio-rendering
+  # work for a prose change [task 184]. paths-ignore skips the run ONLY when EVERY
+  # changed file matches, so a build/cmake/test/preset change is never masked: any
+  # commit that also touches code still runs the full matrix. The ignore list is the
+  # genuinely doc-only trees + the named root prose files; it deliberately does NOT use
+  # a blanket `**/*.md`, because Markdown is SPDX-license-gated by the `license_headers`
+  # ctest (tests/invariants/LicenseHeaderCheck.cpp scans .md), so a .md landing inside a
+  # build tree (e.g. presets/AUTHORING.md) must still trigger CI. Code/cmake/tests/
+  # presets/scripts/.github paths are intentionally absent here, so they keep triggering.
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'plan/**'
+      - 'orchestration-notes/**'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'README.md'
+      - 'LICENSE'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'plan/**'
+      - 'orchestration-notes/**'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'README.md'
+      - 'LICENSE'
 
 permissions:
   contents: read

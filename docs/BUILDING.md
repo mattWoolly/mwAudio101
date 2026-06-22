@@ -58,6 +58,26 @@ ctest --preset default -R fp_discipline_guard --no-tests=error
 ctest --preset default -R audiothreadguard --no-tests=error
 ```
 
+### Test parallelism (`jobs`) and the `RUN_SERIAL` subset
+
+Every `testPreset` inherits `"execution": { "jobs": 4 }` from the hidden `test-base`
+(`CMakePresets.json`), so `ctest --preset <p>` — the one line a developer runs and CI
+dispatches — runs the suite in parallel. `4` is the GitHub-hosted runner core count;
+it is a fixed literal because a preset cannot compute `nproc`. Locally you may pass a
+larger `-j` (e.g. `ctest --preset default -j "$(nproc)"`), which overrides the preset
+value; the run stays correct because the safety below does not depend on the job count
+[task 184].
+
+A curated subset (the `AudioThreadGuard` alloc/lock-sentinel cases, the cpu-budget
+wall-time golden, and the cross-run determinism / steady-state cases) is marked
+`RUN_SERIAL` so ctest never co-schedules it with other tests. Under parallel memory
+pressure a first-touch page fault inside an armed no-malloc window would otherwise trip
+the guard, and CPU contention would inflate the budget median — both false failures of
+correct code. `RUN_SERIAL` is an *execution* property (`cmake/SerialTests.cmake`, applied
+at ctest time via the directory `TEST_INCLUDE_FILES`); it changes *when* a test runs, not
+*what* it asserts, and does not touch any tag or the `ctest-labels.snapshot`
+[docs/design/11 §13.1/§13.5; ADR-013 C19/C21].
+
 ## JUCE-linked plugin tests (`mw101_plugin_tests`)
 
 The headless `mw101_tests` binary links `mwcore` + Catch2 only — **no JUCE**. To

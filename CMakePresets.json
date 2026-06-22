@@ -103,7 +103,7 @@
       "name": "test-base",
       "hidden": true,
       "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": false }
+      "execution": { "noTestsAction": "error", "stopOnFailure": false, "jobs": 4 }
     },
     { "name": "default",     "inherits": "test-base", "configurePreset": "default" },
     { "name": "debug",       "inherits": "test-base", "configurePreset": "debug" },
