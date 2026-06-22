@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 184
 title: CI ctest parallelism + docs-only skip
-status: in-review
+status: done
 component: build
 stream: ci
 tag: ci
