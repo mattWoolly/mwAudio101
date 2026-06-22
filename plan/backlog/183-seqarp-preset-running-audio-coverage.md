@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 183
 title: SeqArpRiff/Acid preset RUNNING-sequencer audio coverage (validate the now-live seq/arp on the headline presets)
-status: in-review
+status: done
 depends-on: [181, 182, 131]
 component: app
 estimated-size: M
