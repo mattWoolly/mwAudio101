@@ -398,6 +398,19 @@ void MwAudioProcessor::setCurrentProgram(int index)
     mw::state::Extras extras{};
     mw::plugin::state::RecoveryReport report{};
     presetManager_.loadPreset(index, apvts_, extras, report);
+
+    // Adopt + publish the RECOVERED <extras> seq pattern exactly like setStateInformation
+    // (task 185). loadPreset already filled `extras` with the preset's 100-step pattern POD,
+    // so no re-parse is needed (unlike setStateInformation, which decodes it from the tree via
+    // readSeqPattern). Without this, the recovered pattern was DISCARDED here: a Program-Change
+    // recall (handleAsyncUpdate -> setCurrentProgram) or a PresetBrowser selection applied
+    // seq.mode=Play but left the engine's StepSequencer pattern EMPTY (count_==0) — the riff
+    // did not play. The publish is the SAME RT-safe lock-free SeqPatternHandoff the editor's
+    // setSeqPattern and setStateInformation use; the audio thread ADOPTS it on its next block
+    // [docs/design/10-ui.md §9.3; docs/design/06 §5.4; ADR-008 C19]. Message-thread only.
+    seqPattern_ = extras;
+    seqPatternHandoff_.publish(seqPattern_);
+
     currentProgram_ = index;
 }
 
