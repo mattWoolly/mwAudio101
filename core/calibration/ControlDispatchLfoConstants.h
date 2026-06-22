@@ -25,10 +25,20 @@ namespace mw::cal::dispatch {
 
 // ---------------------------------------------------------------------------
 // LFO destination select (mw101.lfo.dest choice {Pitch=0, Filter=1, PWM=2},
-// ParamDefs detail::kLfoDest). The dispatch routes the bipolar LFO output [-1,1] to
-// EXACTLY ONE destination (the hardware MOD selector is a single-position switch,
-// docs/design/03 §3.2) scaled by the matching depth param. (PI) — the index mapping
-// mirrors the choice-label order [docs/design/06 §3.x; ADR-028 item 3].
+// ParamDefs detail::kLfoDest).
+//
+// CORRECTION (task 180 / ADR-029 / QA-154-3): lfo.dest is NOT an exclusive mux. The
+// ratified topology (ADR-007 §Decision item 1) routes the single instantaneous LFO
+// value into THREE FIXED DESTINATIONS with per-destination depth gains, ALL ACTIVE
+// every control tick — VCO pitch, PWM, VCF cutoff [docs/design/05 §3.3 marks LFO->VCO
+// pitch and LFO->VCF cutoff "always"; docs/design/03 §3.6 "Routing is fixed with
+// per-destination depths, not a matrix"]. Per docs/design/06 ~L381 lfo.dest selects
+// which destination the single hardware LFO routing **EMPHASIZES** — an emphasis
+// selector, NOT a single-position switch that silences the others. (The earlier
+// single-leg gating mis-cited docs/design/03 §3.2, which governs the LFO *waveform*
+// being single-select — four positions, no sine core — and says nothing about
+// *destinations*.) The decode below is retained for the emphasis gain only; it never
+// zeroes a non-selected leg. (PI) index mapping mirrors the choice-label order.
 enum class LfoDest : int { Pitch = 0, Filter = 1, Pwm = 2 };
 
 [[nodiscard]] inline constexpr LfoDest lfoDestFor(int choiceIndex) noexcept {
@@ -37,6 +47,22 @@ enum class LfoDest : int { Pitch = 0, Filter = 1, Pwm = 2 };
         case 2:  return LfoDest::Pwm;
         default: return LfoDest::Pitch;
     }
+}
+
+// lfo.dest EMPHASIS gains (task 180 / ADR-029 item 2). The selected destination's depth
+// is multiplied by kLfoEmphasisSelected and the unselected ones by kLfoEmphasisUnselected.
+// Both default to 1.0 so the control is NON-DESTRUCTIVE: every destination modulates at its
+// own depth REGARDLESS of dest, and dest changes nothing until a deliberate emphasis curve is
+// ratified by a future ADR (then only these two (PI) figures move — no call site re-tunes).
+// The unselected gain MUST stay > 0 (the control may never again zero a destination — that was
+// the QA-154-3 regression) [docs/design/06 ~L381 "emphasizes"; ADR-029 item 2]. (PI) anchors.
+inline constexpr float kLfoEmphasisSelected   = 1.0f;   // (PI) — selected-dest depth multiplier
+inline constexpr float kLfoEmphasisUnselected = 1.0f;   // (PI) — non-selected (MUST be > 0)
+
+// Per-leg emphasis multiplier for `leg` given the selected destination `dest`: the selected
+// leg gets kLfoEmphasisSelected, every other leg kLfoEmphasisUnselected (both 1.0 by default).
+[[nodiscard]] inline constexpr float lfoEmphasisGain(LfoDest dest, LfoDest leg) noexcept {
+    return (dest == leg) ? kLfoEmphasisSelected : kLfoEmphasisUnselected;
 }
 
 // ---------------------------------------------------------------------------

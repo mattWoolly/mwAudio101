@@ -817,10 +817,11 @@ VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
     vc.envModOctaves = contValue(snap, slots_.vcfEnvMod)                     // env_mod (linear)
                      * cal::dispatch::kEnvModOctaves;                        // -> octaves of CV
     // mw101.vcf.lfo_mod (task 162e): the VCF module's OWN LFO->cutoff amount (linear 0..1),
-    // DISTINCT from the LFO panel's lfo.depth_cutoff (already wired as lfoCutoffDepthOct, which
-    // routes only when lfo.dest == Filter). Scaled to octaves of CV; applyControls sums
-    // lfoEff * this ALONGSIDE the lfo.depth_cutoff term into the cutoff CV, REGARDLESS of the LFO
-    // dest switch (the VCF panel has its own mod path) [docs/design/02 §1.2; docs/design/05 §3.1].
+    // DISTINCT from the LFO panel's lfo.depth_cutoff (already wired as lfoCutoffDepthOct). Both are
+    // always-active per-destination depths now (ADR-007 / task 180; lfo.dest only emphasizes, never
+    // gates) — this is a SEPARATE VCF-panel depth control. Scaled to octaves of CV; applyControls
+    // sums lfoEff * this ALONGSIDE the lfo.depth_cutoff term into the cutoff CV [docs/design/02 §1.2;
+    // docs/design/05 §3.1].
     vc.vcfLfoModDepthOct = contValue(snap, slots_.vcfLfoMod)
                          * cal::dispatch::kVcfLfoModDepthOctaves;
 
