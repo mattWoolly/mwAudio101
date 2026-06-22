@@ -22,6 +22,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
 #include <memory>
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -72,19 +73,53 @@ TEST_CASE("ui_timer drains the SPSC to the most-recent snapshot and repaints onl
     REQUIRE(editor->scopeRepaintCountForTest() == repaintsBefore);
     REQUIRE_FALSE(editor->lastPulledFrameForTest());
 
-    // Publish three frames; the coalescing pull must jump straight to the MOST-RECENT
-    // (seqStep is monotonic, advanced once per published block).
-    publishOneTelemetryFrame(processor);
-    publishOneTelemetryFrame(processor);
-    publishOneTelemetryFrame(processor);
+    // Discriminator for "which published frame did the coalescing pull land on": the free-running
+    // LFO (default 5 Hz) advances Snapshot.lfoPhase by a fixed, non-zero increment on EVERY published
+    // processBlock, independent of notes/gate (Engine applyParamSnapshot, §8.4). seqStep is no longer
+    // a per-block counter (118d: it is the REAL sequencer slot, == the -1 sentinel here since nothing
+    // is playing), so lfoPhase is the live monotonic quantity that tells the frames apart.
+    //
+    // The LFO rate is Fast-smoothed, so first drive blocks until the per-block phase advance converges
+    // to a CONSTANT increment `inc` (two consecutive equal, non-zero deltas) before relying on it.
+    auto publishAndPull = [&]() -> std::uint32_t {
+        publishOneTelemetryFrame(processor);
+        editor->timerCallback();
+        REQUIRE(editor->lastPulledFrameForTest());
+        return editor->lastSnapshotForTest().lfoPhase;
+    };
+    std::uint32_t prevPhase = publishAndPull();
+    std::uint32_t prevDelta = 0u;
+    std::uint32_t inc       = 0u;
+    bool settled            = false;
+    for (int i = 0; i < 256 && !settled; ++i) {
+        const std::uint32_t cur = publishAndPull();
+        const std::uint32_t d   = cur - prevPhase;          // uint32 wrap-safe
+        if (d != 0u && d == prevDelta) { settled = true; inc = d; }
+        prevDelta = d;
+        prevPhase = cur;
+    }
+    REQUIRE(settled);        // the per-block advance converged -> the discriminator is live + constant
+    REQUIRE(inc != 0u);
+
+    const int repaintsAfterSettle = editor->scopeRepaintCountForTest();
+    const std::uint32_t base      = prevPhase;
+
+    // Publish three frames WITHOUT draining; the coalescing pull must jump straight to the
+    // MOST-RECENT (#3 => base + 3*inc), skipping #1 and #2 (base + 1*inc).
+    publishOneTelemetryFrame(processor);   // #1 -> base + 1*inc
+    publishOneTelemetryFrame(processor);   // #2 -> base + 2*inc
+    publishOneTelemetryFrame(processor);   // #3 -> base + 3*inc
 
     editor->timerCallback();
 
     // It pulled a frame (the newest), and triggered exactly one TARGETED scope repaint.
     REQUIRE(editor->lastPulledFrameForTest());
-    REQUIRE(editor->scopeRepaintCountForTest() == repaintsBefore + 1);
+    REQUIRE(editor->scopeRepaintCountForTest() == repaintsAfterSettle + 1);
     REQUIRE(editor->wholeEditorRepaintCountForTest() == 0);  // never whole-editor (C7)
-    REQUIRE(editor->lastSnapshotForTest().seqStep == 3);     // coalesced to the newest
+    // Coalesced to the NEWEST of the batch (#3 = 3 blocks of advance), NOT the oldest (#1 = 1 block).
+    const std::uint32_t pulled = editor->lastSnapshotForTest().lfoPhase;
+    REQUIRE(static_cast<std::uint32_t>(pulled - base) == static_cast<std::uint32_t>(3u * inc));
+    REQUIRE(static_cast<std::uint32_t>(pulled - base) != static_cast<std::uint32_t>(1u * inc));
 
     // The targeted region is a real, non-empty sub-rectangle of the editor (not the
     // whole bounds) — a dirty-rect, not a full invalidation (§8.4; ADR-015 C7).
@@ -95,7 +130,7 @@ TEST_CASE("ui_timer drains the SPSC to the most-recent snapshot and repaints onl
 
     // A second tick with nothing newly published is a no-op (coalescing returns false).
     editor->timerCallback();
-    REQUIRE(editor->scopeRepaintCountForTest() == repaintsBefore + 1);
+    REQUIRE(editor->scopeRepaintCountForTest() == repaintsAfterSettle + 1);
 }
 
 TEST_CASE("ui_timer reduce-motion downsamples the timer and idles the scope without touching bindings",
