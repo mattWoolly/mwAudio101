@@ -43,22 +43,35 @@ Wire the subsystem end-to-end, RT-safe, conforming to ADR-007 (sequencer/arp beh
 - Core test: after dispatching `seq.mode≠off` + a loaded pattern, the engine's sequencer reflects them
   (mode, count) and the arp mode/latch reach `arp_`; non-vacuous.
 
-**Task 182 — run-state seam + free-run gate + editor wiring (core + plugin; the end-to-end integration).**
-- `Engine::setSequencerPlaying(bool) noexcept` → `sequencer_.setSeqPlay` (a lock-free flag forward,
-  mirroring `setGateTrigMode`).
+**Task 182 — run-state TRANSPORT gate + free-run + editor wiring (core + plugin; the end-to-end integration).**
+
+RECONCILIATION (per the 181 QA): task 181's `dispatchSeqArp` is the SINGLE writer of
+`StepSequencer::setSeqPlay`, and it correctly maps `setSeqPlay(seq.mode==Play)` (seq.mode IS the
+persisted play/record state, design 05 §6.1/§6.3). Run/Hold is a DISTINCT transient transport (design
+10 §5.3), so 182 must NOT add a competing `setSequencerPlaying`/`setSeqPlay` writer (it would clobber,
+or be clobbered by, `dispatchSeqArp` every block — last-writer-wins). Instead 182 routes run/hold into
+the **`transportRunning` clock/ingress gate**, leaving `setSeqPlay` solely to 181's seq.mode dispatch.
+The existing gate `sequencerOwnsIngress = transportRunning && (seqPlaying || arpEnabled)`
+(`Engine.cpp:332`) then composes the two cleanly: `seqPlaying` = seq.mode==Play (181); `transportRunning`
+= run/hold ∧ free-run-rung (182). The sequencer advances iff BOTH (in Play mode AND transport running).
+
+- **No `setSequencerPlaying` seam.** Instead add a `runHeld` (transient, default false) input the Engine
+  reads in the gate: plumb it via `BlockContext`/`TransportInfo` (a new POD field the processor fills
+  each block) — consistent with the existing POD seam.
+- Replace `Engine.cpp:285` `transportRunning = ctx.transport.isPlaying` with
+  `transportRunning = runHeld && (clockSource==Internal ? true : ctx.transport.isPlaying)` (Internal
+  free-runs when RUN is held, per ADR-022; HostSync still requires the host to be playing). Get the
+  clock source from the dispatched snapshot (181) or the resolved `TransportRung` (stop discarding `caps`).
 - Processor: `std::atomic<bool> transportRunning_{false}` + `setTransportRunning(bool) noexcept`
-  (message-thread RELEASE store); `processBlock` loads it (ACQUIRE) and calls
-  `engine_.setSequencerPlaying(running)` before `process(ctx)`. RT-safe (one atomic read, one flag).
-  Run-state is transient — NOT persisted in `<extras>` (it must not survive reload).
+  (message-thread RELEASE store); `processBlock` loads it (ACQUIRE) and fills `ctx`'s `runHeld` each
+  block. RT-safe (one atomic read). Run-state is transient — NOT persisted in `<extras>`.
 - `MwAudioEditor` `onRunStateChanged` → `processor_.setTransportRunning(running)` (replace the 114c stub).
-- Free-run gate: honor the resolved `TransportRung` (stop discarding `caps`) so the **Internal** clock
-  advances regardless of host `isPlaying` (ADR-022); `HostSync` still holds when the host is stopped.
-  Plumb the rung into `BlockContext`/Engine, or gate on `clockSource==Internal ? always : transportRunning`.
 - **The missing plugin-level proving test:** drive `MwAudioProcessor` with a loaded ≥2-distinct-pitch
-  pattern, `setTransportRunning(true)`, run `processBlock` for several Internal-clock periods with
-  `isPlaying==false` (the Standalone case), and assert the output is the stepped pattern and
-  `currentSeqStep()` advances; `setTransportRunning(false)` → no advance. This is the editor→processor
-  →engine path the const_cast back door never covered.
+  pattern, **seq.mode=Play** (the play state) AND `setTransportRunning(true)` (the transport), run
+  `processBlock` for several Internal-clock periods with `isPlaying==false` (the Standalone case), and
+  assert the output is the stepped pattern and `currentSeqStep()` advances. Then prove the gate composes:
+  `setTransportRunning(false)` → no advance (transport off); and seq.mode≠Play with RUN held → no advance
+  (not in play mode). This is the editor→processor→engine path the const_cast back door never covered.
 
 ## Consequences
 
