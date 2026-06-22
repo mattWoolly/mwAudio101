@@ -326,28 +326,46 @@ TEST_CASE("note_ingress: a fractional data0 resolves to its integer MIDI note",
 // ke.pitch was a fixed negative base-relative key — every played key arped at the same
 // wrong pitch (and out-of-range keys could even be dropped from the 0..31 arp bitmap).
 //
-// Driven exactly as the engine_seq arp suite does (publishSnapshot + transport playing).
+// Driven through the PRODUCTION-AUTHORITATIVE path (task 181 / ADR-030 part 1): the arp is
+// engaged by the arp.mode + arp.latch APVTS params flowing through Engine::dispatchSeqArp
+// (the per-control-tick authority over the seq/arp snapshot), NOT the engine-internal
+// publishSnapshot back door. Since 181 made ctx.params the unconditional per-block authority
+// over arpMode/arpHold, a publishSnapshot(arpHold=true) injection would be clobbered to
+// arpHold=false the very next block; the migrated recipe mirrors DispatchSeqArpTest.
+//
+// The clock RATE (internalRateHz) has no APVTS param yet (that is task 182), so it is seeded
+// through publishSnapshot — a clock-RATE field dispatchSeqArp explicitly PRESERVES
+// (cp.internalRateHz = live->internalRateHz), so it survives the per-block dispatch and is
+// NOT clobbered. Only the arp config moves to ctx.params.
+//
 // We assert BOTH the deterministic RESOLVED voice note (currentNote(): the direct proof
 // ne.note -> ke.pitch -> recovered MIDI note carried data0) AND the audible rendered pitch.
 // ===========================================================================
 TEST_CASE("note_ingress: the running arp path routes the correct data0 note number",
           "[note_ingress]") {
     using mw::control::ControlSnapshot;
-    using mw::control::ArpMode;
     using mw::control::ClockSource;
-
-    Snap snap;   // saw-only INIT mixer so the resolved note sounds at its fundamental
 
     auto resolvedAndAudio = [&](int midiNote) {
         mw::Engine eng; eng.prepare(kSr, kMaxBlock, kMaxVoices);
 
-        // Arp UP + HOLD on, internal clock, clock-reset off — the engine_seq arp recipe.
+        // Saw-only INIT mixer + the arp config driven through ctx.params (the production
+        // authority): arp.mode = Up (choice 1) and arp.latch ON (choice 1) -> dispatchSeqArp
+        // sets cp.arpMode = Up and cp.arpHold = true on every block. A held MIDI key + the
+        // HOLD latch engages the arp so the seq engine owns note ingress (doc 05 §5.1).
+        // arp.tempo_sync OFF (choice 0) -> dispatchSeqArp keeps clockSource = Internal (its
+        // default is ON, which would force HostSync and override the Internal seed below).
+        Snap snap;
+        snap.setChoice(mw::params::ids::kArpMode,      /*Up*/  1);
+        snap.setChoice(mw::params::ids::kArpLatch,     /*on*/  1);
+        snap.setChoice(mw::params::ids::kArpTempoSync, /*off*/ 0);
+
+        // Seed only the clock RATE (50 Hz, internal) through the state seam. dispatchSeqArp
+        // preserves internalRateHz (no rate param until task 182), so 50 Hz survives every
+        // per-block dispatch; arp.mode/arp.latch/tempo_sync above are the live arp authority.
         ControlSnapshot s{};
-        s.clockSource          = ClockSource::Internal;
-        s.internalRateHz       = 50.0f;
-        s.arpMode              = ArpMode::Up;
-        s.arpHold              = true;        // arp ENABLED -> seq engine owns note ingress
-        s.clockResetOnKeypress = false;
+        s.clockSource    = ClockSource::Internal;
+        s.internalRateHz = 50.0f;
         auto& seq = const_cast<mw::seq::SequencerEngine&>(eng.sequencer());
         seq.publishSnapshot(s);
 

@@ -148,10 +148,21 @@ void SequencerEngine::applyControlParams(const ControlParams& p) noexcept {
 
     // Mirror the dynamic scalar fields into the LIVE snapshot slot so liveSnapshot() — read
     // by the Engine's routing gate (renderChunk: arpEnabled == liveSnapshot()->arpHold) and
-    // the clock-reset-on-keypress check in processBlock — tracks the live params. The audio
-    // thread is the sole writer of these scalar fields on the hot path; the message-thread
-    // publishSnapshot writes the INACTIVE slot then swaps, so this in-place scalar update of
-    // the active slot does not race a publish (it mirrors reset()'s audio-thread re-apply).
+    // the clock-reset-on-keypress check in processBlock — tracks the live params.
+    //
+    // THREADING CONTRACT (single-audio-thread-writer; ADR-030) — this writes the ACTIVE
+    // double-buffer slot IN PLACE from the audio thread, in contrast to publishSnapshot(),
+    // which fills the INACTIVE slot then RELEASE-swaps the live pointer off the message
+    // thread. That is SAFE only because the audio thread is the SOLE writer of these scalar
+    // fields on the hot path AND publishSnapshot has NO production caller racing it (state
+    // restore happens off-thread before transport; cf. the grep in task 181's QA). This
+    // in-place active-slot update mirrors reset()'s audio-thread re-apply and never collides
+    // with a publish, which only ever touches the inactive slot. INVARIANT FOR THE FUTURE:
+    // if a message-thread ControlSnapshot publisher is ever added that runs CONCURRENTLY with
+    // process() (e.g. a live editor pushing internalRateHz before task 182's rate param
+    // lands), it MUST reconcile with this audio-thread writer — publish into the inactive
+    // slot and let the audio thread own these scalar fields, or move this mirror behind the
+    // same RELEASE swap — so the active slot keeps a single writer [forward ref: ADR-030].
     // The seq buffer / seqCount are left untouched (owned by loadPattern / capture).
     ctl::ControlSnapshot& live = slots_[static_cast<std::size_t>(activeSlot_)];
     live.arpMode              = p.arpMode;
