@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 180
 title: LFO multi-destination routing fix — apply all three legs simultaneously (ADR-029 / QA-154-3)
-status: todo
+status: in-review
 depends-on: [162, 154]
 component: dsp
 estimated-size: S

@@ -261,30 +261,42 @@ TEST_CASE("dispatch_gap: vco pwm_depth narrows the pulse duty with the LFO off (
     REQUIRE(narrow > square * 3.0);
 }
 
-// The manual depth is DISTINCT from the LFO->PWM path: with the LFO still OFF, lfo.depth_pwm
-// moved low-vs-high does NOTHING (no LFO routed to PWM), while vco.pwm_depth low-vs-high
-// changes the duty. This is the discriminator the 165 finding asked for.
+// The manual depth is DISTINCT from the LFO->PWM path — they are two SEPARATELY ADDRESSABLE
+// controls over the same duty dimension, NOT an exclusive mux. Per ADR-029 / task 180 the LFO->PWM
+// leg is ALWAYS active (lfo.dest only EMPHASIZES; it never gates), so each control narrows the duty
+// (raising the even/2nd harmonic) ON ITS OWN with the other held at zero — neither requires the
+// other, and the LFO leg works even with dest != PWM. (Updated from the pre-ADR-029 contract,
+// which wrongly asserted lfo.depth_pwm was inert at dest != PWM — exactly the QA-154-3 single-dest
+// gating regression task 180 removes. The amplitude-envelope wobble is NOT used to discriminate
+// here: at a fully-open filter a duty change moves harmonic CONTENT, not total RMS energy.)
 TEST_CASE("dispatch_gap: vco pwm_depth is the manual path distinct from lfo depth_pwm",
           "[dispatch_gap]") {
     const int    note = 60;
     const double f0   = midiHz442(note);
 
-    auto secondHarmonic = [&](float manualDepth, float lfoPwmDepth) {
+    // Even (2nd) harmonic ratio: the duty discriminator. ~0 for a 50% square, rises as the duty
+    // narrows off 50% (whether by the manual bias or by the LFO sweeping the duty over time).
+    auto h2Ratio = [&](float manualDepth, float lfoPwmDepth) {
         Snap sn; flatPulse(sn);
-        sn.setChoice(P::kLfoDest, 0);             // LFO NOT routed to PWM
+        sn.setChoice(P::kLfoDest, 0);             // dest = Pitch, NOT PWM (the LFO leg stays active)
+        sn.setCont(P::kLfoRate, 5.0f);
+        sn.setCont(P::kLfoDelay, 0.0f);
+        sn.setCont(P::kLfoDepthPitch, 0.0f);      // isolate the PWM dimension
+        sn.setCont(P::kLfoDepthCutoff, 0.0f);
         sn.setCont(P::kLfoDepthPwm, lfoPwmDepth);
         sn.setCont(P::kVcoPwmDepth, manualDepth);
-        return secondOverFirst(freshHeld(&sn.s, note, 0.30), f0, kSr);
+        return secondOverFirst(freshHeld(&sn.s, note, 0.8), f0, kSr);
     };
 
-    // With the LFO dest != PWM, moving lfo.depth_pwm has no effect (LFO not routed to PWM).
-    const double lfoOnly0 = secondHarmonic(0.0f, 0.0f);
-    const double lfoOnly1 = secondHarmonic(0.0f, 1.0f);
-    REQUIRE(lfoOnly1 == Catch::Approx(lfoOnly0).epsilon(0.05));   // lfo.depth_pwm inert here
+    const double base   = h2Ratio(0.0f, 0.0f);   // base square: weak 2nd harmonic
+    const double manual = h2Ratio(1.0f, 0.0f);   // MANUAL depth alone, LFO->PWM at zero
+    const double lfo    = h2Ratio(0.0f, 1.0f);   // LFO->PWM alone, manual at zero (dest=Pitch)
 
-    // The MANUAL depth, in contrast, changes the duty on its own.
-    const double manual1 = secondHarmonic(1.0f, 0.0f);
-    REQUIRE(manual1 > lfoOnly0 * 3.0);
+    // Each control narrows the duty ON ITS OWN — two separately addressable paths over the same
+    // dimension. The manual path works with the LFO->PWM leg at zero; the LFO path works with the
+    // manual depth at zero AND with dest != PWM (the always-active routing ADR-029 restores).
+    REQUIRE(manual > base * 3.0);   // manual PWM narrows the duty by itself
+    REQUIRE(lfo    > base * 3.0);   // LFO->PWM narrows the duty by itself (active at dest != PWM)
 }
 
 // =====================================================================================
@@ -324,10 +336,10 @@ TEST_CASE("dispatch_gap: vcf lfo_mod makes the LFO modulate the filter cutoff",
     REQUIRE(wobbly > flat * 5.0);            // the wobble is unmistakable in the envelope
 }
 
-// The VCF-panel lfo_mod is DISTINCT from lfo.depth_cutoff and SUMS WITH it: it wobbles the
-// cutoff even when the LFO dest switch is on a DIFFERENT destination (Pitch), where
-// lfo.depth_cutoff would contribute nothing. (lfo.depth_cutoff only fires at dest==Filter; the
-// VCF panel routes the LFO to cutoff regardless of the panel switch.)
+// The VCF-panel lfo_mod is DISTINCT from lfo.depth_cutoff and SUMS WITH it: here lfo.depth_cutoff
+// is held at ZERO, so the VCF-panel lfo_mod is the ONLY cutoff-LFO term, and it wobbles the cutoff
+// regardless of the dest switch (dest=Pitch below). This proves the VCF-panel path is a SEPARATE
+// always-active depth control, independent of the lfo.dest emphasis selector (ADR-029 / task 180).
 TEST_CASE("dispatch_gap: vcf lfo_mod routes the LFO to cutoff independent of the lfo dest switch",
           "[dispatch_gap]") {
     auto wobbleAt = [&](int lfoDest, float lfoDepthCutoff, float vcfLfoMod) {

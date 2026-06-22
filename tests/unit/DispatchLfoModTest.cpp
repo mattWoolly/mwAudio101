@@ -414,6 +414,134 @@ TEST_CASE("dispatch_lfo: LFO to PWM sweeps the pulse duty over time",
 }
 
 // ===========================================================================
+// SIMULTANEITY (task 180 / ADR-029 / QA-154-3): the single LFO drives ALL THREE fixed
+// destinations AT ONCE, each by its OWN depth — the ratified ADR-007 always-active topology
+// (docs/design/05 §3.3 "always", docs/design/03 §3.6 "fixed with per-destination depths").
+// With lfo.depth_pitch>0 AND lfo.depth_pwm>0 AND lfo.depth_cutoff>0 set TOGETHER on one held
+// pulse voice, the rendered output must show ALL THREE effects at once:
+//   * pitch vibrato  -> the fundamental SPREADS into sidebands (on-bin power drops);
+//   * PWM sweep      -> the even (2nd) harmonic energy RISES (duty swept off 50%);
+//   * filter wobble  -> the amplitude-envelope AC energy RISES (cutoff swung).
+//
+// FAILS against the as-built single-leg `switch (c.lfoDest)` (Voice.cpp ~L252-256, the bug
+// QA-154-3 cites): with dest=Pitch (the switch `default:`) the old code applies ONLY the pitch
+// leg and ZEROES lfoCutoffOct + lfoPwmNorm, so the PWM and filter metrics would stay at their
+// off-baseline and the two RISE assertions below would fail. (Mutation under which it fails:
+// the single-leg switch that gates the three legs on lfo.dest.)
+//
+// NON-VACUOUS: each leg's effect is established INDEPENDENTLY first — a per-leg baseline with
+// ONLY that depth up is measured to move its own metric, so the combined assertion is not a
+// tautology and no single dominant leg can mask a dead one.
+// ===========================================================================
+TEST_CASE("dispatch_lfo: the single LFO modulates pitch PWM and cutoff simultaneously each tick",
+          "[dispatch_lfo]") {
+    const double f0 = midiHz(60);
+
+    // One probe voice: a pulse-only square (base duty 50% => weak 2nd harmonic), a partly-closed
+    // resonant filter (so a cutoff swing wobbles the amplitude AND the duty sweep survives), and
+    // a fixed LFO rate. dest=Pitch deliberately — the OLD switch's `default:` leg, which would
+    // zero the PWM + cutoff legs; the fix applies all three regardless of dest.
+    auto probe = [&](float depthPitch, float depthPwm, float depthCutoff) {
+        Snap snap;
+        snap.setCont(mw::params::ids::kSawLevel, 0.0f);          // pulse-only
+        snap.setCont(mw::params::ids::kPulseLevel, 1.0f);
+        snap.setCont(mw::params::ids::kVcoPw, 0.0f);             // base square (~zero 2nd harmonic)
+        snap.setChoice(mw::params::ids::kLfoDest, 0);            // Pitch (old switch `default:` leg)
+        snap.setCont(mw::params::ids::kLfoRate, 5.0f);
+        snap.setCont(mw::params::ids::kLfoDelay, 0.0f);          // instant full depth
+        snap.setCont(mw::params::ids::kLfoDepthPitch, depthPitch);
+        snap.setCont(mw::params::ids::kLfoDepthPwm, depthPwm);
+        snap.setCont(mw::params::ids::kLfoDepthCutoff, depthCutoff);
+        snap.setCont(mw::params::ids::kVcfCutoff, 0.5f);         // partly open so a swing wobbles amp
+        snap.setCont(mw::params::ids::kVcfResonance, 0.55f);
+        snap.setCont(mw::params::ids::kVcfEnvMod, 0.0f);         // isolate the LFO from the env
+        snap.setCont(mw::params::ids::kVcfKbdTrack, 0.0f);
+        snap.setCont(mw::params::ids::kVcfLfoMod, 0.0f);         // isolate the LFO-PANEL cutoff leg
+        mw::Engine eng; eng.prepare(kSr, kMaxBlock, kMaxVoices);
+        auto buf = renderHeld(eng, &snap.s, 60, 1.0);
+
+        struct Metrics { double centerFrac, h2Ratio, envAc; } m{};
+        double tot = 0.0; for (float v : buf) tot += static_cast<double>(v) * v;
+        m.centerFrac = goertzelPower(buf, f0, kSr) / std::max(1e-12, tot);   // ON-bin fraction
+        const double h1 = goertzelPower(buf, f0, kSr);
+        const double h2 = goertzelPower(buf, 2.0 * f0, kSr);
+        m.h2Ratio = h2 / std::max(1e-12, h1);                                // 2nd-harmonic ratio
+        m.envAc   = envAcEnergy(rmsEnvelope(buf, 128));                      // amplitude wobble
+        return m;
+    };
+
+    // --- baselines (each leg established INDEPENDENTLY so the combined test is non-vacuous) ---
+    const auto allOff    = probe(0.0f, 0.0f, 0.0f);  // LFO depths zero: reference for all metrics
+    const auto pitchOnly = probe(1.0f, 0.0f, 0.0f);  // only pitch leg up
+    const auto pwmOnly   = probe(0.0f, 1.0f, 0.0f);  // only PWM leg up
+    const auto cutOnly   = probe(0.0f, 0.0f, 1.0f);  // only cutoff leg up
+
+    // Each leg, alone, moves its OWN metric (proves the metric is sensitive => non-vacuous).
+    REQUIRE(pitchOnly.centerFrac < allOff.centerFrac * 0.85);   // vibrato de-concentrates fundamental
+    REQUIRE(pwmOnly.h2Ratio      > allOff.h2Ratio * 3.0);       // PWM sweep injects even harmonics
+    REQUIRE(cutOnly.envAc        > allOff.envAc * 3.0);         // cutoff swing wobbles the amplitude
+
+    // --- the SIMULTANEITY assertion: all three depths up AT ONCE move ALL THREE metrics ---
+    const auto all = probe(1.0f, 1.0f, 1.0f);
+    REQUIRE(all.centerFrac < allOff.centerFrac * 0.85);   // pitch STILL vibrates with the others up
+    REQUIRE(all.h2Ratio    > allOff.h2Ratio * 3.0);       // PWM STILL sweeps (old switch zeroed this)
+    REQUIRE(all.envAc      > allOff.envAc * 3.0);         // cutoff STILL wobbles (old switch zeroed this)
+}
+
+// ===========================================================================
+// lfo.dest is NON-DESTRUCTIVE (task 180 / ADR-029): selecting a destination must NOT zero the
+// other two legs. docs/design/06 ~L381 — lfo.dest "EMPHASIZES" a destination; it is an emphasis
+// selector, NOT an exclusive mux. With dest=Pitch chosen AND depth_pwm>0 AND depth_cutoff>0, the
+// PWM + cutoff legs MUST STILL modulate (the as-built switch zeroed them — exactly the regression).
+// Proven by sweeping dest across all three positions: the PWM 2nd-harmonic ratio and the cutoff
+// envelope-wobble stay HIGH (near their dest=PWM / dest=Filter values) for EVERY dest selection.
+// ===========================================================================
+TEST_CASE("dispatch_lfo: lfo.dest selection does not zero the non-selected destinations",
+          "[dispatch_lfo]") {
+    const double f0 = midiHz(60);
+
+    // depth_pwm AND depth_cutoff up; pitch left at 0 so the metrics read cleanly. Vary only dest.
+    auto metricsForDest = [&](int destIdx) {
+        Snap snap;
+        snap.setCont(mw::params::ids::kSawLevel, 0.0f);          // pulse-only
+        snap.setCont(mw::params::ids::kPulseLevel, 1.0f);
+        snap.setCont(mw::params::ids::kVcoPw, 0.0f);             // base square
+        snap.setChoice(mw::params::ids::kLfoDest, destIdx);      // 0 Pitch / 1 Filter / 2 PWM
+        snap.setCont(mw::params::ids::kLfoRate, 5.0f);
+        snap.setCont(mw::params::ids::kLfoDelay, 0.0f);
+        snap.setCont(mw::params::ids::kLfoDepthPitch, 0.0f);
+        snap.setCont(mw::params::ids::kLfoDepthPwm, 1.0f);
+        snap.setCont(mw::params::ids::kLfoDepthCutoff, 1.0f);
+        snap.setCont(mw::params::ids::kVcfCutoff, 0.5f);
+        snap.setCont(mw::params::ids::kVcfResonance, 0.55f);
+        snap.setCont(mw::params::ids::kVcfEnvMod, 0.0f);
+        snap.setCont(mw::params::ids::kVcfKbdTrack, 0.0f);
+        snap.setCont(mw::params::ids::kVcfLfoMod, 0.0f);
+        mw::Engine eng; eng.prepare(kSr, kMaxBlock, kMaxVoices);
+        auto buf = renderHeld(eng, &snap.s, 60, 1.0);
+        const double h1 = goertzelPower(buf, f0, kSr);
+        const double h2 = goertzelPower(buf, 2.0 * f0, kSr);
+        struct M { double h2Ratio, envAc; };
+        return M{ h2 / std::max(1e-12, h1), envAcEnergy(rmsEnvelope(buf, 128)) };
+    };
+
+    const auto onPitch  = metricsForDest(0);   // dest=Pitch  (old `default:` zeroed pwm+cutoff)
+    const auto onFilter = metricsForDest(1);   // dest=Filter (old `case 1:` zeroed pwm+pitch)
+    const auto onPwm    = metricsForDest(2);   // dest=PWM    (old `case 2:` zeroed cutoff+pitch)
+
+    // The PWM sweep is present for EVERY dest selection (it is never gated off by dest now). The
+    // old switch made it present ONLY at dest=PWM — so dest=Pitch/Filter would read ~0 there.
+    REQUIRE(onPitch.h2Ratio  > 0.02);   // pwm STILL sweeps with dest=Pitch  (old: zeroed -> ~0)
+    REQUIRE(onFilter.h2Ratio > 0.02);   // pwm STILL sweeps with dest=Filter (old: zeroed -> ~0)
+    REQUIRE(onPwm.h2Ratio    > 0.02);   // pwm sweeps with dest=PWM too (the always-on baseline)
+
+    // The cutoff wobble is present for EVERY dest selection likewise. The old switch made it
+    // present ONLY at dest=Filter — so dest=Pitch/PWM would read a flat (un-wobbled) envelope.
+    REQUIRE(onPitch.envAc  > onFilter.envAc * 0.5);   // cutoff STILL wobbles with dest=Pitch
+    REQUIRE(onPwm.envAc    > onFilter.envAc * 0.5);   // cutoff STILL wobbles with dest=PWM
+}
+
+// ===========================================================================
 // VELOCITY -> VCA/VCF (routing wired; live velocity BLOCKED at the VoiceManager seam).
 //
 // The velocity->VCA (post-VCA gain) and velocity->VCF (cutoff CV) routing IS implemented in

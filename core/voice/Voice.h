@@ -133,16 +133,21 @@ struct VoiceControls {
     // here (rate/shape) and ADVANCED at the control-tick cadence in applyControls (the
     // same reconciliation the glide uses: the old per-sample lfo_.tick() in render() is
     // REMOVED so the LFO is sampled exactly once per tick and routed). Its bipolar [-1,1]
-    // output is scaled by the per-dest depth and SUMMED into the existing 160/161 CVs:
-    //   dest=Pitch  -> + lfoOut * lfoPitchDepthVolts   into the pitch CV (vibrato)
-    //   dest=Filter -> + lfoOut * lfoCutoffDepthOct     into the cutoff CV (wobble)
-    //   dest=Pwm    -> + lfoOut * lfoPwmDepthNorm       into the PWM CV (PWM sweep)
-    // lfoDelaySec fades the depth in over time from the keypress; the effective depths
-    // already fold in the mod.lfo_mod_wheel routing param scaled by the LIVE mod-wheel
-    // position (consumed from CC1 MidiEvents / BlockContext::controllers by task 162c). ---
+    // output is scaled by EACH per-dest depth and SUMMED into ALL THREE existing 160/161 CVs
+    // EVERY tick — the ratified ADR-007 always-active three-destination topology, restored by
+    // task 180 / ADR-029 (docs/design/05 §3.3 "always"; docs/design/03 §3.6 "fixed with
+    // per-destination depths, not a matrix"):
+    //   + lfoOut * lfoPitchDepthVolts   into the pitch CV  (vibrato)
+    //   + lfoOut * lfoCutoffDepthOct    into the cutoff CV (wobble)
+    //   + lfoOut * lfoPwmDepthNorm      into the PWM CV    (PWM sweep)
+    // lfo.dest is a NON-DESTRUCTIVE EMPHASIS selector (docs/design/06 ~L381), NOT a mux: it scales
+    // each leg by a (PI) emphasis gain (selected vs unselected, both ×1.0 by default) — it never
+    // zeroes a non-selected destination. lfoDelaySec fades the depth in over time from the keypress;
+    // the effective depths already fold in the mod.lfo_mod_wheel routing param scaled by the LIVE
+    // mod-wheel position (consumed from CC1 MidiEvents / BlockContext::controllers by task 162c). ---
     float                lfoRateHz       = 5.0f;
     mw101::dsp::LfoShape lfoShape        = mw101::dsp::LfoShape::SmoothTri;
-    int                  lfoDest         = 0;     // 0 Pitch / 1 Filter / 2 PWM (decoded enum)
+    int                  lfoDest         = 0;     // 0 Pitch / 1 Filter / 2 PWM (emphasis selector)
     float                lfoPitchDepthVolts = 0.0f;  // peak pitch-CV swing at this depth (volts)
     float                lfoCutoffDepthOct  = 0.0f;  // peak cutoff-CV swing at this depth (octaves)
     float                lfoPwmDepthNorm    = 0.0f;  // peak PWM-CV swing at this depth (norm)

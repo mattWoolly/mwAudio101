@@ -244,23 +244,34 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
 
     const float lfoEff = lfoOut * lfoDelayScale;   // delayed bipolar LFO output
 
-    // Route to EXACTLY ONE destination per lfo.dest (the single MOD switch). Each term is the
-    // bipolar LFO times the per-dest depth (already scaled to volts/octaves/norm by the Engine).
-    float lfoPitchVolts = 0.0f;     // -> summed into the pitch CV (vibrato)
-    float lfoCutoffOct  = 0.0f;     // -> summed into the cutoff CV (wobble)
-    float lfoPwmNorm    = 0.0f;     // -> summed into the PWM CV (PWM sweep)
-    switch (c.lfoDest) {
-        case 1:  lfoCutoffOct = lfoEff * c.lfoCutoffDepthOct;   break;  // Filter
-        case 2:  lfoPwmNorm   = lfoEff * c.lfoPwmDepthNorm;     break;  // PWM
-        default: lfoPitchVolts = lfoEff * c.lfoPitchDepthVolts; break;  // Pitch
-    }
+    // Route the single LFO value to ALL THREE FIXED DESTINATIONS every control tick, each scaled
+    // by its OWN depth — the ratified ADR-007 §Decision item 1 always-active topology, restored by
+    // task 180 / ADR-029 (closing QA-154-3). docs/design/05 §3.3 marks LFO->VCO pitch and
+    // LFO->VCF cutoff "always"; docs/design/03 §3.6: "Routing is fixed with per-destination depths,
+    // not a matrix." This mirrors the sibling vcfLfoModCutoffOct leg below, which is already applied
+    // UNCONDITIONALLY. (The earlier single-leg `switch (c.lfoDest)` applied exactly ONE leg per tick
+    // and zeroed the other two — the regression; its comment mis-cited docs/design/03 §3.2, which
+    // governs the LFO WAVEFORM being single-select, NOT the destinations.)
+    //
+    // lfo.dest is now a NON-DESTRUCTIVE EMPHASIS selector (docs/design/06 ~L381 "emphasizes"), NOT a
+    // mux: each leg's depth is multiplied by lfoEmphasisGain(dest, leg) — selected vs unselected,
+    // both (PI) ×1.0 by default so dest changes NOTHING until a deliberate emphasis curve is ratified
+    // (the gains live in ControlDispatchLfoConstants.h; the unselected gain MUST stay > 0). Each term
+    // is the bipolar LFO × the per-dest depth (already scaled to volts/octaves/norm by the Engine).
+    const auto lfoDest = static_cast<cal::dispatch::LfoDest>(c.lfoDest);
+    const float lfoPitchVolts = lfoEff * c.lfoPitchDepthVolts                  // -> pitch CV (vibrato)
+                              * cal::dispatch::lfoEmphasisGain(lfoDest, cal::dispatch::LfoDest::Pitch);
+    const float lfoCutoffOct  = lfoEff * c.lfoCutoffDepthOct                   // -> cutoff CV (wobble)
+                              * cal::dispatch::lfoEmphasisGain(lfoDest, cal::dispatch::LfoDest::Filter);
+    const float lfoPwmNorm    = lfoEff * c.lfoPwmDepthNorm                     // -> PWM CV (PWM sweep)
+                              * cal::dispatch::lfoEmphasisGain(lfoDest, cal::dispatch::LfoDest::Pwm);
 
     // VCF-panel LFO->cutoff (mw101.vcf.lfo_mod, task 162e): the VCF module's OWN LFO mod amount,
-    // DISTINCT from the LFO panel's lfo.depth_cutoff (lfoCutoffOct above, gated by the single MOD
-    // dest switch). The VCF panel routes the per-voice LFO to the cutoff REGARDLESS of the dest
-    // switch, so this term is computed UNCONDITIONALLY (not inside the dest switch) and SUMMED
-    // ALONGSIDE lfoCutoffOct into the cutoff CV below. Same bipolar lfoEff, scaled to octaves by
-    // the Engine. Zero when vcf.lfo_mod == 0 [docs/design/02 §1.2; docs/design/05 §3.1; ADR-028].
+    // DISTINCT from the LFO panel's lfo.depth_cutoff (lfoCutoffOct above). Both the LFO-panel cutoff
+    // leg and this VCF-panel leg are always-active per-destination depths (ADR-007 / task 180); this
+    // is a SEPARATE depth control (its own param) summed ALONGSIDE lfoCutoffOct into the cutoff CV
+    // below. Same bipolar lfoEff, scaled to octaves by the Engine. Zero when vcf.lfo_mod == 0
+    // [docs/design/02 §1.2; docs/design/05 §3.1; ADR-028].
     const float vcfLfoModCutoffOct = lfoEff * c.vcfLfoModDepthOct;
 
     // --- assemble the oscillator-section control block (§7.2) ---------------------------
@@ -273,8 +284,9 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
     // Vibrato + drift ride on TOP of the slewed base pitch (not glided). The PWM CV is the base
     // width (mw101.vco.pw) + the MANUAL static PWM depth (manualPwmDepthNorm, mw101.vco.pwm_depth,
     // task 162e — an LFO-INDEPENDENT duty bias, DISTINCT from the LFO->PWM sweep lfoPwmNorm below)
-    // + the LFO PWM-sweep term (lfoPwmNorm, mw101.lfo.depth_pwm, fires only at dest==PWM) + the
-    // var.pw drift (pwDriftNorm), clamped to [0,1] duty [docs/design/01 §4.6; docs/design/05 §3.1].
+    // + the LFO PWM-sweep term (lfoPwmNorm, mw101.lfo.depth_pwm, ALWAYS active per its own depth —
+    // ADR-007 / task 180; lfo.dest only emphasizes, never gates) + the var.pw drift (pwDriftNorm),
+    // clamped to [0,1] duty [docs/design/01 §4.6; docs/design/05 §3.1].
     mw101::dsp::OscillatorSection::Controls oc{};
     oc.vco.pitchCvVolts = pitchCv + lfoPitchVolts + c.bendVcoVolts
                         + c.pitchRefVolts + c.pitchDriftVolts + c.mpeBendVolts;
@@ -303,7 +315,8 @@ void Voice::applyControls(const VoiceControls& c, int advanceSamples) noexcept {
     // filter cutoff is a control-rate setter, not a per-sample one). Pure arithmetic +
     // one table-backed setter; noexcept, alloc-free [docs/design/02 §5.2; ADR-003 F-08].
     // The summed cutoff CV adds the task-162 modulators on top of the 161 terms: the LFO
-    // wobble (lfoCutoffOct, octaves of CV, when dest=Filter), the velocity->cutoff term
+    // wobble (lfoCutoffOct, octaves of CV, ALWAYS active per its own depth — ADR-007 / task 180;
+    // lfo.dest emphasizes but never gates), the velocity->cutoff term
     // (velCutoffVolts, a hard key opens the filter when vel.enable), and the resolved
     // pitch-bend->VCF term (bendVcfVolts; LIVE wheel via task 162c). All are volts in the same
     // 1 V/oct CV frame the filter consumes [docs/design/02 §1.2; ADR-028 item 3].
