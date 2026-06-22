@@ -258,17 +258,25 @@ void MwAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
     lastBendUnit_ = ctx.controllers.pitchBend;   // test introspection (plain member write)
     lastModWheel_ = ctx.controllers.modWheel;
 
+    // 7c. ADOPT the latest message-thread-published seq pattern + LOAD it into the engine
+    //     BEFORE the render so this block's StepSequencer plays the current pattern (task
+    //     181; ADR-030 part 1). adopt() is ONE ACQUIRE atomic-pointer load + a trivial POD
+    //     copy; the audio thread NEVER parses a tree, allocates, or locks [docs/design/10-ui.md
+    //     §9.3; docs/design/00 §5.4; ADR-008 C19]. engine_.loadSeqPattern() is the new seam
+    //     that transcodes the <extras> POD into the control-core SeqBuffer and loads it into
+    //     the hosted StepSequencer — change-gated (it re-phases playback only when the pattern
+    //     actually differs), so calling it every block is RT-safe and does not rewind the
+    //     playhead under a steady pattern. This REPLACES the task-111c test-only dead end where
+    //     lastAdoptedSeq_ was read solely by adoptedSeqPatternForTest() (ADR-030 break Q2: the
+    //     edited/preset pattern never reached the engine, count_==0 forever). lastAdoptedSeq_
+    //     is still kept for the test introspection accessor.
+    lastAdoptedSeq_ = seqPatternHandoff_.adopt();
+    engine_.loadSeqPattern(lastAdoptedSeq_);
+
     // 8. Pure render through the seam (the engine writes its stereo output directly into
     //    the borrowed host channels) [ADR-001 C3].
     engine_.process(ctx);
     ++processCalls_;
-
-    // 8b. ADOPT the latest message-thread-published seq pattern: ONE ACQUIRE atomic-
-    //     pointer load + a trivial POD copy. The audio thread NEVER parses a tree,
-    //     allocates, or locks — it only adopts a published POD [docs/design/10-ui.md §9.3;
-    //     docs/design/00 §5.4; ADR-008 C19]. (Held for the seq subsystem + test
-    //     introspection; the live playhead step authority is the control core.)
-    lastAdoptedSeq_ = seqPatternHandoff_.adopt();
 
     // 8c. PUBLISH one audio->GUI telemetry frame for this block via the 107 SPSC Producer
     //     — a seqlock byte copy: NO heap alloc, NO lock [docs/design/10-ui.md §8.3, §8.4;

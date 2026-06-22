@@ -63,6 +63,7 @@
 #include "control/ControlCore.h"
 #include "control/ControlTypes.h"     // KeyEvent / ControlEvent PODs (doc 05 §2.3)
 #include "control/SequencerEngine.h"  // arp/seq/clock fixed-order state machine (task 087)
+#include "state/Extras.h"             // the <extras> seq-pattern POD the load seam adopts (task 181)
 #include "dsp/fx/FxChain.h"
 #include "dsp/drift/DriftModel.h"     // the analog-character drift/vintage/variance engine (task 164)
 
@@ -98,6 +99,17 @@ public:
     // MONO/UNISON note-priority authority that the engine's render path resolves
     // (task 118b reconcile). A lock-free flag write; safe from the audio thread.
     void setGateTrigMode(GateTrigMode m) noexcept { voices_.setGateTrigMode(m); }
+
+    // Load an edited / preset sequencer pattern (the <extras> SeqStep buffer) into the
+    // hosted StepSequencer so SequencerGrid edits + preset patterns reach the engine and
+    // count_>0 (task 181; ADR-030 part 1 — closes break Q2's "pattern never reaches the
+    // engine"). Converts the mw::state::Extras POD (note/gate/tie/rest) into the control
+    // core's 6-bit SeqBuffer and forwards to SequencerEngine::loadPattern. RT-safe: a
+    // bounded fixed-array transcode + a POD copy, no heap, no lock; noexcept. The load only
+    // re-phases playback (StepSequencer::loadBuffer) when the incoming pattern actually
+    // DIFFERS from the one already loaded, so the processor can call this every block (it
+    // adopts the lock-free SPSC handoff each block) without rewinding the playhead.
+    void loadSeqPattern(const mw::state::Extras& pattern) noexcept;
 
     // --- accessors (for tests; no audio-thread state mutation) -----------------------
     [[nodiscard]] bool   isPrepared() const noexcept { return prepared_; }
@@ -192,6 +204,22 @@ private:
     // per-tick call; task 162 (LFO/mod) extends it further the same way.
     void applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noexcept;
 
+    // THE SEQ/ARP CONTROL-TICK DISPATCH (task 181; ADR-030 part 1; the ADR-028 idiom
+    // extended to the seq/arp params). Decode the seq.*/arp.* slots from the snapshot and
+    // drive the hosted SequencerEngine + Arp + StepSequencer, so the subsystem stops
+    // running on the INIT-default ControlSnapshot (arpHold=false, arpMode=Up, not playing).
+    // Decodes:
+    //   * arp.mode (direction) + arp.latch -> SequencerEngine::ControlParams.arpMode/arpHold;
+    //   * arp/seq.tempo_sync + sync_div     -> the clock source (HostSync/Internal) + HostRate;
+    //   * seq.mode { Off, Play, Record }     -> the StepSequencer PLAY / RECORD toggles.
+    // A SINGLE shared clock drives arp + seq (the hardware has one clock); when seq.mode is
+    // an active driver (Play/Record) the seq's tempo_sync/sync_div own the clock, otherwise
+    // the arp's do. The internal-clock RATE authority + the Standalone free-run gate are
+    // task 182 (ADR-030) — this leaves the live snapshot's internalRateHz untouched. Called
+    // on the same per-control-tick path as applyParamSnapshot. RT-safe: a POD decode +
+    // lock-free setters, no heap, no lock; noexcept [ADR-028; ADR-030 part 1].
+    void dispatchSeqArp(const ParamSnapshot& snap) noexcept;
+
     // Decode the snapshot into the shared VCO/mixer/glide VoiceControls fields (the parts
     // that are the SAME for every active voice). Per-voice pitch (which depends on each
     // voice's resolved note) is filled in applyParamSnapshot. Pure arithmetic; noexcept.
@@ -252,6 +280,15 @@ private:
     // (-1 == none), so a step transition issues the right NoteOff(prev)/NoteOn(new). Set
     // on the single-threaded audio path only.
     int seqHeldNote_   = -1;
+    // The pattern most recently loaded into the StepSequencer through loadSeqPattern (task
+    // 181). The processor adopts the lock-free SPSC seq-pattern handoff every block and
+    // forwards it here; we only re-load (and thus re-phase playback) when the incoming POD
+    // DIFFERS from this shadow, so a steady pattern does not rewind the playhead every
+    // block. A by-value POD copy written only on the single-threaded audio path; no alloc,
+    // no lock. seqPatternLoaded_ guards the first load (a default Extras == empty pattern is
+    // a legitimate value, so a bool flag, not an all-zero compare, decides the first load).
+    mw::state::Extras lastLoadedSeqPattern_{};
+    bool              seqPatternLoaded_ = false;
     // The live current sequencer step (the slot the last edge played), -1 if none. Latched
     // from the StepSequencer's OWN currentSlot() (the real playhead) each seq edge, NOT a
     // reconstructed mirror — so it tracks a clock-reset-on-keypress rewind exactly (task 118d
@@ -362,6 +399,17 @@ private:
         int mpeEnable        = -1;  // bool  -> MPE routing enable (decode; inert without ingress)
         int mpeBendRange     = -1;  // 0..96 semitones -> MPE per-note bend range
         int mpePressureDest  = -1;  // choice 0..2 -> {VCF,VCA,PW} pressure destination
+
+        // --- seq / arp control-tick dispatch (task 181; ADR-030 part 1) — decoded into a
+        // SequencerEngine::ControlParams + the StepSequencer PLAY/RECORD toggles, applied
+        // via dispatchSeqArp(). Before this task these reached zero production code. ---
+        int arpMode      = -1;  // choice 0..3 { Off, Up, Down, Up-Down } -> ArpMode + engaged gate
+        int arpTempoSync = -1;  // bool  -> HostSync (on) vs Internal (off) clock source
+        int arpSyncDiv   = -1;  // choice 0..5 (kSyncDiv) -> HostRate
+        int arpLatch     = -1;  // bool  -> ControlSnapshot.arpHold
+        int seqMode      = -1;  // choice 0..2 { Off, Play, Record } -> setSeqPlay / setSeqRecord
+        int seqTempoSync = -1;  // bool  -> HostSync (on) vs Internal (off) clock source
+        int seqSyncDiv   = -1;  // choice 0..5 (kSyncDiv) -> HostRate
     } slots_{};
 
     // --- live continuous-controller state (task 162c; ADR-028 control-dispatch repair;

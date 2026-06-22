@@ -126,6 +126,56 @@ void SequencerEngine::restoreState(const ctl::ControlSnapshot& s) noexcept {
     publishSnapshot(s);
 }
 
+// --- Per-control-tick param + pattern application (audio thread; task 181) --------
+
+void SequencerEngine::applyControlParams(const ControlParams& p) noexcept {
+    // Apply the dynamic arp/clock/trigger config the Engine's control-tick dispatch
+    // decoded from the seq.*/arp.* APVTS params, WITHOUT reloading the seq buffer or
+    // rewinding the playhead (task 181; ADR-030 part 1). Before this seam nothing in
+    // production drove these, so the hosted components ran on the INIT-default snapshot
+    // forever (arpHold=false, arpMode=Up). All setters touch only fixed members — no
+    // heap, no lock; noexcept [docs/design/05 §5.4/§7.7; ADR-007 C26; ADR-028].
+    arp_.setMode(p.arpMode);
+    arp_.setHold(p.arpHold);
+    arp_.setUandDRepeatEndpoints(p.uAndDRepeatEndpoints);
+
+    clock_.setSource(p.clockSource);
+    clock_.setInternalRateHz(p.internalRateHz);
+    clock_.setHostRate(p.hostRate);
+    clock_.setClockResetOnKeypress(p.clockResetOnKeypress);
+
+    trigger_.setMode(p.trigMode);
+
+    // Mirror the dynamic scalar fields into the LIVE snapshot slot so liveSnapshot() — read
+    // by the Engine's routing gate (renderChunk: arpEnabled == liveSnapshot()->arpHold) and
+    // the clock-reset-on-keypress check in processBlock — tracks the live params. The audio
+    // thread is the sole writer of these scalar fields on the hot path; the message-thread
+    // publishSnapshot writes the INACTIVE slot then swaps, so this in-place scalar update of
+    // the active slot does not race a publish (it mirrors reset()'s audio-thread re-apply).
+    // The seq buffer / seqCount are left untouched (owned by loadPattern / capture).
+    ctl::ControlSnapshot& live = slots_[static_cast<std::size_t>(activeSlot_)];
+    live.arpMode              = p.arpMode;
+    live.arpHold              = p.arpHold;
+    live.uAndDRepeatEndpoints = p.uAndDRepeatEndpoints;
+    live.clockSource          = p.clockSource;
+    live.internalRateHz       = p.internalRateHz;
+    live.hostRate             = p.hostRate;
+    live.clockResetOnKeypress = p.clockResetOnKeypress;
+    live.trigMode             = p.trigMode;
+}
+
+void SequencerEngine::loadPattern(const ctl::SeqBuffer& buffer, int count) noexcept {
+    // Copy an edited / preset pattern into the hosted StepSequencer (re-phasing playback to
+    // slot 0). RT-safe: a fixed-array POD copy + integer counters, no heap, no lock (task
+    // 181). The caller gates on pattern change so playback is not rewound every block. Keep
+    // the live snapshot's seq view coherent so captureState() round-trips the loaded pattern
+    // even before the next message-thread publish [docs/design/05 §6.3/§6.5; ADR-030 part 1].
+    seq_.loadBuffer(buffer, count);
+    ctl::ControlSnapshot& live = slots_[static_cast<std::size_t>(activeSlot_)];
+    live.seq      = seq_.buffer();
+    live.seqCount = seq_.count();
+}
+
 // --- Transport toggles (message/key thread) --------------------------------------
 
 void SequencerEngine::setSeqPlay(bool on) noexcept { seq_.setPlay(on); }

@@ -91,6 +91,50 @@ public:
     void recordTie(int pitch6) noexcept;
 
     // -----------------------------------------------------------------------
+    // Audio thread: the per-control-tick param + pattern application seam (task 181;
+    // ADR-030 part 1). The shipped plugin had NO production path that drove these from
+    // the seq.*/arp.* APVTS params or the edited pattern buffer, so the SequencerEngine
+    // ran on the INIT-default snapshot with an empty buffer forever (the dead-subsystem
+    // ship-blocker). These two seams close that, RT-safe (no heap, no lock, noexcept):
+    //   * applyControlParams() updates the DYNAMIC arp/clock/trigger config the
+    //     control-tick dispatch decodes from the params, applying it to the hosted Arp /
+    //     Clock / TriggerSource AND mirroring it into the live snapshot's scalar fields
+    //     (so liveSnapshot()->arpHold etc. — which the Engine's routing gate reads — track
+    //     the live params). It does NOT touch the seq buffer / playback position, so it is
+    //     safe to call every tick without re-loading the pattern or rewinding the playhead.
+    //   * loadPattern() copies an edited / preset SeqBuffer into the StepSequencer (it
+    //     wraps StepSequencer::loadBuffer, which re-phases playback to slot 0). The caller
+    //     loads only when the pattern actually changed, so playback is not rewound every
+    //     block. The seq PLAY / RECORD toggles stay the setSeqPlay/setSeqRecord controls.
+    // Both are noexcept, allocation-free, lock-free — the StepSequencer/Arp/Clock setters
+    // touch only fixed members [docs/design/05 §6.5/§9.2; ADR-007 C26; ADR-028; ADR-030].
+    // -----------------------------------------------------------------------
+
+    // The dynamic per-tick control config the dispatch decodes from the seq.*/arp.* params
+    // (the parts of ControlSnapshot that can change between ticks WITHOUT a buffer reload).
+    // A trivially-copyable POD; passed by value on the audio thread.
+    struct ControlParams {
+        mw::control::ArpMode     arpMode = mw::control::ArpMode::Up;
+        bool                     arpHold = false;
+        bool                     uAndDRepeatEndpoints = false;
+        mw::control::ClockSource clockSource = mw::control::ClockSource::Internal;
+        float                    internalRateHz = 1.0f;
+        mw::control::HostRate    hostRate = mw::control::HostRate::Sixteenth;
+        bool                     clockResetOnKeypress = true;
+        mw::control::TrigMode    trigMode = mw::control::TrigMode::GateTrig;
+    };
+
+    // Apply the decoded dynamic control config to the hosted components + the live
+    // snapshot's scalar fields, WITHOUT reloading the seq buffer or rewinding playback.
+    // Audio-thread, noexcept, no alloc, no lock (task 181) [ADR-030 part 1].
+    void applyControlParams(const ControlParams& p) noexcept;
+
+    // Load an edited / preset pattern buffer into the hosted StepSequencer (re-phasing
+    // playback to slot 0). Audio-thread, noexcept, no alloc, no lock; the caller gates on
+    // pattern change so playback is not rewound every block (task 181) [ADR-030 part 1].
+    void loadPattern(const mw::control::SeqBuffer& buffer, int count) noexcept;
+
+    // -----------------------------------------------------------------------
     // Audio thread: the hot, noexcept fixed-order tick. Reads the live snapshot
     // pointer with an ACQUIRE load (no lock); consumes Clock edges produced for the
     // block (sample-accurate, §2.2) and, on EACH edge, advances arp + seq + RANDOM
