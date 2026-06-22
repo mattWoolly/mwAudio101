@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 185
 title: setCurrentProgram must publish the recovered <extras> seq pattern (preset recall plays its riff)
-status: in-review
+status: done
 depends-on: [181, 182, 183]
 component: app
 estimated-size: S
