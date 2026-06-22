@@ -126,6 +126,67 @@ void SequencerEngine::restoreState(const ctl::ControlSnapshot& s) noexcept {
     publishSnapshot(s);
 }
 
+// --- Per-control-tick param + pattern application (audio thread; task 181) --------
+
+void SequencerEngine::applyControlParams(const ControlParams& p) noexcept {
+    // Apply the dynamic arp/clock/trigger config the Engine's control-tick dispatch
+    // decoded from the seq.*/arp.* APVTS params, WITHOUT reloading the seq buffer or
+    // rewinding the playhead (task 181; ADR-030 part 1). Before this seam nothing in
+    // production drove these, so the hosted components ran on the INIT-default snapshot
+    // forever (arpHold=false, arpMode=Up). All setters touch only fixed members — no
+    // heap, no lock; noexcept [docs/design/05 §5.4/§7.7; ADR-007 C26; ADR-028].
+    arp_.setMode(p.arpMode);
+    arp_.setHold(p.arpHold);
+    arp_.setUandDRepeatEndpoints(p.uAndDRepeatEndpoints);
+
+    clock_.setSource(p.clockSource);
+    clock_.setInternalRateHz(p.internalRateHz);
+    clock_.setHostRate(p.hostRate);
+    clock_.setClockResetOnKeypress(p.clockResetOnKeypress);
+
+    trigger_.setMode(p.trigMode);
+
+    // Mirror the dynamic scalar fields into the LIVE snapshot slot so liveSnapshot() — read
+    // by the Engine's routing gate (renderChunk: arpEnabled == liveSnapshot()->arpHold) and
+    // the clock-reset-on-keypress check in processBlock — tracks the live params.
+    //
+    // THREADING CONTRACT (single-audio-thread-writer; ADR-030) — this writes the ACTIVE
+    // double-buffer slot IN PLACE from the audio thread, in contrast to publishSnapshot(),
+    // which fills the INACTIVE slot then RELEASE-swaps the live pointer off the message
+    // thread. That is SAFE only because the audio thread is the SOLE writer of these scalar
+    // fields on the hot path AND publishSnapshot has NO production caller racing it (state
+    // restore happens off-thread before transport; cf. the grep in task 181's QA). This
+    // in-place active-slot update mirrors reset()'s audio-thread re-apply and never collides
+    // with a publish, which only ever touches the inactive slot. INVARIANT FOR THE FUTURE:
+    // if a message-thread ControlSnapshot publisher is ever added that runs CONCURRENTLY with
+    // process() (e.g. a live editor pushing internalRateHz before task 182's rate param
+    // lands), it MUST reconcile with this audio-thread writer — publish into the inactive
+    // slot and let the audio thread own these scalar fields, or move this mirror behind the
+    // same RELEASE swap — so the active slot keeps a single writer [forward ref: ADR-030].
+    // The seq buffer / seqCount are left untouched (owned by loadPattern / capture).
+    ctl::ControlSnapshot& live = slots_[static_cast<std::size_t>(activeSlot_)];
+    live.arpMode              = p.arpMode;
+    live.arpHold              = p.arpHold;
+    live.uAndDRepeatEndpoints = p.uAndDRepeatEndpoints;
+    live.clockSource          = p.clockSource;
+    live.internalRateHz       = p.internalRateHz;
+    live.hostRate             = p.hostRate;
+    live.clockResetOnKeypress = p.clockResetOnKeypress;
+    live.trigMode             = p.trigMode;
+}
+
+void SequencerEngine::loadPattern(const ctl::SeqBuffer& buffer, int count) noexcept {
+    // Copy an edited / preset pattern into the hosted StepSequencer (re-phasing playback to
+    // slot 0). RT-safe: a fixed-array POD copy + integer counters, no heap, no lock (task
+    // 181). The caller gates on pattern change so playback is not rewound every block. Keep
+    // the live snapshot's seq view coherent so captureState() round-trips the loaded pattern
+    // even before the next message-thread publish [docs/design/05 §6.3/§6.5; ADR-030 part 1].
+    seq_.loadBuffer(buffer, count);
+    ctl::ControlSnapshot& live = slots_[static_cast<std::size_t>(activeSlot_)];
+    live.seq      = seq_.buffer();
+    live.seqCount = seq_.count();
+}
+
 // --- Transport toggles (message/key thread) --------------------------------------
 
 void SequencerEngine::setSeqPlay(bool on) noexcept { seq_.setPlay(on); }

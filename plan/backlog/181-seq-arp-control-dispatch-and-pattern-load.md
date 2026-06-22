@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 181
 title: Seq/arp control-dispatch + pattern-buffer load into the engine (ADR-030 part 1)
-status: todo
+status: in-review
 depends-on: [154, 160, 161, 162, 165]
 component: dsp
 estimated-size: M

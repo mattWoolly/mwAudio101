@@ -29,6 +29,7 @@
 #include "calibration/FxDispatchConstants.h"          // FX free-ms / chorus-Hz decode (task 163)
 #include "calibration/PitchAssemblyConstants.h"      // kVoltsPerCount (count->volt anchor)
 #include "calibration/ControlDispatchCharacterConstants.h" // a4 ref / cents->volts / expression (task 164)
+#include "calibration/ControlDispatchSeqArpConstants.h" // seq/arp choice->enum maps (task 181)
 
 #include "dsp/drift/VintageMacro.h"   // the Age-macro -> drift/var target mapping (task 164)
 
@@ -313,6 +314,17 @@ void Engine::renderChunk(const BlockContext& ctx, int n0, int len) noexcept {
                                    cal::ccingress::kModWheelMin, cal::ccingress::kModWheelMax);
         }
     }
+
+    // 0b. THE SEQ/ARP CONTROL-TICK DISPATCH (task 181; ADR-030 part 1). Decode the
+    //     seq.*/arp.* params and drive the hosted SequencerEngine + Arp + StepSequencer
+    //     BEFORE the ingress gate below reads the live snapshot (arpHold) and the seq
+    //     play/count state — so arp.mode/latch + seq.mode take effect THIS chunk instead of
+    //     leaving the subsystem on the INIT-default snapshot (ADR-030 break Q2). When
+    //     ctx.params is null (an init path with no bridge) the dispatch is skipped and the
+    //     subsystem keeps whatever was published/loaded off-thread (unchanged pre-181
+    //     behavior). RT-safe: a POD decode + lock-free setters; no heap, no lock.
+    if (ctx.params != nullptr)
+        dispatchSeqArp(*ctx.params);
 
     // The sequencer OWNS note ingress this chunk only when it is actually driving notes:
     // the step sequencer is playing, OR the arpeggiator is explicitly ENABLED. The
@@ -774,6 +786,15 @@ void Engine::cacheParamSlots() noexcept {
     slots_.mpeEnable        = find(kMpeEnable);
     slots_.mpeBendRange     = find(kMpeBendRange);
     slots_.mpePressureDest  = find(kMpePressureDest);
+
+    // --- seq / arp control-tick dispatch (task 181; ADR-030 part 1) ---
+    slots_.arpMode      = find(kArpMode);
+    slots_.arpTempoSync = find(kArpTempoSync);
+    slots_.arpSyncDiv   = find(kArpSyncDiv);
+    slots_.arpLatch     = find(kArpLatch);
+    slots_.seqMode      = find(kSeqMode);
+    slots_.seqTempoSync = find(kSeqTempoSync);
+    slots_.seqSyncDiv   = find(kSeqSyncDiv);
 }
 
 VoiceControls Engine::decodeShared(const ParamSnapshot& snap) const noexcept {
@@ -1223,6 +1244,102 @@ void Engine::applyParamSnapshot(const ParamSnapshot& snap, int chunkSamples) noe
 
         v.applyControls(vc, chunkSamples);
     }
+}
+
+void Engine::dispatchSeqArp(const ParamSnapshot& snap) noexcept {
+    // THE SEQ/ARP CONTROL-TICK DISPATCH (task 181; ADR-030 part 1). Before this seam the
+    // SequencerEngine/Arp ran on the INIT-default ControlSnapshot forever — Engine never
+    // read the seq.*/arp.* params (they reached zero production code, ADR-030 break Q2).
+    // Decode them now and drive the hosted components, RT-safe (POD decode + lock-free
+    // setters; no heap, no lock) [ADR-028 dispatch idiom; ADR-030 part 1].
+    namespace cd = cal::dispatch;
+
+    const int seqModeChoice = choiceIndex(snap, slots_.seqMode);    // {Off,Play,Record}
+    const bool seqPlays   = cd::seqModePlays(seqModeChoice);
+    const bool seqRecords = cd::seqModeRecords(seqModeChoice);
+
+    // A SINGLE shared clock drives arp + seq (the hardware has one clock). When the seq is
+    // an active driver (Play/Record) its tempo_sync/sync_div own the clock; otherwise the
+    // arp's do. tempo_sync ON -> the host-synced division (HostSync + the mapped HostRate);
+    // OFF -> the Internal clock (its RATE authority + the Standalone free-run gate are task
+    // 182 — we leave the live snapshot's internalRateHz untouched here).
+    const bool seqIsDriver  = seqPlays || seqRecords;
+    const int  tempoSyncSlot = seqIsDriver ? slots_.seqTempoSync : slots_.arpTempoSync;
+    const int  syncDivSlot   = seqIsDriver ? slots_.seqSyncDiv    : slots_.arpSyncDiv;
+    const bool tempoSyncOn   = choiceIndex(snap, tempoSyncSlot) != 0;   // bool option index
+
+    seq::SequencerEngine::ControlParams cp{};
+    // Preserve the live clock RATE + swing + uAndD-endpoints (task 181 does not own these);
+    // start from the current live snapshot so an existing internalRateHz / swing survives.
+    if (const mw::control::ControlSnapshot* live = sequencer_.liveSnapshot()) {
+        cp.internalRateHz       = live->internalRateHz;
+        cp.uAndDRepeatEndpoints = live->uAndDRepeatEndpoints;
+        cp.trigMode             = live->trigMode;   // S7 owned by the key.trigger_priority path
+    }
+    cp.arpMode              = cd::arpModeFor(choiceIndex(snap, slots_.arpMode));
+    cp.arpHold              = choiceIndex(snap, slots_.arpLatch) != 0;   // bool -> arpHold
+    cp.clockSource          = tempoSyncOn ? mw::control::ClockSource::HostSync
+                                          : mw::control::ClockSource::Internal;
+    cp.hostRate             = cd::hostRateForSyncDiv(choiceIndex(snap, syncDivSlot));
+    cp.clockResetOnKeypress = true;   // the schema/INIT default (no param exposes this yet)
+
+    sequencer_.applyControlParams(cp);
+
+    // seq.mode { Off, Play, Record } -> the StepSequencer PLAY / RECORD toggles. NOTE: the
+    // editor's transient Run/Hold transport gate (Engine::setSequencerPlaying) is task 182;
+    // this drives the PERSISTED seq.mode param, the distinct APVTS authority [ADR-030].
+    sequencer_.setSeqRecord(seqRecords);
+    sequencer_.setSeqPlay(seqPlays);
+}
+
+void Engine::loadSeqPattern(const mw::state::Extras& pattern) noexcept {
+    // Transcode the <extras> seq pattern (note/gate/tie/rest, note relative to the seam
+    // base) into the control-core 6-bit SeqBuffer and load it into the hosted StepSequencer
+    // (task 181; ADR-030 part 1 — closes break Q2's "pattern never reaches the engine").
+    // Change-gated: only re-load (which re-phases playback to slot 0) when the incoming POD
+    // DIFFERS from the last loaded one, so the processor can call this every block (it
+    // adopts the lock-free SPSC handoff per block) without rewinding the playhead. RT-safe:
+    // a bounded fixed-array transcode + POD copies; no heap, no lock; noexcept.
+    if (seqPatternLoaded_) {
+        // A trivially-copyable POD compare (no alloc): identical pattern -> nothing to do.
+        const bool same =
+            pattern.stepCount == lastLoadedSeqPattern_.stepCount
+            && std::equal(pattern.steps.begin(),
+                          pattern.steps.begin() + std::max(0, std::min(pattern.stepCount,
+                                                                       mw::state::kMaxSeqSteps)),
+                          lastLoadedSeqPattern_.steps.begin(),
+                          [](const mw::state::SeqStep& a, const mw::state::SeqStep& b) noexcept {
+                              return a.noteSemitone == b.noteSemitone && a.gate == b.gate
+                                  && a.tie == b.tie && a.rest == b.rest;
+                          });
+        if (same)
+            return;
+    }
+
+    mw::control::SeqBuffer buf{};   // zero-initialized fixed array (no heap)
+    const int count = std::clamp(pattern.stepCount, 0, mw::control::kMaxSteps);
+    for (int i = 0; i < count; ++i) {
+        const mw::state::SeqStep& s = pattern.steps[static_cast<std::size_t>(i)];
+        // The 6-bit control pitch is the note relative to the seam base, clamped to 0..63
+        // (the StepSequencer's SeqStep::kPitchMask range; the routeControlEvents path adds
+        // kSeqVoiceBaseMidi to recover the MIDI note). REST/TIE flags take precedence over
+        // a plain note per the §6.2 byte layout.
+        const auto pitch6 = static_cast<std::uint8_t>(
+            std::clamp<int>(s.noteSemitone, 0, mw::control::SeqStep::kPitchMask));
+        std::uint8_t bits = 0;
+        if (s.rest) {
+            bits = mw::control::SeqStep::kRestFlag;
+        } else if (s.tie) {
+            bits = static_cast<std::uint8_t>(mw::control::SeqStep::kTieFlag | pitch6);
+        } else {
+            bits = pitch6;
+        }
+        buf[static_cast<std::size_t>(i)].bits = bits;
+    }
+
+    sequencer_.loadPattern(buf, count);
+    lastLoadedSeqPattern_ = pattern;   // by-value POD shadow for the next change check
+    seqPatternLoaded_     = true;
 }
 
 void Engine::process(const BlockContext& ctx) noexcept {
