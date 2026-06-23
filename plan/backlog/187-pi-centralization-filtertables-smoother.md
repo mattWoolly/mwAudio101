@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 187
 title: Centralize the FilterTables 1024 + Smoother 1e-5 (PI) literals (QA-155-1/QA-155-2)
-status: in-review
+status: done
 depends-on: [155]
 component: dsp
 estimated-size: S
