@@ -45,6 +45,13 @@ target_include_directories(mw101_tests PRIVATE
 
 target_compile_features(mw101_tests PRIVATE cxx_std_20)
 
+# The presets/ corpus root, so the JUCE-free flat-POD bake test (task 144b) can
+# enumerate the real .mw101preset patches deterministically. This is a build-time
+# host-side path injection ONLY — mwcore carries no such path and no corpus knowledge;
+# the baker takes its inputs from the caller [task 144b; docs/design/11 §9.1].
+target_compile_definitions(mw101_tests PRIVATE
+  MW_PRESETS_DIR="${CMAKE_SOURCE_DIR}/presets")
+
 # --- ctest discovery under the silent-pass rules (docs/design/11 §8.1) ----------
 catch_discover_tests(mw101_tests
   TEST_PREFIX "mw101."

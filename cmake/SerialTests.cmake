@@ -103,6 +103,7 @@ set(MW_SERIAL_TEST_NAMES
   [==[polyalloc: the steal scan is deterministic across identical runs]==]
   [==[polywire: POLY note handling and render are alloc-free and lock-free]==]
   [==[polywire: POLY steal is deterministic across identical runs]==]
+  [==[presets_bake: the audio thread reads only the POD table — no parse, no alloc under the guard]==]
   [==[processor processBlock is allocation-free and lock-free over a steady-state block]==]
   [==[processor_wire processBlock is allocation-free over a ProgramChange-bearing block]==]
   [==[renderversion_e2e: frozen constant-set selection is a prepare-time bind, not audio-rate]==]
