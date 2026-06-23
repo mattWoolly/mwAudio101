@@ -190,6 +190,26 @@ if(MW_BUILD_PLUGIN)
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 
+  # --- OpenGL opt-in: link juce_opengl into the test binary too (task 130b) -------
+  # The ui_opengl acceptance cases (tests/plugin/RenderBackendTest.cpp) drive
+  # MwAudioEditor::setOpenGlEnabled(true/false), which exercises ui/RenderBackend.h's
+  # attach/detach lifecycle. To verify that the lifecycle is green against the REAL
+  # juce::OpenGLContext (not just the software shim), the test binary must define
+  # JUCE_MODULE_AVAILABLE_juce_opengl=1 the same way the plugin shell does — i.e. link
+  # juce_opengl under the SAME MW_LINK_OPENGL platform guard. This stays GPU-safe: the
+  # tests run headless and never give the editor an on-screen peer, so attachTo() never
+  # creates a native GL surface (no GPU/display required) [docs/design/10-ui.md §11;
+  # ADR-015 C9]. On Linux (MW_LINK_OPENGL OFF) the tests exercise the software shim,
+  # which is behaviour-identical by construction — the suite stays green either way.
+  if(MW_LINK_OPENGL)
+    if(NOT TARGET juce::juce_opengl)
+      message(FATAL_ERROR
+        "tests/: MW_LINK_OPENGL is ON but juce::juce_opengl is not a target. JUCE should "
+        "publish it once fetched (cmake/Dependencies.cmake). [ADR-015 C9]")
+    endif()
+    target_link_libraries(mw101_plugin_tests PRIVATE juce::juce_opengl)
+  endif()
+
   # ctest discovery under the silent-pass rules: test-case names begin with the
   # selector word `plugin_harness` so `-R plugin_harness` selects what we expect, and
   # the FAIL_REGULAR_EXPRESSION turns a "No tests ran" Catch2 result red. The
