@@ -14,6 +14,8 @@
 
 #include <cmath>
 
+#include "../calibration/Calibration.h"  // (PI) snap epsilon — read, not inlined [ADR-020 S13]
+
 namespace mw::params {
 
 class OnePoleSmoother {
@@ -24,7 +26,7 @@ public:
     // and the control-rate tick rate (Hz). Called at prepareToPlay, off the audio
     // thread. timeConstantSeconds <= 0 => no smoothing (snap; the NoSmooth class).
     void prepare(double timeConstantSeconds, double tickRateHz) noexcept {
-        snapThreshold_ = 1.0e-5; // (PI) — kept in sync with cal::smoothing::kSnapThreshold
+        snapThreshold_ = cal::smoothing::kSnapThreshold; // (PI) de-zipper snap epsilon, centralized
         if (timeConstantSeconds <= 0.0 || tickRateHz <= 0.0) {
             coeff_ = 0.0;        // 0 => snap to target every tick (no de-zipper)
         } else {
@@ -67,7 +69,7 @@ private:
     double current_       = 0.0;
     double target_        = 0.0;
     double coeff_         = 0.0;     // 0 => snap; (0,1) => one-pole de-zipper
-    double snapThreshold_ = 1.0e-5;  // (PI)
+    double snapThreshold_ = cal::smoothing::kSnapThreshold;  // (PI) centralized [ADR-020 S13]
 };
 
 } // namespace mw::params

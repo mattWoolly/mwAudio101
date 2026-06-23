@@ -36,8 +36,10 @@ constexpr double kTwoPi = 6.283185307179586476925286766559;
 }
 
 // Linear interpolation over a fixed-size table given a clamped [0,1) position.
-[[nodiscard]] float lerpTable(const std::array<float, 1024>& tbl, float pos01) noexcept {
-    constexpr int n = 1024;
+// Extent is the centralized (PI) table size — never an inlined literal [ADR-003 F-15].
+[[nodiscard]] float lerpTable(
+    const std::array<float, cal::vcf::kFilterTableSize>& tbl, float pos01) noexcept {
+    constexpr int n = cal::vcf::kFilterTableSize;
     // pos01 in [0,1]; map to [0, n-1] fractional index.
     const float fidx = pos01 * static_cast<float>(n - 1);
     int i0 = static_cast<int>(fidx);
@@ -66,7 +68,7 @@ void FilterTables::build(double fsOsHz) noexcept {
     const double cvMin   = static_cast<double>(cal::vcf::kCvTableMinVolts);
     const double cvMax   = static_cast<double>(cal::vcf::kCvTableMaxVolts);
 
-    constexpr int n = 1024;
+    constexpr int n = cal::vcf::kFilterTableSize;  // (PI) table size — centralized [ADR-003 F-15]
 
     // --- CV-domain g table: fc = fcRef * 2^v (1 V/oct), clamped, then g(fc) -----
     for (int i = 0; i < n; ++i) {
