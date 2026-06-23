@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 025b
 title: presets_roundtrip ctest — every preset round-trips schema + checksum
-status: todo
+status: in-review
 depends-on: [025, 119, 040, 144b]
 component: qa
 estimated-size: S
