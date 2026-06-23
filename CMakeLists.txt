@@ -40,6 +40,30 @@ option(MW101_TESTS    "Build the headless Catch2 test binary"            ON)
 option(MW_BUILD_PLUGIN "Build the JUCE plugin shell (fetches JUCE — large)" OFF)
 option(MW_BUILD_CLAP  "Build the CLAP format (needs MW_BUILD_PLUGIN)"     OFF)
 option(MW_BUILD_LV2   "Build the LV2 format, Linux goal-tier (needs MW_BUILD_PLUGIN)" OFF)
+
+# --- OpenGL opt-in escape hatch (task 130b; ui/RenderBackend.h §11; ADR-015 C9) ----
+# The software/CPU render path is PRIMARY and DEFAULT; a juce::OpenGLContext is an
+# opt-in escape hatch that is OFF by default [docs/design/10-ui.md §11; ADR-015 C9].
+# Linking juce_opengl defines JUCE_MODULE_AVAILABLE_juce_opengl=1, which makes
+# RenderBackend resolve to the REAL juce::OpenGLContext (no source change — the header
+# is already forward-compatible). Linking the module merely makes the hatch real; it
+# does NOT create or attach a context — that happens ONLY on the explicit advanced
+# setter (setOpenGlEnabled(true)), and the attached native GL surface is created lazily
+# by JUCE only once the component acquires an on-screen peer. The headless test/run
+# paths never reach that, so a linked-but-not-engaged module needs no GPU/display.
+#
+# PLATFORM GUARD (ADR-015 C9): default ON on macOS/Windows, where the GL dev libraries
+# ship with the SDK/toolchain, and OFF on Linux so the headless x64 HARD GATE never even
+# acquires a juce_opengl link dependency (no libGL/X11 dev libs required to build or
+# test). Software render is the default everywhere, so leaving this OFF on Linux changes
+# no behaviour — the hatch simply stays the behaviour-identical software shim there.
+if(APPLE OR WIN32)
+  set(_mw_opengl_default ON)
+else()
+  set(_mw_opengl_default OFF)   # Linux/headless hard gate: GPU-safe, no GL link dep
+endif()
+option(MW_LINK_OPENGL "Link juce_opengl so the OFF-by-default OpenGL opt-in engages a real GL context (needs MW_BUILD_PLUGIN)" ${_mw_opengl_default})
+
 # Sanitizer toggles are flipped by the asan/ubsan/tsan presets, not edited by hand.
 option(MW_ENABLE_ASAN  "AddressSanitizer"            OFF)
 option(MW_ENABLE_UBSAN "UndefinedBehaviorSanitizer"  OFF)
@@ -48,6 +72,15 @@ option(MW_ENABLE_TSAN  "ThreadSanitizer"             OFF)
 if((MW_BUILD_CLAP OR MW_BUILD_LV2) AND NOT MW_BUILD_PLUGIN)
   message(WARNING
     "mwAudio101: MW_BUILD_CLAP/MW_BUILD_LV2 imply MW_BUILD_PLUGIN; they are inert with the plugin off.")
+endif()
+
+# MW_LINK_OPENGL only affects the JUCE plugin/test targets; it is inert in a core-only
+# build (no juce_opengl module exists to link). Note, don't fail — software render is
+# the default and the core build is JUCE-free [ADR-015 C9].
+if(MW_LINK_OPENGL AND NOT MW_BUILD_PLUGIN)
+  message(WARNING
+    "mwAudio101: MW_LINK_OPENGL implies MW_BUILD_PLUGIN; it is inert with the plugin off "
+    "(the core/test build is JUCE-free — no juce_opengl module to link).")
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")

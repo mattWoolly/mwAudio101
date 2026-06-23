@@ -179,6 +179,29 @@ target_link_libraries(mwAudio101 PRIVATE
   juce::juce_recommended_lto_flags
   juce::juce_recommended_warning_flags)
 
+# --- OpenGL opt-in escape hatch: link juce_opengl when MW_LINK_OPENGL (task 130b) ----
+# Linking juce_opengl defines JUCE_MODULE_AVAILABLE_juce_opengl=1, which makes the
+# already-forward-compatible ui/RenderBackend.h resolve to the REAL juce::OpenGLContext
+# (NO source change) so the §11 opt-in escape hatch engages a real GL context when the
+# user opts in (setOpenGlEnabled(true)). The module is OFF-by-default on Linux (the
+# headless x64 hard gate stays GPU-safe — see MW_LINK_OPENGL in the top-level
+# CMakeLists), and even where linked it does NOT auto-create a context: the software
+# render path remains primary and a native GL surface is only ever created lazily once
+# the editor acquires an on-screen peer AND the user has opted in [docs/design/10-ui.md
+# §11; plan/decisions/015 (ADR-015) C9]. The plugin links the module PRIVATEly: the GL
+# backend is an internal implementation detail of the shell, not part of its interface.
+if(MW_LINK_OPENGL)
+  if(NOT TARGET juce::juce_opengl)
+    message(FATAL_ERROR
+      "plugin/: MW_LINK_OPENGL is ON but juce::juce_opengl is not a target. JUCE should "
+      "publish it once fetched (cmake/Dependencies.cmake). [ADR-015 C9]")
+  endif()
+  target_link_libraries(mwAudio101 PRIVATE juce::juce_opengl)
+  message(STATUS "mwAudio101: juce_opengl LINKED — RenderBackend resolves the real juce::OpenGLContext (OFF-by-default opt-in) [ADR-015 C9].")
+else()
+  message(STATUS "mwAudio101: juce_opengl NOT linked — RenderBackend uses the software shim (software render is primary) [ADR-015 C9].")
+endif()
+
 # --- CLAP target via clap-juce-extensions (wraps the SAME processor) -------------
 # CLAP is not a juce_add_plugin FORMATS token; clap-juce-extensions (Surge synth team)
 # adds a `mwAudio101_CLAP` target that wraps the one shared MwAudioProcessor — no DSP

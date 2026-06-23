@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 130b
 title: Link juce_opengl into the plugin target so the OpenGL opt-in hatch engages a real GL context
-status: todo
+status: in-review
 depends-on: [113, 130]
 component: infra
 estimated-size: S
