@@ -27,6 +27,8 @@
 
 #include <array>
 
+#include "calibration/FilterTablesConstants.h"  // (PI) table size — read, not inlined [ADR-003 F-15]
+
 namespace mw::dsp {
 
 class FilterTables {
@@ -64,7 +66,9 @@ private:
     double fsOs_   = 0.0;
     float  fcMaxHz_ = 0.0f;  // min(kFcMaxHz, 0.45*fs_os) for this fs_os (the guard)
 
-    static constexpr int kTableSize = 1024;        // (PI) resolution; frozen for bless
+    // (PI) table resolution; centralized in core/calibration/FilterTablesConstants.h
+    // (mw::cal::vcf) — read, never inlined here [ADR-003 F-15; docs/design/11 §4.2].
+    static constexpr int kTableSize = cal::vcf::kFilterTableSize;  // frozen for bless
     std::array<float, kTableSize> gByCv_  {};      // CV-domain g table
     std::array<float, kTableSize> compByG_{};      // tuning-comp table
 };

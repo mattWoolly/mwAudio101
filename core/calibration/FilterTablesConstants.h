@@ -58,4 +58,12 @@ inline constexpr std::array<float, 3> kCompFit = { 1.0f, 0.0f, 0.0f };  // (PI) 
 inline constexpr float kCompGMin = 0.0f;            // (PI) — comp table low edge (g)
 inline constexpr float kCompGMax = 1.0f;            // (PI) — comp table high edge (g)
 
+// --- Table resolution -------------------------------------------------------
+// Sample count of each precomputed FilterTables lookup (gByCv_, compByG_). The
+// resolution is an engineering choice traded off against interpolation error and
+// table memory; it is frozen for bless so the tables are bit-identical across runs
+// for a fixed fs_os [docs/design/02 §5.2, §7; ADR-003 F-14, F-15]. FilterTables
+// READS this; it does not inline the literal at the DSP call site [ADR-003 F-15].
+inline constexpr int kFilterTableSize = 1024;       // (PI) — lookup resolution; frozen for bless
+
 } // namespace mw::cal::vcf
