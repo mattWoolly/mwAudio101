@@ -373,3 +373,222 @@ built artifact at commit `d372ed9`.
 - tests/unit/QaCoverageMatrixTest.cpp (this task), tests/unit/DispatchLfoModTest.cpp,
   cmake/CheckPrefixCoverage.cmake, tests/CMakeLists.txt, tests/golden/corpus/MANIFEST.toml,
   tests/golden/corpus/ctest-labels.snapshot.
+
+<!-- ============================================================================ -->
+<!-- ===  TASK 155 APPENDED SECTION — (PI) Pragmatic-Invention Ledger Sweep  ==== -->
+<!-- ============================================================================ -->
+
+---
+
+# (PI) Pragmatic-Invention Ledger Sweep (Phase 5, task 155)
+
+**Status:** sweep complete, read-and-report. **Scope:** enumerate every `(PI)`
+pragmatic-invention constant in the codebase and verify each either (a) centralizes
+in `core/calibration/Calibration.h` or a `core/calibration/*Constants.h` header (the
+single-home rule), or (b) is a documented test-TU-local fixture constant — **never
+silently duplicated across TUs** (docs/design/11 §1, §4.2, §12; AGENTS.md "ADRs &
+decisions"). Then verify every blessed artifact deriving from a ledger §2-§8 fact
+carries its honesty label in `MANIFEST.toml` (§7.4 / ADR-013 C14). This is a separate,
+clearly-delimited section appended to task 154's report (same file, SPDX header intact).
+
+**Audit posture (unchanged, per docs/design/11 §1.3 / ADR-013):** every verdict below
+is about **centralization / self-consistency**, NOT measured SH-101 fidelity. No
+statement here asserts a measured-hardware magnitude for any `(PI)` value; by definition
+a `(PI)` is an engineering invention *not present in research* (§1).
+
+## 5A. Evidence base (what I actually ran)
+
+Real local build + run in this worktree (local == CI per docs/design/11 §9.4 /
+docs/BUILDING.md), branch `task/155-pi-ledger-sweep`, commit `7e6866b`, macOS arm64
+(reference/bless platform), Apple clang 17.0.0, generator Unix Makefiles,
+`MW_BUILD_PLUGIN=OFF` (JUCE-free core + headless Catch2 binary).
+
+```
+export CPM_SOURCE_CACHE=$HOME/.cache/CPM
+cmake --preset default          # resolved formats (macos) = STANDALONE; Configuring done
+cmake --build --preset default  # Built target mw101_tests (+ LicenseHeaderCheck / FpDisciplineCheck)
+ctest --preset default -N       # Total Tests: 1009
+```
+
+`(PI)`-marker census (`grep -rn '(PI)' core/`, observed at `7e6866b`):
+
+| Population | Count | Note |
+| --- | --- | --- |
+| `(PI)` markers in `core/` (all) | **833** | comments + definitions |
+| …inside `core/calibration/` | **725** | the centralized constant homes + their doc-comments |
+| …outside `core/calibration/` | **102** | almost entirely *references / comments* (see §5C) |
+| Actual `inline constexpr` `(PI)` **definitions** in `core/calibration/*` | **~200** | one home per constant |
+| `(PI)` in `tests/golden/` (MANIFEST + CpuBudget) | **11** | the per-corpus tolerance bands + CPU ceiling (§5B rows F1-F4) |
+
+The architecture realizes the §1 single-table rule via a *federated* table: a root
+`core/calibration/Calibration.h` (`namespace mw::cal`) plus ~80 sibling
+`core/calibration/*Constants.h` headers that **extend the same `mw::cal::*` namespace**
+and are `#include`d into the table — a deliberate parallel-fleet conflict-avoidance
+idiom (docs/design/00 §8.3; each header's banner cites it). For the §4.2/§12 rule,
+"centralizes in Calibration.h" therefore reads as "centralizes in a
+`core/calibration/*` header in the `mw::cal` namespace," exactly as the task allows
+(option (b): "a `core/calibration/*.h` constants header").
+
+## 5B. The (PI) sweep table (named anchors the task enumerates)
+
+Each row: the `(PI)` constant, its value, its source `file:line`, and the
+centralized-or-documented-fixture verdict. **CENTRALIZED** = single home in
+`core/calibration/*`. **MANIFEST** = correctly lives in `MANIFEST.toml` per §6.4/§13.5
+(NOT a compile constant by design). **FIXTURE** = documented test-TU-local fixture.
+**VIOLATION** = inline/duplicated, flagged in §5C.
+
+| `(PI)` constant | Value | Source `file:line` | Verdict |
+| --- | --- | --- | --- |
+| `kSelfOscRmsFloor` (§4.2 paired-assert floor) | `1.0e-3` | core/calibration/FilterGoldenCorpusConstants.h:74 | **CENTRALIZED** (`mw::cal::golden::filter`); test TU refs `filter::kSelfOscRmsFloor`, not duplicated (tests/unit/FilterGoldenCorpusTest.cpp:235+) |
+| `kRecoveryRelTolerance` (§12 calibration recovery tol) | `0.02` | core/calibration/CalibrationSelfTestConstants.h:38 | **CENTRALIZED** (`mw::cal::selftest`); [cal] test asserts it is read FROM the header (tests/unit/CalibrationSelfTestsTest.cpp:179) |
+| `kHeldOutRelTolerance` (§12 disjoint cal/val band) | `0.03` | core/calibration/CalibrationSelfTestConstants.h:45 | **CENTRALIZED** (`mw::cal::selftest`); held `>= recovery tol` by construction |
+| FP tolerance seed `maxAbsErr` (§6.4) | `1e-6` (PI seed) | tests/golden/corpus/MANIFEST.toml:85, :107 (per-corpus `tolerance`) | **MANIFEST** — §6.4 mandates these are NOT global compile constants; CompareFpConstants.h header correctly does **not** define them |
+| FP tolerance seed `rmsErr` (§6.4) | `1e-7` (PI seed) | docs/design/11 §6.4 table (per-corpus, manifest-resident) | **MANIFEST** (per-corpus, not yet exercised by a blessed CLASS-FP corpus row beyond `tolerance=1e-6`) |
+| FP tolerance seed `nmseDbCeiling` (§6.4) | `-120 dB` (PI seed) | docs/design/11 §6.4 table (per-corpus, manifest-resident) | **MANIFEST** (per-corpus) |
+| `kStage1FlagMargin` (§6.1 comparer fast-reject) | `1.0` | core/calibration/CompareFpConstants.h:47 | **CENTRALIZED** (`mw::cal::golden`) |
+| `kStage2FftLength` (§6.3 comparer FFT length) | `4096` | core/calibration/CompareFpConstants.h:53 | **CENTRALIZED** (`mw::cal::golden`) |
+| `ceilingMicrosPerBlock` (§13.5 CPU budget ceiling) | `50000.0` (PI seed) | tests/golden/corpus/MANIFEST.toml:126 | **MANIFEST** — §13.5 mandates it is pinned in MANIFEST, host-relative; CpuBudgetTest READS it (tests/unit/CpuBudgetTest.cpp:101) |
+| `kLfoEmphasisSelected` (task 180 / ADR-029 LFO emphasis) | `1.0f` | core/calibration/ControlDispatchLfoConstants.h:59 | **CENTRALIZED** (`mw::cal::dispatch`) |
+| `kLfoEmphasisUnselected` (task 180 / ADR-029 LFO emphasis) | `1.0f` (MUST be > 0) | core/calibration/ControlDispatchLfoConstants.h:60 | **CENTRALIZED** (`mw::cal::dispatch`); `lfoEmphasisGain()` reads both (L64) — Voice.cpp inlines no literal |
+| seq/arp choice-map (task 181 / ADR-030) `arpModeFor` / `seqModePlays` / `hostRateForSyncDiv` | option-index→enum maps | core/calibration/ControlDispatchSeqArpConstants.h:41,59-60,65 | **CENTRALIZED** (`mw::cal::dispatch`); banner states "the Engine's control-tick dispatch inlines NO literal choice index" (L11) |
+| `kSnapThreshold` (de-zipper snap epsilon) | `1.0e-5` | core/calibration/Calibration.h:50 | **CENTRALIZED** (`mw::cal::smoothing`) — BUT textually duplicated inline; see VIOLATION QA-155-2 |
+| minBLEP `kOversampling` / `kZeroCrossings` | `64` / `16` | core/calibration/MinBlepConstants.h:21,26 | **CENTRALIZED** (`mw::cal::minblep`); MinBlepTable.cpp:85 *derives* `2*kZC*kOS` (no re-minted literal) |
+| FilterTables `kTableSize` (table resolution) | `1024` | core/dsp/FilterTables.h:67 | **VIOLATION** — defined inline in a DSP TU + duplicated as bare `1024`; see QA-155-1 |
+
+The ~200 remaining centralized `(PI)` definitions (VCO/VCF/ENV/LFO/VCA tapers, drift/
+variance bands, FX, oversampler FIR, UI tokens, etc.) follow the same idiom and were
+spot-audited by grepping for inline-literal `(PI)` definitions OUTSIDE
+`core/calibration/`; the only two literal-bearing exceptions are the two VIOLATIONs in
+§5C. All other 100 of the 102 non-calibration `(PI)` markers are **comments that
+reference** a calibration-header constant by name (e.g. `LadderFilter.cpp:128`
+`invTwoVt = cal::vcf::invTwoVt; // OTA knee scaler (PI), from calibration`;
+`ModRouting.cpp:30` `kModBusLpHz` corner read from `mw::cal::lfo`), or `(PI)`-tagged
+*derived expressions* (no stored literal), which satisfy the single-home rule.
+
+## 5C. Flagged centralization violations (REPORT-ONLY — not fixed here)
+
+Per AGENTS.md "QA — Diagnose only — never fix inline" and task 155 "sweep REPORTS, it
+does not relocate." Both are filed as follow-up tasks; neither is fixed in task 155
+(read-only on engine; moving `(PI)` constants is out of this task's scope).
+
+> **FINDING QA-155-1 (MEDIUM, uncentralized + duplicated `(PI)`).** The FilterTables
+> table-resolution `(PI)` `1024` is **defined inline in a DSP TU** at
+> `core/dsp/FilterTables.h:67` (`static constexpr int kTableSize = 1024; // (PI)
+> resolution`) and then **textually duplicated as the bare literal `1024`** at
+> `core/dsp/FilterTables.cpp:39` (`std::array<float, 1024>`), `:40`
+> (`constexpr int n = 1024`) and `:69` (`constexpr int n = 1024`) — four sites, one
+> value. This directly contradicts that subsystem's OWN centralization contract:
+> `core/calibration/FilterTablesConstants.h:13-14` states "FilterTables READS these; it
+> never inlines a `(PI)` numeric literal at the DSP call site [ADR-003 F-15;
+> docs/design/02 §10 F-15]," yet `kTableSize` is absent from that header. Contradicts
+> docs/design/11 §4.2 (a `(PI)` "migrates to `core/calibration/…` rather than being
+> duplicated") and ADR-003 F-15. **Recommendation (follow-up task):** add
+> `kFilterTableSize = 1024 (PI)` to `core/calibration/FilterTablesConstants.h`
+> (`mw::cal::vcf`) and replace all four FilterTables sites with the named constant.
+> *Not fixed in task 155.*
+
+> **FINDING QA-155-2 (LOW, uncentralized `(PI)` duplicate kept-in-sync by comment).**
+> The de-zipper snap epsilon `(PI)` is correctly centralized at
+> `core/calibration/Calibration.h:50` (`mw::cal::smoothing::kSnapThreshold = 1.0e-5`),
+> AND a sibling header `core/calibration/GlideConstants.h:47-48` correctly *derives*
+> its copy via `static_cast<float>(mw::cal::smoothing::kSnapThreshold)` (the right
+> pattern). BUT `core/params/Smoother.h` instead **inlines the literal `1.0e-5` twice**
+> — at `:27` (`snapThreshold_ = 1.0e-5; // (PI) — kept in sync with
+> cal::smoothing::kSnapThreshold`) and `:70` (`double snapThreshold_ = 1.0e-5; //
+> (PI)`) — and does not `#include "Calibration.h"` (only `<cmath>`). "Kept in sync"
+> by a comment is exactly the silent-duplication anti-pattern §4.2 forbids: the two
+> values currently agree (`1.0e-5 == 1.0e-5`, behavior correct) but can drift on any
+> future edit to the canonical constant. Contradicts docs/design/11 §4.2.
+> **Recommendation (follow-up task):** have `Smoother.h` reference
+> `mw::cal::smoothing::kSnapThreshold` directly (as GlideConstants.h does) instead of
+> the inline literals. *Not fixed in task 155.* The new `[qa]` `qa pi ledger` suite
+> (§5E) pins the canonical value as a drift TRIPWIRE in the interim.
+
+## 5D. Honesty-label provenance check (§7.4 / ADR-013 C14)
+
+Every blessed artifact whose claim derives from a ledger §2-§8 labelled fact MUST carry
+that label in its `MANIFEST.toml` entry. The corpus has four `[[golden]]` entries plus
+the `[cpu_budget]` table; provenance was checked against the §7.4 / research/13 §1.2
+controlled vocabulary:
+
+| MANIFEST entry (`artifactRef`) | Class | Ledger fact | `honestyLabels` | Verdict |
+| --- | --- | --- | --- | --- |
+| `corpus/prng-stream-44100-s12345.f32` (L31) | EXACT | integer PRNG stream [research/10 §6] — pure algorithm, NOT a labelled §2-§8 fact | `[]` | **OK** — empty is correct (no ledger §2-§8 claim to label) |
+| `corpus/seq-bytes-48000-s777.f32` (L52) | EXACT | sequencer byte layout [research/13 §4.6] | `["community-disassembly"]` | **LABELLED** (correct §4.6 mapping) |
+| `corpus/ladder-selfosc-48000-s4242.f32` (L74) | FP | IR3109 self-osc amplitude [research/13 §4.1] | `["clone-derived"]` | **LABELLED** (correct §4.1 mapping) |
+| `corpus/vca-drive-96000-s9001.f32` (L96) | FP | BA662 VCA drive [research/13 §4.2] | `["reverse-engineered"]` | **LABELLED** (correct §4.2 mapping) |
+| `[cpu_budget]` (L126) `ceilingMicrosPerBlock` | (not a golden artifact) | `(PI)` host-relative ceiling [§13.5] — NOT a ledger fact | n/a | **OK** — `(PI)`, no honesty label applies |
+
+**No unlabelled provenance found.** All three artifacts whose claims derive from a
+ledger §4 labelled fact carry the correct controlled-vocabulary token; the PRNG entry's
+empty label is correct (a deterministic-algorithm CLASS-EXACT artifact carries no
+§2-§8 honesty claim). The C14 gate itself (the `[provenance]` suite, 7 cases) is green
+per task 154 §2 C14. This sweep adds no new provenance finding.
+
+## 5E. qa coverage test (test-enforced ledger invariant)
+
+This sweep adds **`tests/unit/QaPiLedgerTest.cpp`** (display names begin `qa`, EXISTING
+tag `[qa]` — **no new tag, no `ctest-labels.snapshot` regen**; confirmed:
+`labels_snapshot` add_test still **Passed (0.04 s)** and `[qa]` is already in the
+snapshot from task 154), so the sweep's central invariant is mechanically enforced:
+
+- `qa pi ledger: named (PI) anchors resolve to their centralized home` — asserts each
+  tabulated `(PI)` anchor resolves through its `mw::cal::*` namespace to its documented
+  value (single-home / no-drift), incl. `kRecoveryRelTolerance`, `kSelfOscRmsFloor`,
+  `kStage1FlagMargin`, `kStage2FftLength`, the LFO emphasis pair, and the minBLEP
+  anchors the derived table-length depends on.
+- `qa pi ledger: de-zipper snap epsilon canonical value is pinned` — pins
+  `mw::cal::smoothing::kSnapThreshold == 1.0e-5` as the **drift tripwire** for QA-155-2.
+- `qa pi ledger: a wrong expected value does not match the centralized (PI)` — paired
+  negative control (ADR-013 C4 discipline): proves the checks discriminate, not vacuous.
+
+Observed run (branch `task/155-pi-ledger-sweep`, commit `7e6866b`):
+
+```
+$ ctest --preset default -R qa --no-tests=error --output-on-failure
+ 4/12 Test #793: mw101.qa coverage matrix: every required subsystem prefix maps to a discovered test ... Passed 0.01 sec
+ 5/12 Test #794: mw101.qa coverage matrix: an unknown subsystem token has zero discovered tests ........ Passed 0.01 sec
+ 6/12 Test #795: mw101.qa coverage matrix: cross-cutting Catch2 invariant tags are present ............. Passed 0.01 sec
+ 7/12 Test #796: mw101.qa pi ledger: named (PI) anchors resolve to their centralized home .............. Passed 0.01 sec
+ 8/12 Test #797: mw101.qa pi ledger: de-zipper snap epsilon canonical value is pinned .................. Passed 0.01 sec
+ 9/12 Test #798: mw101.qa pi ledger: a wrong expected value does not match the centralized (PI) ........ Passed 0.01 sec
+100% tests passed, 0 tests failed out of 12
+Total Test time (real) =  19.31 sec
+```
+
+(The `-R qa` selector also matches the four pre-existing `dispatch_seqarp` cases — hence
+12, not 6 — all green; `--no-tests=error` confirms the selector is not a silent-pass.)
+
+## 5F. Findings register (task 155)
+
+| ID | Severity | Title | Contradicts | Disposition |
+| --- | --- | --- | --- | --- |
+| QA-155-1 | MEDIUM | FilterTables `(PI)` `1024` defined inline in DSP TU + duplicated 4× (`FilterTables.h:67`; `.cpp:39,40,69`); absent from `FilterTablesConstants.h` despite that header's own no-inline-literal contract | docs/design/11 §4.2; ADR-003 F-15 | Follow-up task: add `kFilterTableSize (PI)` to `FilterTablesConstants.h`, replace all four sites. Not fixed here. |
+| QA-155-2 | LOW | `Smoother.h` inlines `(PI)` `1.0e-5` twice (`:27`, `:70`), "kept in sync" by comment with `cal::smoothing::kSnapThreshold` rather than referencing it | docs/design/11 §4.2 | Follow-up task: reference `mw::cal::smoothing::kSnapThreshold` directly (as GlideConstants.h does). Drift tripwire added (§5E). Not fixed here. |
+
+No findings were rejected/false-positive in this pass. The provenance check (§5D) and
+the centralization of all named anchors (§5B) are clean; QA-155-1/2 are the only two
+uncentralized/duplicated `(PI)` literals located in the whole `core/` sweep, and each
+reproduces against the built tree at commit `7e6866b`.
+
+## 5G. References (task 155)
+
+- ADR-013 (plan/decisions/013-testing-golden-calibration-harness.md) — C14 (honesty-label
+  provenance); "ADRs & decisions" centralize-every-`(PI)` rule.
+- docs/design/11-testing-build-ci.md §1 (the `(PI)` tag definition + single-table rule),
+  §4.2 (`kSelfOscRmsFloor` fixture / migrate-not-duplicate), §6.4 (FP tolerance seeds are
+  manifest-resident, not compile constants), §7.4 (honesty-label binding), §12 (calibration
+  recovery tolerance `(PI)`), §13.5 (`ceilingMicrosPerBlock` `(PI)`), References (Calibration.h
+  as the single `(PI)` table).
+- ADR-003 F-15 (FilterTables reads `(PI)` from calibration, never inlines a literal) — the
+  contract QA-155-1 contradicts.
+- core/calibration/Calibration.h:50, CalibrationSelfTestConstants.h:38/45,
+  CompareFpConstants.h:47/53, ControlDispatchLfoConstants.h:59-60/64,
+  ControlDispatchSeqArpConstants.h:11/41/59-60/65, FilterGoldenCorpusConstants.h:74,
+  FilterTablesConstants.h:13-14, MinBlepConstants.h:21/26, GlideConstants.h:47-48.
+- core/dsp/FilterTables.h:67, core/dsp/FilterTables.cpp:39/40/69 (QA-155-1);
+  core/params/Smoother.h:27/70 (QA-155-2); core/dsp/MinBlepTable.cpp:85 (derived, OK).
+- tests/golden/corpus/MANIFEST.toml:31/52/74/96/126 (provenance + ceiling),
+  tests/unit/CalibrationSelfTestsTest.cpp:179 (recovery-tol-from-header [cal] assert),
+  tests/unit/CpuBudgetTest.cpp:101 (ceiling read from MANIFEST).
+- tests/unit/QaPiLedgerTest.cpp (this task), tests/golden/corpus/ctest-labels.snapshot.
