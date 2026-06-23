@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: 2026 Matt Woolly
 ---
 id: 144b
 title: presets/ flat-POD bake loader contract — deterministic build/load-time bake, never parsed on the audio thread
-status: todo
+status: in-review
 depends-on: [025, 040]
 component: core
 estimated-size: M
